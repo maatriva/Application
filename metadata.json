@@ -1,0 +1,6 @@
+{
+  "name": "Maatriva",
+  "description": "An AI-powered smart baby monitoring application delivering real-time sleep, biometric, and ambient nursery insights.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
