@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  database:
+    image: timescale/timescaledb:latest-pg16
+    container_name: maatriva_timescale
+    environment:
+      POSTGRES_DB: maatriva
+      POSTGRES_USER: maatriva_admin
+      POSTGRES_PASSWORD: admin_secret_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./src/database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    restart: always
+
+  mqtt-broker:
+    image: emqx/emqx:5.6.1
+    container_name: maatriva_mqtt
+    ports:
+      - "1883:1883"       # MQTT TCP Port
+      - "8883:8883"       # MQTT TLS Port (Production)
+      - "18083:18083"     # Dashboard API/Web Console
+    environment:
+      EMQX_NAME: maatriva_broker
+      EMQX_ALLOW_ANONYMOUS: "false"
+    volumes:
+      - emqx_data:/opt/emqx/data
+    restart: always
+
+  media-server:
+    image: bluenentin/mediamtx:latest
+    container_name: maatriva_mediamtx
+    ports:
+      - "8554:8554"       # RTSP Ingestion
+      - "8889:8889"       # WebRTC streams API
+      - "8888:8888"       # HLS streams
+    restart: always
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: maatriva_backend
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: development
+      DATABASE_URL: postgres://maatriva_admin:admin_secret_pass@database:5432/maatriva
+      MQTT_HOST: mqtt-broker
+      MQTT_PORT: 1883
+      MQTT_CLIENT_ID: MaatrivaBackendServer
+      JWT_SECRET: super_jwt_secret_token_1234
+    depends_on:
+      - database
+      - mqtt-broker
+    restart: always
+
+volumes:
+  timescale_data:
+  emqx_data:

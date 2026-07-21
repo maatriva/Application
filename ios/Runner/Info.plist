@@ -66,5 +66,10 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Maatriva requires camera access to stream live video of your baby and to scan device pairing QR codes.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Maatriva requires microphone access to detect crying sounds and enable two-way audio communication.</string>
 </dict>
 </plist>
+

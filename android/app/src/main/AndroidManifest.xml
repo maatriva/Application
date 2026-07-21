@@ -1,5 +1,24 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Internet & Network State (Needed for REST API, WebSockets, WebRTC) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <!-- Camera (Needed for local streaming QR pairing scanning) -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Microphone (Needed for two-way baby talk feedback) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Post Notifications (Android 13+ FCM alerts) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
     <application
+
+
         android:label="maatriva"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">

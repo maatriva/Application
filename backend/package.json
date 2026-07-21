@@ -1,0 +1,30 @@
+{
+  "name": "maatriva-backend",
+  "version": "1.0.0",
+  "description": "Production-ready backend for MAATRIVA Smart Cradle ecosystem",
+  "main": "dist/src/app.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/src/app.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/app.ts"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "mqtt": "^5.5.0",
+    "pg": "^8.11.5",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^20.12.7",
+    "@types/pg": "^8.11.5",
+    "@types/ws": "^8.5.10",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.4.5"
+  }
+}
