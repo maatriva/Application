@@ -16,8 +16,9 @@ class NotificationService {
   NotificationService({
     FirebaseMessaging? firebaseMessaging,
     FlutterLocalNotificationsPlugin? localNotifications,
-  })  : _firebaseMessaging = firebaseMessaging ?? FirebaseMessaging.instance,
-        _localNotifications = localNotifications ?? FlutterLocalNotificationsPlugin();
+  }) : _firebaseMessaging = firebaseMessaging ?? FirebaseMessaging.instance,
+       _localNotifications =
+           localNotifications ?? FlutterLocalNotificationsPlugin();
 
   static const String _emergencyChannelId = 'maatriva_emergency_channel';
   static const String _emergencyChannelName = 'MAATRIVA Emergencies';
@@ -28,7 +29,9 @@ class NotificationService {
     await _requestPermissions();
 
     // 2. Configure Android high-priority channel details
-    const androidInitSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidInitSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     const iosInitSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -46,8 +49,10 @@ class NotificationService {
     );
 
     // Create custom siren notification channel on Android
-    final androidNotificationPlugin =
-        _localNotifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    final androidNotificationPlugin = _localNotifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (androidNotificationPlugin != null) {
       await androidNotificationPlugin.createNotificationChannel(
         const AndroidNotificationChannel(
@@ -67,7 +72,9 @@ class NotificationService {
 
     // Foreground notifications handler
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      print('Received foreground notification message: ${message.notification?.title}');
+      print(
+        'Received foreground notification message: ${message.notification?.title}',
+      );
       _showLocalNotification(message);
     });
 

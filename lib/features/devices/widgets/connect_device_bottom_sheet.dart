@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import '../../../theme/colors.dart';
+import 'package:maatriva/core/theme/app_colors.dart';
 
 class ConnectDeviceBottomSheet extends StatefulWidget {
   final Function(String deviceType) onDeviceAdded;

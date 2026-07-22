@@ -37,6 +37,24 @@ class MusicState {
     this.searchQuery = '',
   });
 
+  List<Song> get filteredSongs {
+    var filtered = songs;
+    if (activeCategory != null) {
+      filtered = filtered.where((s) => s.category == activeCategory).toList();
+    }
+    if (searchQuery.isNotEmpty) {
+      final query = searchQuery.toLowerCase();
+      filtered = filtered
+          .where(
+            (s) =>
+                s.title.toLowerCase().contains(query) ||
+                s.artist.toLowerCase().contains(query),
+          )
+          .toList();
+    }
+    return filtered;
+  }
+
   MusicState copyWith({
     List<Song>? songs,
     Song? currentSong,

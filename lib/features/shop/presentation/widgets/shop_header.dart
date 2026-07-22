@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../theme/colors.dart';
+import 'package:maatriva/core/theme/app_colors.dart';
 import '../../provider/shop_provider.dart';
 
 class ShopHeader extends ConsumerWidget implements PreferredSizeWidget {

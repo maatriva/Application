@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../../../../theme/colors.dart';
+import 'package:maatriva/core/theme/app_colors.dart';
 
 class QRCodeCard extends StatelessWidget {
   final String qrToken;

@@ -103,7 +103,8 @@ class PredictiveHealthState {
 
 class PredictiveHealthNotifier extends StateNotifier<PredictiveHealthState> {
   PredictiveHealthNotifier()
-      : super(PredictiveHealthState(
+    : super(
+        PredictiveHealthState(
           stabilityIndex: 82,
           diagnosticInsight:
               "Maatriva's analysis suggests a consistent pattern of night-time restlessness combined with slight temperature fluctuations. This pattern is often a precursor to teething or mild digestive sensitivity. We've noted increased cardiac variability during the 3 AM window over the last 4 nights.",
@@ -161,19 +162,22 @@ class PredictiveHealthNotifier extends StateNotifier<PredictiveHealthState> {
           recommendations: [
             PreventiveRecommendation(
               icon: Icons.opacity_rounded,
-              text: 'Adjust nursery humidity to 50% to reduce nighttime respiratory stress.',
+              text:
+                  'Adjust nursery humidity to 50% to reduce nighttime respiratory stress.',
               iconColor: const Color(0xFF6E3DE0),
               iconBgColor: const Color(0xFFF3EDFA),
             ),
             PreventiveRecommendation(
               icon: Icons.health_and_safety_rounded,
-              text: 'Consider a pediatric consult if cough patterns persist for 48 more hours.',
+              text:
+                  'Consider a pediatric consult if cough patterns persist for 48 more hours.',
               iconColor: const Color(0xFF6E3DE0),
               iconBgColor: const Color(0xFFF3EDFA),
             ),
           ],
           isAnalyzing: false,
-        ));
+        ),
+      );
 
   void runAIAnalysis() {
     state = state.copyWith(isAnalyzing: true);
@@ -189,6 +193,8 @@ class PredictiveHealthNotifier extends StateNotifier<PredictiveHealthState> {
 }
 
 final predictiveHealthProvider =
-    StateNotifierProvider<PredictiveHealthNotifier, PredictiveHealthState>((ref) {
-  return PredictiveHealthNotifier();
-});
+    StateNotifierProvider<PredictiveHealthNotifier, PredictiveHealthState>((
+      ref,
+    ) {
+      return PredictiveHealthNotifier();
+    });

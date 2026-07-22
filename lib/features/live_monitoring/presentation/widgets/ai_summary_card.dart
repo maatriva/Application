@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../theme/colors.dart';
+import 'package:maatriva/core/theme/app_colors.dart';
 
 class AiSummaryCard extends StatelessWidget {
   const AiSummaryCard({super.key});

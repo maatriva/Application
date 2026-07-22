@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../theme/colors.dart';
-import '../../../dashboard/presentation/widgets/bottom_navigation.dart';
+import 'package:maatriva/core/theme/app_colors.dart';
+import 'package:maatriva/shared/widgets/bottom_navigation.dart';
 import '../../provider/health_reports_provider.dart';
 import '../widgets/health_header.dart';
 import '../widgets/report_filter_tabs.dart';

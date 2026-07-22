@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import '../../../../theme/colors.dart';
+import 'package:maatriva/core/theme/app_colors.dart';
 import 'qr_code_card.dart';
 
 class ShareAccessCard extends StatelessWidget {

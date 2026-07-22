@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:maatriva/core/iot/models/enums.dart';
-import 'package:maatriva/core/iot/models/sensor_payload.dart';
-import 'package:maatriva/core/iot/models/device_info.dart';
-import 'package:maatriva/core/iot/models/alert_payload.dart';
-import 'package:maatriva/core/iot/models/camera_payload.dart';
-import 'package:maatriva/core/iot/models/environmental_payload.dart';
-import 'package:maatriva/core/iot/models/health_payload.dart';
+import 'package:maatriva/shared/enums/sensor_enums.dart';
+import 'package:maatriva/shared/models/sensor_payload.dart';
+import 'package:maatriva/shared/models/device_info.dart';
+import 'package:maatriva/shared/models/alert_payload.dart';
+import 'package:maatriva/shared/models/camera_payload.dart';
+import 'package:maatriva/shared/models/environmental_payload.dart';
+import 'package:maatriva/shared/models/health_payload.dart';
 
 void main() {
   group('IoT Enums Serialization Tests', () {
@@ -45,7 +45,7 @@ void main() {
       'firmwareVersion': '1.1.0',
       'cradleId': 'CRDL001',
       'sequenceNumber': 4012,
-      'metadata': {'opticalContact': true}
+      'metadata': {'opticalContact': true},
     };
 
     test('fromJson creates correct object', () {
@@ -96,7 +96,7 @@ void main() {
       'battery': 88,
       'paired': true,
       'lastSeen': '2026-07-21T08:24:17.000Z',
-      'status': 'online'
+      'status': 'online',
     };
 
     test('fromJson and toJson cycles correctly', () {
@@ -123,7 +123,7 @@ void main() {
       'value': 185.0,
       'thresholdLimit': 180.0,
       'timestamp': '2026-07-21T12:10:30.000Z',
-      'acknowledged': false
+      'acknowledged': false,
     };
 
     test('fromJson and toJson cycles correctly', () {
@@ -157,7 +157,7 @@ void main() {
       'resolution': '4K',
       'bitrate': 1500000,
       'signalStrength': -54,
-      'timestamp': '2026-07-21T12:10:30.000Z'
+      'timestamp': '2026-07-21T12:10:30.000Z',
     };
 
     test('fromJson and toJson cycles correctly', () {
@@ -189,7 +189,7 @@ void main() {
       'signalStrength': -48,
       'status': 'online',
       'timestamp': '2026-07-21T12:10:30.000Z',
-      'sequenceNumber': 10582
+      'sequenceNumber': 10582,
     };
 
     test('fromJson and toJson cycles correctly', () {
@@ -221,7 +221,7 @@ void main() {
       'signalStrength': -54,
       'status': 'online',
       'timestamp': '2026-07-21T12:10:30.000Z',
-      'sequenceNumber': 4012
+      'sequenceNumber': 4012,
     };
 
     test('fromJson and toJson cycles correctly', () {

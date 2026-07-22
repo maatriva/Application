@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../theme/colors.dart';
+import 'package:maatriva/core/theme/app_colors.dart';
 import '../../domain/caregiver.dart';
 
 class ActiveSessionCard extends StatelessWidget {

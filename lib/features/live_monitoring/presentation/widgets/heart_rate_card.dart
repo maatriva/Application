@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../theme/colors.dart';
+import 'package:maatriva/core/theme/app_colors.dart';
 
 class HeartRateCard extends StatelessWidget {
   const HeartRateCard({super.key});

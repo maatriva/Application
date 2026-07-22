@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../theme/colors.dart';
+import 'package:maatriva/core/theme/app_colors.dart';
 import '../../../dashboard/presentation/widgets/dashboard_header.dart';
-import '../../../dashboard/presentation/widgets/bottom_navigation.dart';
+import 'package:maatriva/shared/widgets/bottom_navigation.dart';
 import '../../provider/ai_assistant_provider.dart';
 import '../widgets/ai_avatar.dart';
 import '../widgets/assistant_bubble.dart';

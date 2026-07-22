@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../../theme/colors.dart';
-import '../../../../theme/typography.dart';
+import 'package:maatriva/core/theme/app_colors.dart';
+import 'package:maatriva/core/theme/app_typography.dart';
 
 class QuickActionButton extends StatelessWidget {
   final IconData icon;

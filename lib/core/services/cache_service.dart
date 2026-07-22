@@ -11,7 +11,10 @@ class CacheService {
   static const String _devicesCacheKey = 'maatriva_cache_devices';
 
   /// Save latest telemetry payload map for a device.
-  Future<void> cacheVitals(String deviceId, Map<String, dynamic> vitalsMap) async {
+  Future<void> cacheVitals(
+    String deviceId,
+    Map<String, dynamic> vitalsMap,
+  ) async {
     final key = '$_vitalsCacheKeyPrefix$deviceId';
     await _prefs.setString(key, jsonEncode(vitalsMap));
   }

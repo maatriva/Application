@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../theme/colors.dart';
+import 'package:maatriva/core/theme/app_colors.dart';
 import '../widgets/live_header.dart';
 import '../widgets/camera_card.dart';
 import '../widgets/action_button.dart';

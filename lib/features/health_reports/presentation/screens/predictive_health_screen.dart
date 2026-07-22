@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../../theme/colors.dart';
-import '../../../dashboard/presentation/widgets/bottom_navigation.dart';
+import 'package:maatriva/core/theme/app_colors.dart';
+import 'package:maatriva/shared/widgets/bottom_navigation.dart';
 import '../../provider/predictive_health_provider.dart';
 
 class PredictiveHealthScreen extends ConsumerStatefulWidget {
@@ -15,7 +15,8 @@ class PredictiveHealthScreen extends ConsumerStatefulWidget {
       _PredictiveHealthScreenState();
 }
 
-class _PredictiveHealthScreenState extends ConsumerState<PredictiveHealthScreen> {
+class _PredictiveHealthScreenState
+    extends ConsumerState<PredictiveHealthScreen> {
   final ScrollController _scrollController = ScrollController();
   bool _isPatternsExpanded = true;
 
@@ -44,8 +45,11 @@ class _PredictiveHealthScreenState extends ConsumerState<PredictiveHealthScreen>
                 Row(
                   children: [
                     IconButton(
-                      icon: Icon(Icons.arrow_back_rounded,
-                          color: const Color(0xFF6E3DE0), size: 24.r),
+                      icon: Icon(
+                        Icons.arrow_back_rounded,
+                        color: const Color(0xFF6E3DE0),
+                        size: 24.r,
+                      ),
                       onPressed: () {
                         if (Navigator.of(context).canPop()) {
                           context.pop();
@@ -91,20 +95,28 @@ class _PredictiveHealthScreenState extends ConsumerState<PredictiveHealthScreen>
                 Row(
                   children: [
                     IconButton(
-                      icon: Icon(Icons.share_outlined,
-                          color: AppColors.textSecondary, size: 22.r),
+                      icon: Icon(
+                        Icons.share_outlined,
+                        color: AppColors.textSecondary,
+                        size: 22.r,
+                      ),
                       onPressed: () {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text("Sharing report with pediatricians..."),
+                            content: Text(
+                              "Sharing report with pediatricians...",
+                            ),
                             behavior: SnackBarBehavior.floating,
                           ),
                         );
                       },
                     ),
                     IconButton(
-                      icon: Icon(Icons.settings_outlined,
-                          color: AppColors.textSecondary, size: 22.r),
+                      icon: Icon(
+                        Icons.settings_outlined,
+                        color: AppColors.textSecondary,
+                        size: 22.r,
+                      ),
                       onPressed: () {
                         context.push('/profile');
                       },
@@ -156,7 +168,10 @@ class _PredictiveHealthScreenState extends ConsumerState<PredictiveHealthScreen>
               children: [
                 // Consult Doctor Button (Sticky above the bottom nav)
                 Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 8.h),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 20.w,
+                    vertical: 8.h,
+                  ),
                   child: Container(
                     decoration: BoxDecoration(
                       boxShadow: [
@@ -171,7 +186,9 @@ class _PredictiveHealthScreenState extends ConsumerState<PredictiveHealthScreen>
                       onPressed: () {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text("Initiating call with Pediatrician..."),
+                            content: Text(
+                              "Initiating call with Pediatrician...",
+                            ),
                             behavior: SnackBarBehavior.floating,
                             backgroundColor: Color(0xFF3B82F6),
                           ),
@@ -230,7 +247,10 @@ class _PredictiveHealthScreenState extends ConsumerState<PredictiveHealthScreen>
   // =========================================================================
   // CARD 1: SYSTEM STABILITY INDEX
   // =========================================================================
-  Widget _buildStabilityIndexCard(PredictiveHealthState state, PredictiveHealthNotifier notifier) {
+  Widget _buildStabilityIndexCard(
+    PredictiveHealthState state,
+    PredictiveHealthNotifier notifier,
+  ) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -254,7 +274,10 @@ class _PredictiveHealthScreenState extends ConsumerState<PredictiveHealthScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 10.w,
+                      vertical: 4.h,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF3EDFA),
                       borderRadius: BorderRadius.circular(8.r),
@@ -317,7 +340,9 @@ class _PredictiveHealthScreenState extends ConsumerState<PredictiveHealthScreen>
           ),
           SizedBox(height: 20.h),
           ElevatedButton(
-            onPressed: state.isAnalyzing ? null : () => notifier.runAIAnalysis(),
+            onPressed: state.isAnalyzing
+                ? null
+                : () => notifier.runAIAnalysis(),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF6E3DE0),
               foregroundColor: Colors.white,
@@ -477,7 +502,11 @@ class _PredictiveHealthScreenState extends ConsumerState<PredictiveHealthScreen>
                             color: pattern.iconBgColor,
                             shape: BoxShape.circle,
                           ),
-                          child: Icon(pattern.icon, color: pattern.iconColor, size: 18.r),
+                          child: Icon(
+                            pattern.icon,
+                            color: pattern.iconColor,
+                            size: 18.r,
+                          ),
                         ),
                         SizedBox(width: 12.w),
                         Expanded(
@@ -531,15 +560,21 @@ class _PredictiveHealthScreenState extends ConsumerState<PredictiveHealthScreen>
                     SizedBox(height: 12.h),
                     Container(
                       width: double.infinity,
-                      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 12.w,
+                        vertical: 8.h,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFF3EDFA).withOpacity(0.5),
                         borderRadius: BorderRadius.circular(12.r),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.history_toggle_off_rounded,
-                              color: const Color(0xFF8855EC), size: 14.r),
+                          Icon(
+                            Icons.history_toggle_off_rounded,
+                            color: const Color(0xFF8855EC),
+                            size: 14.r,
+                          ),
                           SizedBox(width: 6.w),
                           Expanded(
                             child: Text(
@@ -620,11 +655,17 @@ class _PredictiveHealthScreenState extends ConsumerState<PredictiveHealthScreen>
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: state.trendData.map((dataPoint) {
                           // Standardized heights based on values
-                          final hrPercent = (dataPoint.heartRate - 100) / 30.0; // 0.0 to 1.0 range
-                          final tempPercent = (dataPoint.temperature - 36.0) / 1.5; // 0.0 to 1.0 range
+                          final hrPercent =
+                              (dataPoint.heartRate - 100) /
+                              30.0; // 0.0 to 1.0 range
+                          final tempPercent =
+                              (dataPoint.temperature - 36.0) /
+                              1.5; // 0.0 to 1.0 range
 
-                          final hrHeight = 40.h + (hrPercent * 80.h).clamp(0.0, 90.h);
-                          final tempHeight = 30.h + (tempPercent * 90.h).clamp(0.0, 90.h);
+                          final hrHeight =
+                              40.h + (hrPercent * 80.h).clamp(0.0, 90.h);
+                          final tempHeight =
+                              30.h + (tempPercent * 90.h).clamp(0.0, 90.h);
 
                           return SizedBox(
                             height: 140.h,

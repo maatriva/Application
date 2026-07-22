@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
-import '../../../theme/colors.dart';
+import 'package:maatriva/core/theme/app_colors.dart';
 import '../models/notification_model.dart';
 import '../providers/notifications_provider.dart';
 import '../widgets/notification_card.dart';

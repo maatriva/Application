@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../theme/colors.dart';
+import 'package:maatriva/core/theme/app_colors.dart';
 import '../models/notification_model.dart';
 
 class NotificationDetailScreen extends StatelessWidget {

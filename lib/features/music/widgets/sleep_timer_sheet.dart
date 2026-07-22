@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../theme/colors.dart';
-import '../../../../theme/typography.dart';
+import 'package:maatriva/core/theme/app_colors.dart';
+import 'package:maatriva/core/theme/app_typography.dart';
 import '../providers/music_provider.dart';
 
 class SleepTimerSheet extends ConsumerWidget {

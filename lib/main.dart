@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'theme/app_theme.dart';
-import 'routes.dart';
+
+import 'core/theme/app_theme.dart';
+import 'routes/app_routes.dart';
 
 void main() {
-  runApp(
-    const ProviderScope(
-      child: MaatrivaApp(),
-    ),
-  );
+  runApp(const ProviderScope(child: MaatrivaApp()));
 }
 
 class MaatrivaApp extends StatelessWidget {
@@ -18,7 +15,10 @@ class MaatrivaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ScreenUtilInit(
-      designSize: const Size(390, 844), // standard design size matching typical modern mobile device dimensions
+      designSize: const Size(
+        390,
+        844,
+      ), // standard design size matching typical modern mobile device dimensions
       minTextAdapt: true,
       splitScreenMode: true,
       builder: (context, child) {

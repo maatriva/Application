@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../../theme/colors.dart';
-import '../../../dashboard/presentation/widgets/bottom_navigation.dart';
+import 'package:maatriva/core/theme/app_colors.dart';
+import 'package:maatriva/shared/widgets/bottom_navigation.dart';
 import '../../provider/profile_provider.dart';
 import '../../../devices/providers/device_provider.dart';
 

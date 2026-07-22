@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../theme/colors.dart';
-import '../../../../theme/typography.dart';
+import 'package:maatriva/core/theme/app_colors.dart';
+import 'package:maatriva/core/theme/app_typography.dart';
 import '../providers/music_provider.dart';
 import '../widgets/album_art_widget.dart';
 import '../widgets/mini_player.dart';
@@ -60,26 +60,7 @@ class _MusicHomeScreenState extends ConsumerState<MusicHomeScreen> {
     final notifier = ref.read(musicProvider.notifier);
 
     // Apply filtering based on provider state
-    var filteredSongs = musicState.songs;
-
-    // Filter by active category
-    if (musicState.activeCategory != null) {
-      filteredSongs = filteredSongs
-          .where((s) => s.category == musicState.activeCategory)
-          .toList();
-    }
-
-    // Filter by search query
-    if (musicState.searchQuery.isNotEmpty) {
-      final query = musicState.searchQuery.toLowerCase();
-      filteredSongs = filteredSongs
-          .where(
-            (s) =>
-                s.title.toLowerCase().contains(query) ||
-                s.artist.toLowerCase().contains(query),
-          )
-          .toList();
-    }
+    final filteredSongs = musicState.filteredSongs;
 
     return Scaffold(
       backgroundColor: AppColors.background,

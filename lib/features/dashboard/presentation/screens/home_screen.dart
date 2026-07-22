@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../theme/colors.dart';
-import '../../../../theme/typography.dart';
+import 'package:maatriva/core/theme/app_colors.dart';
+import 'package:maatriva/core/theme/app_typography.dart';
 import '../providers/dashboard_provider.dart';
 import '../widgets/dashboard_header.dart';
 import '../widgets/greeting_section.dart';
-import '../widgets/status_chip.dart';
+import 'package:maatriva/shared/widgets/status_chip.dart';
 import '../widgets/live_camera_card.dart';
 import '../widgets/summary_card.dart';
 import '../widgets/ai_insight_card.dart';
 import '../widgets/quick_action_button.dart';
-import '../widgets/bottom_navigation.dart';
-import '../widgets/app_drawer.dart';
+import 'package:maatriva/shared/widgets/bottom_navigation.dart';
+import 'package:maatriva/shared/widgets/app_drawer.dart';
 import '../../../live_monitoring/presentation/screens/live_monitoring_screen.dart';
 import '../../../onboarding/providers/onboarding_provider.dart';
 
@@ -68,7 +68,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           backgroundColor: AppColors.primary,
           shape: const CircleBorder(),
           elevation: 0,
-          child: const Icon(Icons.smart_toy_outlined, color: Colors.white, size: 28),
+          child: const Icon(
+            Icons.smart_toy_outlined,
+            color: Colors.white,
+            size: 28,
+          ),
         ),
       ),
 
