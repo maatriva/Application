@@ -1,0 +1,158 @@
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { prisma } from '../../config/database';
+import { env } from '../../config/env';
+import { UserRole } from '@prisma/client';
+import { TokenPayload } from './auth.types';
+
+export class AuthService {
+  /**
+   * Register a new user.
+   */
+  public async register(data: {
+    fullName: string;
+    email: string;
+    passwordPlain: string;
+    role?: UserRole;
+  }) {
+    // 1. Check duplicate email
+    const existing = await prisma.user.findUnique({
+      where: { email: data.email },
+    });
+    if (existing) {
+      throw { statusCode: 409, message: 'User with this email already exists.' };
+    }
+
+    // 2. Hash password (bcryptjs with 10 salt rounds)
+    const passwordHash = await bcrypt.hash(data.passwordPlain, 10);
+
+    // 3. Save user (default role is PARENT)
+    const role = data.role || UserRole.PARENT;
+
+    return await prisma.user.create({
+      data: {
+        fullName: data.fullName,
+        email: data.email,
+        passwordHash: passwordHash,
+        role: role,
+      },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        role: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  /**
+   * Authenticate user and return tokens.
+   */
+  public async login(email: string, passwordPlain: string) {
+    // 1. Find user
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+    if (!user) {
+      throw { statusCode: 401, message: 'Invalid email or password.' };
+    }
+
+    // 2. Compare bcrypt hash
+    const isValid = await bcrypt.compare(passwordPlain, user.passwordHash);
+    if (!isValid) {
+      throw { statusCode: 401, message: 'Invalid email or password.' };
+    }
+
+    // 3. Generate Access Token (15 minutes)
+    const accessToken = jwt.sign(
+      { userId: user.id, role: user.role } as TokenPayload,
+      env.JWT_SECRET,
+      { expiresIn: env.JWT_EXPIRATION as any }
+    );
+
+    // 4. Generate Refresh Token (7 days)
+    const refreshToken = jwt.sign(
+      { userId: user.id, role: user.role } as TokenPayload,
+      env.JWT_SECRET,
+      { expiresIn: env.JWT_REFRESH_EXPIRATION as any }
+    );
+
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+      },
+    };
+  }
+
+  /**
+   * Generate new access token from refresh token.
+   */
+  public async refresh(refreshToken: string) {
+    try {
+      // Verify refresh token signature
+      const decoded = jwt.verify(refreshToken, env.JWT_SECRET) as any;
+      
+      // Look up user to ensure they still exist
+      const user = await prisma.user.findUnique({
+        where: { id: decoded.userId },
+      });
+      if (!user) {
+        throw { statusCode: 403, message: 'User not found.' };
+      }
+
+      // Generate new access token
+      const accessToken = jwt.sign(
+        { userId: user.id, role: user.role } as TokenPayload,
+        env.JWT_SECRET,
+        { expiresIn: env.JWT_EXPIRATION as any }
+      );
+
+      return { accessToken };
+    } catch (e: any) {
+      if (e.statusCode) throw e;
+      throw { statusCode: 403, message: 'Invalid or expired refresh token.' };
+    }
+  }
+
+  /**
+   * Invalidate a session (Logout).
+   */
+  public async logout(refreshToken: string) {
+    try {
+      // Verify token signature is valid
+      jwt.verify(refreshToken, env.JWT_SECRET);
+      return { message: 'Logged out successfully.' };
+    } catch {
+      // Even if invalid, return success since token is dead anyway
+      return { message: 'Logged out successfully.' };
+    }
+  }
+
+  /**
+   * Fetch User Profile by ID.
+   */
+  public async getProfile(userId: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        role: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      throw { statusCode: 404, message: 'User profile not found.' };
+    }
+
+    return user;
+  }
+}

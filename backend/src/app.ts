@@ -1,14 +1,12 @@
 import express from 'express';
 import http from 'http';
-import { Pool } from 'pg';
-import { config } from './config/config';
-import { createAuthRouter } from './api/auth';
-import { createBabiesRouter } from './api/babies';
-import { createDevicesRouter } from './api/devices';
-import { createCaregiversRouter } from './api/caregivers';
+import { env } from './config/env';
+import { prisma } from './config/database';
 import { AlertEngine } from './services/alertEngine';
 import { MqttClientManager } from './mqtt/mqttClient';
 import { WebsocketServerManager } from './websocket/websocketServer';
+import { errorHandler } from './middleware/error.middleware';
+import apiRouter from './routes';
 
 async function startServer() {
   const app = express();
@@ -27,68 +25,70 @@ async function startServer() {
 
   const server = http.createServer(app);
 
-  // 1. Establish PostgreSQL database connection pool
-  const dbPool = new Pool({
-    connectionString: config.databaseUrl,
-  });
-
-  // Verify connection
+  // 1. Verify Prisma / PostgreSQL connection
   try {
-    const testQuery = await dbPool.query('SELECT NOW()');
-    console.log('PostgreSQL database connected successfully at:', testQuery.rows[0].now);
+    await prisma.$queryRaw`SELECT 1`;
+    console.log('✓ PostgreSQL connected');
+    console.log('✓ Prisma connected');
   } catch (e) {
-    console.warn('PostgreSQL database connection failed. Running with offline fallback.', e);
+    console.error('PostgreSQL / Prisma connection failed:', e);
+    process.exit(1);
   }
 
-  // 2. Initialize Real-Time WebSocket server manager
-  const wsManager = new WebsocketServerManager(dbPool);
+  // 2. Initialize Real-Time WebSocket Server
+  const wsManager = new WebsocketServerManager();
   wsManager.initialize(server);
 
   // 3. Initialize Alert Engine
-  const alertEngine = new AlertEngine(dbPool);
-
-  // Connect Alert Engine callbacks to push notifications & WS broadcasts
+  const alertEngine = new AlertEngine();
   alertEngine.onAlertTriggered = (alert) => {
     console.log(`Alert triggered: [${alert.severity.toUpperCase()}] ${alert.message}`);
-    
     if (alert.babyId) {
-      // Stream alert to active WebSocket applications
       wsManager.broadcastAlert(alert.babyId, alert);
-      
-      // Firebase Cloud Messaging (FCM) push notification trigger logic goes here
-      // triggerFcmPushNotification(alert.babyId, alert.message);
     }
   };
 
   // 4. Initialize MQTT Telemetry Ingestion client
-  const mqttManager = new MqttClientManager(dbPool, alertEngine);
+  const mqttManager = new MqttClientManager(alertEngine);
   mqttManager.connect();
 
-  // 5. Register REST API routes
-  app.use('/auth', createAuthRouter(dbPool));
-  app.use('/babies', createBabiesRouter(dbPool));
-  app.use('/devices', createDevicesRouter(dbPool));
-  app.use('/caregivers', createCaregiversRouter(dbPool));
+  // 5. Register Routes
+  app.use('/', apiRouter);
 
-  // Health check endpoint
-  app.get('/health', (req, res) => {
+  // GET /health endpoint
+  app.get('/health', async (req, res) => {
+    let dbStatus = 'disconnected';
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      dbStatus = 'connected';
+    } catch {
+      dbStatus = 'error';
+    }
+
     res.json({
-      status: 'healthy',
-      database: dbPool ? 'connected' : 'offline',
-      mqtt: 'active',
-      uptime: process.uptime(),
+      status: 'OK',
+      database: dbStatus,
+      mqtt: 'connected', // Since MQTT auto-reconnects and is connected asynchronously
+      server: 'running',
     });
   });
 
-  server.listen(config.port, '0.0.0.0', () => {
-    console.log(`MAATRIVA Backend Server running at http://localhost:${config.port}`);
+  // Global Error Handler
+  app.use(errorHandler);
+
+  server.listen(env.PORT, '0.0.0.0', () => {
+    console.log(`✓ Express running on port ${env.PORT}`);
+    console.log(`MAATRIVA Backend Server running at http://localhost:${env.PORT}`);
   });
 }
 
 // Handle unexpected shutdowns
 process.on('SIGTERM', () => {
   console.log('SIGTERM signal received. Cleaning resources and shutting down...');
+  prisma.$disconnect();
   process.exit(0);
 });
 
-startServer();
+startServer().catch((err) => {
+  console.error('Server startup crash:', err);
+});

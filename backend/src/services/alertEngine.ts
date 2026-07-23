@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { prisma } from '../config/database';
 
 export interface TelemetryPacket {
   deviceId: string;
@@ -26,7 +26,6 @@ export interface AlertTrigger {
 }
 
 export class AlertEngine {
-  private dbPool: Pool;
   // Cooldown store: key = deviceId:alertType, value = timestamp of last notification sent
   private cooldowns: Map<string, number> = new Map();
   private readonly cooldownPeriodMs = 120000; // 2 minutes cooldown between duplicate notifications
@@ -34,9 +33,7 @@ export class AlertEngine {
   // Callback hooks for runtime injections
   public onAlertTriggered?: (alert: AlertTrigger) => void;
 
-  constructor(dbPool: Pool) {
-    this.dbPool = dbPool;
-  }
+  constructor() {}
 
   /**
    * Main entry point to evaluate incoming telemetry packet against baby age-specific guidelines.
@@ -310,12 +307,18 @@ export class AlertEngine {
     this.cooldowns.set(cooldownKey, now);
 
     try {
-      // 1. Persist alert to alerts database table
-      await this.dbPool.query(
-        `INSERT INTO alerts (device_id, baby_id, severity, type, message, value, threshold_limit)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [alert.deviceId, alert.babyId, alert.severity, alert.type, alert.message, alert.value, alert.thresholdLimit]
-      );
+      // 1. Persist alert to alerts database table using Prisma
+      await prisma.alert.create({
+        data: {
+          deviceId: alert.deviceId,
+          babyId: alert.babyId,
+          severity: alert.severity,
+          type: alert.type,
+          message: alert.message,
+          value: alert.value,
+          thresholdLimit: alert.thresholdLimit,
+        },
+      });
 
       // 2. Invoke callback (for WebSocket real-time broadcast and FCM pushes)
       if (this.onAlertTriggered) {
@@ -329,17 +332,16 @@ export class AlertEngine {
   // Database helper: Resolves target baby profile mapped to device
   private async resolveBabyFromDevice(deviceId: string): Promise<{ babyId: string; birthDate: Date } | null> {
     try {
-      const res = await this.dbPool.query(
-        `SELECT b.id as "babyId", b.birth_date as "birthDate"
-         FROM device_assignments da
-         JOIN babies b ON b.id = da.baby_id
-         WHERE da.device_id = $1 LIMIT 1`,
-        [deviceId]
-      );
-      if (res.rows.length === 0) return null;
+      const assignment = await prisma.deviceAssignment.findFirst({
+        where: { deviceId },
+        include: {
+          baby: true,
+        },
+      });
+      if (!assignment) return null;
       return {
-        babyId: res.rows[0].babyId,
-        birthDate: new Date(res.rows[0].birthDate),
+        babyId: assignment.babyId,
+        birthDate: assignment.baby.birthDate,
       };
     } catch (e) {
       return null;

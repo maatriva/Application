@@ -2,8 +2,8 @@ import { Server, WebSocket } from 'ws';
 import http from 'http';
 import url from 'url';
 import jwt from 'jsonwebtoken';
-import { Pool } from 'pg';
-import { config } from '../config/config';
+import { prisma } from '../config/database';
+import { env } from '../config/env';
 
 interface ClientSession {
   ws: WebSocket;
@@ -14,12 +14,9 @@ interface ClientSession {
 
 export class WebsocketServerManager {
   private wss?: Server;
-  private dbPool: Pool;
   private sessions: Map<WebSocket, ClientSession> = new Map();
 
-  constructor(dbPool: Pool) {
-    this.dbPool = dbPool;
-  }
+  constructor() {}
 
   /**
    * Initializes the WebSocket server attached to the HTTP server.
@@ -41,7 +38,7 @@ export class WebsocketServerManager {
 
     this.wss.on('connection', async (ws: WebSocket, req: http.IncomingMessage) => {
       console.log('New incoming WebSocket connection handshake...');
-      
+
       const parsedUrl = url.parse(req.url || '', true);
       const token = parsedUrl.query.token as string;
 
@@ -52,7 +49,7 @@ export class WebsocketServerManager {
 
       try {
         // 1. Authenticate token
-        const decoded = jwt.verify(token, config.jwtSecret) as any;
+        const decoded = jwt.verify(token, env.JWT_SECRET) as any;
         const userId = decoded.userId;
         const role = decoded.role;
 
@@ -134,20 +131,30 @@ export class WebsocketServerManager {
    */
   private async fetchAuthorizedBabies(userId: string, role: string): Promise<string[]> {
     try {
-      if (role === 'admin') {
-        const res = await this.dbPool.query('SELECT id FROM babies');
-        return res.rows.map((row) => row.id.toString());
+      if (role.toLowerCase() === 'admin') {
+        const babies = await prisma.baby.findMany({ select: { id: true } });
+        return babies.map((b) => b.id.toString());
       }
 
       // Parents see their babies directly + caregivers see accepted invitation assignments
-      const res = await this.dbPool.query(
-        `SELECT id FROM babies WHERE parent_id = $1
-         UNION
-         SELECT baby_id FROM caregivers WHERE user_id = $1 AND status = 'accepted'`,
-        [userId]
-      );
+      const babies = await prisma.baby.findMany({
+        where: {
+          OR: [
+            { parentId: userId },
+            {
+              caregivers: {
+                some: {
+                  userId,
+                  status: 'accepted',
+                },
+              },
+            },
+          ],
+        },
+        select: { id: true },
+      });
 
-      return res.rows.map((row) => row.id.toString());
+      return babies.map((b) => b.id.toString());
     } catch (e) {
       console.error('Error fetching authorized babies for user:', e);
       return [];
