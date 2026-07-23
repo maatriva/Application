@@ -1,129 +1,167 @@
-import { Server, WebSocket } from 'ws';
+import { Server as SocketIOServer, Socket } from 'socket.io';
 import http from 'http';
-import url from 'url';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../config/database';
 import { env } from '../config/env';
 
-interface ClientSession {
-  ws: WebSocket;
-  userId: string;
-  role: string;
-  babyIds: string[]; // List of babyIds this user is authorized to monitor
-}
-
 export class WebsocketServerManager {
-  private wss?: Server;
-  private sessions: Map<WebSocket, ClientSession> = new Map();
+  private static instance?: WebsocketServerManager;
+  private io?: SocketIOServer;
 
-  constructor() {}
+  private constructor() {}
+
+  public static getInstance(): WebsocketServerManager {
+    if (!WebsocketServerManager.instance) {
+      WebsocketServerManager.instance = new WebsocketServerManager();
+    }
+    return WebsocketServerManager.instance;
+  }
 
   /**
-   * Initializes the WebSocket server attached to the HTTP server.
+   * Initializes the Socket.IO server attached to the HTTP server.
    */
   public initialize(server: http.Server): void {
-    this.wss = new Server({ noServer: true });
-
-    server.on('upgrade', (request, socket, head) => {
-      const pathname = url.parse(request.url || '').pathname;
-
-      if (pathname === '/ws') {
-        this.wss?.handleUpgrade(request, socket, head, (ws) => {
-          this.wss?.emit('connection', ws, request);
-        });
-      } else {
-        socket.destroy();
-      }
+    this.io = new SocketIOServer(server, {
+      cors: {
+        origin: '*',
+        methods: ['GET', 'POST'],
+      },
     });
 
-    this.wss.on('connection', async (ws: WebSocket, req: http.IncomingMessage) => {
-      console.log('New incoming WebSocket connection handshake...');
-
-      const parsedUrl = url.parse(req.url || '', true);
-      const token = parsedUrl.query.token as string;
-
-      if (!token) {
-        ws.close(4001, 'Unauthorized: Missing JWT token parameter.');
-        return;
-      }
-
+    // 1. Authenticate all socket connections using JWT middleware
+    this.io.use(async (socket, next) => {
       try {
-        // 1. Authenticate token
+        const token = (socket.handshake.auth?.token || socket.handshake.query?.token) as string;
+
+        if (!token) {
+          console.warn('[Socket.IO] Connection rejected: Missing token.');
+          return next(new Error('Unauthorized: Missing JWT token parameter.'));
+        }
+
         const decoded = jwt.verify(token, env.JWT_SECRET) as any;
         const userId = decoded.userId;
         const role = decoded.role;
 
-        // 2. Fetch authorized babies list for this user
+        // Fetch authorized babies list for this user
         const babyIds = await this.fetchAuthorizedBabies(userId, role);
 
-        const session: ClientSession = {
-          ws,
+        // Store user metadata on the socket object
+        socket.data = {
           userId,
           role,
           babyIds,
         };
 
-        this.sessions.set(ws, session);
-        console.log(`WebSocket user authenticated: User ID ${userId} (Role: ${role}) subscribed to ${babyIds.length} baby feeds.`);
-
-        // Setup ping-pong to detect dead connections
-        ws.on('pong', () => {
-          // Socket is alive
-        });
-
-        ws.on('close', () => {
-          this.sessions.delete(ws);
-          console.log(`WebSocket session closed for User ${userId}`);
-        });
-
-        // Send initialization success
-        ws.send(JSON.stringify({ event: 'connected', message: 'Authorized real-time telemetry stream active.' }));
-
+        next();
       } catch (err) {
-        ws.close(4003, 'Unauthorized: Invalid token.');
+        console.warn('[Socket.IO] Connection rejected: Invalid token.');
+        next(new Error('Unauthorized: Invalid token.'));
       }
     });
 
-    // Start connection keep-alive heartbeat interval (every 30s)
-    setInterval(() => {
-      this.sessions.forEach((session, ws) => {
-        if (ws.readyState === WebSocket.CLOSED) {
-          this.sessions.delete(ws);
-          return;
-        }
-        ws.ping();
+    // 2. Handle connection and room event subscriptions
+    this.io.on('connection', (socket: Socket) => {
+      const { userId, role, babyIds } = socket.data;
+      console.log(`[Socket.IO] New connection: Socket ID ${socket.id}, User ID ${userId} (Role: ${role})`);
+
+      // socket.on('join:baby', (babyId: string) => {
+      //   if (babyIds.includes(babyId)) {
+      //     const roomName = `baby:${babyId}`;
+      //     socket.join(roomName);
+      //     console.log(`[Socket.IO] Socket ${socket.id} (User ${userId}) joined room ${roomName}`);
+      //     socket.emit('joined:baby', { babyId, status: 'success' });
+      //   } else {
+      //     console.warn(`[Socket.IO] Socket ${socket.id} (User ${userId}) unauthorized join attempt for baby ${babyId}`);
+      //     socket.emit('join:error', { babyId, message: 'Unauthorized access to this baby feed.' });
+      //   }
+      // });
+
+
+
+ socket.on('join:baby', (babyId: string) => {
+  if (babyIds.includes(babyId)) {
+    const roomName = `baby:${babyId}`;
+    socket.join(roomName);
+
+    console.log(`[Socket.IO] Socket ${socket.id} joined ${roomName}`);
+
+    socket.emit('joined:baby', {
+      babyId,
+      status: 'success'
+    });
+
+    console.log('[Socket.IO] joined:baby emitted to client');
+
+    // TEMP TEST
+    socket.emit('test:event', {
+      message: 'Hello from server'
+    });
+
+    console.log('[Socket.IO] test:event emitted');
+  }
+});     
+      socket.on('leave:baby', (babyId: string) => {
+        const roomName = `baby:${babyId}`;
+        socket.leave(roomName);
+        console.log(`[Socket.IO] Socket ${socket.id} (User ${userId}) left room ${roomName}`);
+        socket.emit('left:baby', { babyId });
       });
-    }, 30000);
+
+      socket.on('disconnect', (reason) => {
+        console.log(`[Socket.IO] Socket ${socket.id} disconnected. Reason: ${reason}`);
+      });
+    });
   }
 
   /**
-   * Streams a telemetry packet in real-time to all authenticated sockets monitoring the baby.
+   * Streams a telemetry packet in real-time only to clients in that baby's room.
    */
   public broadcastTelemetry(babyId: string, telemetry: any): void {
-    this.sessions.forEach((session) => {
-      if (session.babyIds.includes(babyId) && session.ws.readyState === WebSocket.OPEN) {
-        session.ws.send(JSON.stringify({
-          event: 'telemetry',
-          babyId,
-          data: telemetry,
-        }));
-      }
+    if (!this.io) {
+      console.warn('[Socket.IO] Server not initialized. Cannot broadcast telemetry.');
+      return;
+    }
+    const roomName = `baby:${babyId}`;
+    this.io.to(roomName).emit('telemetry:update', {
+      babyId,
+      telemetry,
     });
+    console.log(`[Socket.IO] Broadcasted telemetry:update to room ${roomName}`);
   }
 
   /**
    * Streams alert pings immediately to all parent/caregiver app clients monitoring the baby.
    */
   public broadcastAlert(babyId: string, alert: any): void {
-    this.sessions.forEach((session) => {
-      if (session.babyIds.includes(babyId) && session.ws.readyState === WebSocket.OPEN) {
-        session.ws.send(JSON.stringify({
-          event: 'alert',
-          babyId,
-          data: alert,
-        }));
-      }
+    if (!this.io) {
+      console.warn('[Socket.IO] Server not initialized. Cannot broadcast alert.');
+      return;
+    }
+    const roomName = `baby:${babyId}`;
+    this.io.to(roomName).emit('alert:new', {
+      babyId,
+      alert,
     });
+    console.log(`[Socket.IO] Broadcasted alert:new to room ${roomName}`);
+  }
+
+  /**
+   * Streams device status updates to clients monitoring the baby.
+   */
+  public broadcastDeviceStatus(babyId: string, deviceId: string, status: string, battery?: number): void {
+    if (!this.io) {
+      console.warn('[Socket.IO] Server not initialized. Cannot broadcast device status.');
+      return;
+    }
+    const roomName = `baby:${babyId}`;
+    this.io.to(roomName).emit('device:status', {
+      deviceId,
+      babyId,
+      status,
+      lastSeen: new Date(),
+      ...(battery !== undefined && { battery }),
+    });
+    console.log(`[Socket.IO] Broadcasted device:status (${status}) to room ${roomName}`);
   }
 
   /**
@@ -136,7 +174,6 @@ export class WebsocketServerManager {
         return babies.map((b) => b.id.toString());
       }
 
-      // Parents see their babies directly + caregivers see accepted invitation assignments
       const babies = await prisma.baby.findMany({
         where: {
           OR: [
@@ -156,7 +193,7 @@ export class WebsocketServerManager {
 
       return babies.map((b) => b.id.toString());
     } catch (e) {
-      console.error('Error fetching authorized babies for user:', e);
+      console.error('[Socket.IO] Error fetching authorized babies for user:', e);
       return [];
     }
   }

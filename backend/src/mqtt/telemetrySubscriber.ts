@@ -2,6 +2,7 @@ import { prisma } from '../config/database';
 import { TelemetryService } from '../modules/telemetry/telemetry.service';
 import { TelemetryPayloadSchema } from '../modules/telemetry/telemetry.validation';
 import { AlertEngine, TelemetryPacket } from '../services/alertEngine';
+import { WebsocketServerManager } from '../websocket/websocketServer';
 
 const telemetryService = new TelemetryService();
 
@@ -72,6 +73,10 @@ export class TelemetrySubscriber {
       }, babyId);
       console.log(`Telemetry stored successfully.`);
 
+      if (babyId) {
+        WebsocketServerManager.getInstance().broadcastTelemetry(babyId, telemetryData);
+      }
+
       // 7. Update device registry status = ONLINE, lastSeen, and battery level
       await prisma.device.update({
         where: { deviceId: cleanTopicDeviceId },
@@ -84,6 +89,15 @@ export class TelemetrySubscriber {
         },
       });
       console.log(`[TelemetrySubscriber] Device registry updated: Device ${cleanTopicDeviceId} status set to ONLINE.`);
+
+      if (babyId) {
+        WebsocketServerManager.getInstance().broadcastDeviceStatus(
+          babyId,
+          cleanTopicDeviceId,
+          'ONLINE',
+          telemetryData.batteryLevel ?? undefined
+        );
+      }
 
       // 8. Route sensor metrics to the Alert Engine to trigger safety alerts
       const timestampStr = telemetryData.timestamp;

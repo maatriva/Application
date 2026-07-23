@@ -36,7 +36,7 @@ async function startServer() {
   }
 
   // 2. Initialize Real-Time WebSocket Server
-  const wsManager = new WebsocketServerManager();
+  const wsManager = WebsocketServerManager.getInstance();
   wsManager.initialize(server);
 
   // 3. Initialize Alert Engine

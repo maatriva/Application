@@ -3,6 +3,7 @@ import { prisma } from '../config/database';
 import { env } from '../config/env';
 import { AlertEngine } from '../services/alertEngine';
 import { TelemetrySubscriber } from './telemetrySubscriber';
+import { WebsocketServerManager } from '../websocket/websocketServer';
 
 export class MqttClientManager {
   private client?: MqttClient;
@@ -104,6 +105,18 @@ export class MqttClientManager {
       });
 
       console.log(`Device registry updated: Device ${deviceId} is ${status}.`);
+
+      // Find babyId for this device assignment
+      const assignment = await prisma.deviceAssignment.findFirst({
+        where: { deviceId },
+      });
+      if (assignment) {
+        WebsocketServerManager.getInstance().broadcastDeviceStatus(
+          assignment.babyId,
+          deviceId,
+          status
+        );
+      }
     } catch (e) {
       console.error(`Error updating status for device ${deviceId}:`, e);
     }
