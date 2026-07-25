@@ -12,6 +12,15 @@ async function startServer() {
   const app = express();
   app.use(express.json());
 
+  // Request logger middleware
+  app.use((req, res, next) => {
+    console.log(`[HTTP] ${req.method} ${req.url}`);
+    if (req.method !== 'GET' && req.body) {
+      console.log('Body:', JSON.stringify(req.body, null, 2));
+    }
+    next();
+  });
+
   // CORS Middleware setup
   app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*');

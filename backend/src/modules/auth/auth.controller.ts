@@ -163,4 +163,40 @@ export class AuthController {
       });
     }
   }
+
+  /**
+   * PATCH /auth/profile
+   */
+  public static async updateProfile(req: AuthenticatedRequest, res: Response) {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized: No session user found.',
+      });
+    }
+
+    const { fullName, email } = req.body;
+    if (!fullName && !email) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one field (fullName, email) must be provided.',
+      });
+    }
+
+    try {
+      const updatedUser = await authService.updateProfile(userId, { fullName, email });
+      res.json({
+        success: true,
+        message: 'Profile updated successfully.',
+        data: updatedUser,
+      });
+    } catch (e: any) {
+      const status = e.statusCode || 500;
+      res.status(status).json({
+        success: false,
+        message: e.message || 'Internal update profile error',
+      });
+    }
+  }
 }

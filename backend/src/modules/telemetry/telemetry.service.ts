@@ -29,7 +29,7 @@ export class TelemetryService {
    * Get the latest telemetry reading for a baby. Verifies parent ownership.
    */
   public async getLatestReading(babyId: string, parentId: string) {
-    await this.verifyBabyOwnership(babyId, parentId);
+    await this.verifyBabyOwnership(babyId, parentId, 'VIEW_LATEST');
 
     const latest = await prisma.telemetry.findFirst({
       where: {
@@ -51,7 +51,7 @@ export class TelemetryService {
     parentId: string,
     filters: { from?: Date; to?: Date; limit?: number }
   ) {
-    await this.verifyBabyOwnership(babyId, parentId);
+    await this.verifyBabyOwnership(babyId, parentId, 'VIEW_HISTORY');
 
     const whereClause: any = {
       babyId,
@@ -79,38 +79,51 @@ export class TelemetryService {
   }
 
   /**
-   * Helper method to verify baby ownership and existence.
+   * Helper method to verify baby ownership / caregiver access and existence.
    */
-  private async verifyBabyOwnership(babyId: string, parentId: string) {
+  private async verifyBabyOwnership(babyId: string, userId: string, action: 'VIEW_LATEST' | 'VIEW_HISTORY') {
     const baby = await prisma.baby.findFirst({
       where: {
         id: babyId,
-        parentId,
         deletedAt: null,
       },
     });
 
     if (!baby) {
-      const exists = await prisma.baby.findFirst({
-        where: { id: babyId },
-      });
+      const err: any = new Error('Baby profile not found.');
+      err.statusCode = 404;
+      throw err;
+    }
 
-      if (!exists) {
-        const err: any = new Error('Baby profile not found.');
-        err.statusCode = 404;
-        throw err;
-      }
+    // 1. Primary parent has full access
+    if (baby.parentId === userId) {
+      return baby;
+    }
 
-      if (exists.deletedAt !== null) {
-        const err: any = new Error('Baby profile has been deleted.');
-        err.statusCode = 404;
-        throw err;
-      }
+    // 2. Caregiver check
+    const caregiver = await prisma.caregiver.findFirst({
+      where: {
+        babyId,
+        userId,
+        status: 'accepted',
+      },
+    });
 
+    if (!caregiver) {
       const err: any = new Error('Access denied to baby telemetry.');
       err.statusCode = 403;
       throw err;
     }
+
+    // 3. Enforce Role restrictions
+    const role = caregiver.accessLevel.toUpperCase(); // SECONDARY_PARENT, GRANDPARENT, BABYSITTER
+
+    if (action === 'VIEW_HISTORY' && role === 'BABYSITTER') {
+      const err: any = new Error('Access denied: Babysitters do not have access to telemetry history.');
+      err.statusCode = 403;
+      throw err;
+    }
+
     return baby;
   }
 }

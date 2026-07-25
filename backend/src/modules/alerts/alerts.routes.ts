@@ -1,13 +1,15 @@
 import { Router } from 'express';
 import { authenticateToken } from '../../middleware/auth.middleware';
+import { AlertsController } from './alerts.controller';
 
 const router = Router();
 
 router.use(authenticateToken);
 
-// Placeholder for alert acknowledging endpoint
-router.post('/:id/acknowledge', (req, res) => {
-  res.json({ message: 'Alert acknowledged route active' });
-});
+// Alerts endpoints
+router.get('/', AlertsController.getAlerts);
+router.patch('/:id/read', AlertsController.markAsRead);
+router.delete('/:id', AlertsController.deleteAlert);
+router.delete('/', AlertsController.clearAll);
 
 export default router;

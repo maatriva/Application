@@ -13,6 +13,7 @@ import doctorsRoutes from '../modules/doctors/doctors.routes';
 import notificationsRoutes from '../modules/notifications/notifications.routes';
 import musicRoutes from '../modules/music/music.routes';
 import telemetryRoutes from '../modules/telemetry/telemetry.routes';
+import debugRoutes from '../modules/debug/debug.routes';
 
 const router = Router();
 
@@ -31,5 +32,6 @@ router.use('/doctors', doctorsRoutes);
 router.use('/notifications', notificationsRoutes);
 router.use('/music', musicRoutes);
 router.use('/telemetry', telemetryRoutes);
+router.use('/debug', debugRoutes);
 
 export default router;

@@ -123,6 +123,19 @@ export class DevicesService {
     if (latest.batteryLevel !== null && latest.batteryLevel !== undefined) {
       result.push({ sensorType: 'battery_level', value: latest.batteryLevel, unit: '%', quality: 'good', timestamp: latest.timestamp });
     }
+    if (latest.sleepStage !== null && latest.sleepStage !== undefined) {
+      let numericVal = 0;
+      if (latest.sleepStage === 'Light') numericVal = 1;
+      else if (latest.sleepStage === 'Deep') numericVal = 2;
+      else if (latest.sleepStage === 'REM') numericVal = 3;
+      result.push({ sensorType: 'sleep_stage', value: numericVal, unit: latest.sleepStage, quality: 'good', timestamp: latest.timestamp });
+    }
+    if (latest.cryDetected !== null && latest.cryDetected !== undefined) {
+      result.push({ sensorType: 'cry_detection', value: latest.cryDetected ? 1.0 : 0.0, unit: '', quality: 'good', timestamp: latest.timestamp });
+    }
+    if (latest.movementDetected !== null && latest.movementDetected !== undefined) {
+      result.push({ sensorType: 'movement_detection', value: latest.movementDetected ? 1.0 : 0.0, unit: '', quality: 'good', timestamp: latest.timestamp });
+    }
     return result;
   }
 
@@ -203,7 +216,7 @@ export class DevicesService {
 
     return alerts.map((a) => ({
       id: a.id,
-      severity: a.severity,
+      severity: a.severity === 'danger' && a.type === 'CRY_DETECTED' ? 'HIGH' : a.severity,
       type: a.type,
       message: a.message,
       value: a.value,
@@ -211,5 +224,44 @@ export class DevicesService {
       timestamp: a.timestamp,
       acknowledged: a.acknowledged,
     }));
+  }
+
+  /**
+   * Rename a device.
+   */
+  public async renameDevice(deviceId: string, newName: string) {
+    return await prisma.device.update({
+      where: { deviceId },
+      data: { deviceName: newName },
+    });
+  }
+
+  /**
+   * Reassign device to another baby.
+   */
+  public async reassignBaby(deviceId: string, babyId: string) {
+    // Delete existing assignments first
+    await prisma.deviceAssignment.deleteMany({
+      where: { deviceId },
+    });
+    // Create new assignment
+    return await prisma.deviceAssignment.create({
+      data: { deviceId, babyId },
+    });
+  }
+
+  /**
+   * Unpair a device.
+   */
+  public async unpairDevice(deviceId: string) {
+    // Delete assignments
+    await prisma.deviceAssignment.deleteMany({
+      where: { deviceId },
+    });
+    // Update paired status
+    return await prisma.device.update({
+      where: { deviceId },
+      data: { paired: false },
+    });
   }
 }

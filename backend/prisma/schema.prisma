@@ -29,6 +29,7 @@ model User {
   acknowledgedAlerts Alert[]               @relation("AlertAcknowledgedBy")
   notifications      NotificationHistory[]
   auditLogs          AuditLog[]
+  invitations        Invitation[]          @relation("UserInvitations")
 
   @@map("users")
 }
@@ -54,6 +55,7 @@ model Baby {
   alerts            Alert[]
   aiReports         AiReport[]
   sleepSessions     SleepSession[]
+  invitations       Invitation[]
 
   @@map("babies")
 }
@@ -231,4 +233,22 @@ model SleepStage {
   session SleepSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@map("sleep_stages")
+}
+
+model Invitation {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  babyId     String   @map("baby_id") @db.Uuid
+  email      String   @db.VarChar(255)
+  role       String   @db.VarChar(50) // 'SECONDARY_PARENT', 'GRANDPARENT', 'BABYSITTER'
+  token      String   @unique @db.VarChar(255)
+  status     String   @default("PENDING") @db.VarChar(50) // 'PENDING', 'ACCEPTED', 'REJECTED', 'EXPIRED'
+  invitedBy  String   @map("invited_by") @db.Uuid
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  baby Baby @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  inviter User @relation("UserInvitations", fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  @@map("invitations")
 }

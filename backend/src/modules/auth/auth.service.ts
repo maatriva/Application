@@ -29,7 +29,7 @@ export class AuthService {
     // 3. Save user (default role is PARENT)
     const role = data.role || UserRole.PARENT;
 
-    return await prisma.user.create({
+    const user = await prisma.user.create({
       data: {
         fullName: data.fullName,
         email: data.email,
@@ -44,6 +44,24 @@ export class AuthService {
         createdAt: true,
       },
     });
+
+    const accessToken = jwt.sign(
+      { userId: user.id, role: user.role } as TokenPayload,
+      env.JWT_SECRET,
+      { expiresIn: env.JWT_EXPIRATION as any }
+    );
+
+    const refreshToken = jwt.sign(
+      { userId: user.id, role: user.role } as TokenPayload,
+      env.JWT_SECRET,
+      { expiresIn: env.JWT_REFRESH_EXPIRATION as any }
+    );
+
+    return {
+      accessToken,
+      refreshToken,
+      user,
+    };
   }
 
   /**
@@ -154,5 +172,37 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  /**
+   * Update User Profile by ID.
+   */
+  public async updateProfile(userId: string, data: { fullName?: string; email?: string }) {
+    // If email is changing, check duplicate email
+    if (data.email) {
+      const existing = await prisma.user.findUnique({
+        where: { email: data.email },
+      });
+      if (existing && existing.id !== userId) {
+        throw { statusCode: 409, message: 'User with this email already exists.' };
+      }
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        fullName: data.fullName ?? undefined,
+        email: data.email ?? undefined,
+      },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        role: true,
+        createdAt: true,
+      },
+    });
+
+    return updated;
   }
 }

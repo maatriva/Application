@@ -18,7 +18,7 @@ export interface TelemetryPacket {
 export interface AlertTrigger {
   deviceId: string;
   babyId: string | null;
-  severity: 'warning' | 'danger' | 'emergency';
+  severity: string;
   type: string;
   message: string;
   value: number;
@@ -31,7 +31,7 @@ export class AlertEngine {
   private readonly cooldownPeriodMs = 120000; // 2 minutes cooldown between duplicate notifications
 
   // Callback hooks for runtime injections
-  public onAlertTriggered?: (alert: AlertTrigger) => void;
+  public onAlertTriggered?: (alert: any) => void;
 
   constructor() {}
 
@@ -69,6 +69,9 @@ export class AlertEngine {
           break;
         case 'spo2':
           alert = this.evaluateOxygenLevels(packet.deviceId, babyId, value);
+          break;
+        case 'cry_detection':
+          alert = this.evaluateCryDetection(packet.deviceId, babyId, value);
           break;
       }
 
@@ -295,24 +298,40 @@ export class AlertEngine {
     return null;
   }
 
+  private evaluateCryDetection(deviceId: string, babyId: string | null, value: number): AlertTrigger | null {
+    if (value > 0) {
+      return {
+        deviceId,
+        babyId,
+        severity: 'HIGH',
+        type: 'CRY_DETECTED',
+        message: 'The system detected that the baby is crying. Please check on the baby.',
+        value: 1.0,
+        thresholdLimit: 1.0,
+      };
+    }
+    return null;
+  }
+
   private async handleTriggeredAlert(alert: AlertTrigger): Promise<void> {
     const cooldownKey = `${alert.deviceId}:${alert.type}`;
     const now = Date.now();
     const lastTriggered = this.cooldowns.get(cooldownKey) || 0;
 
-    // Apply notification deduplication cooldowns
-    if (now - lastTriggered < this.cooldownPeriodMs) {
+    // Apply notification deduplication cooldowns: 45s for cry alert, 120s default for others
+    const cooldownPeriod = alert.type === 'CRY_DETECTED' ? 45000 : this.cooldownPeriodMs;
+    if (now - lastTriggered < cooldownPeriod) {
       return; // Skip spamming duplicate alarms
     }
     this.cooldowns.set(cooldownKey, now);
 
     try {
       // 1. Persist alert to alerts database table using Prisma
-      await prisma.alert.create({
+      const dbAlert = await prisma.alert.create({
         data: {
           deviceId: alert.deviceId,
           babyId: alert.babyId,
-          severity: alert.severity,
+          severity: alert.severity === 'HIGH' ? 'danger' : alert.severity,
           type: alert.type,
           message: alert.message,
           value: alert.value,
@@ -322,7 +341,12 @@ export class AlertEngine {
 
       // 2. Invoke callback (for WebSocket real-time broadcast and FCM pushes)
       if (this.onAlertTriggered) {
-        this.onAlertTriggered(alert);
+        // Build a broadcast object containing both ID formats
+        const broadcastAlert = {
+          ...dbAlert,
+          alertId: dbAlert.id, // For compatibility with AlertPayload
+        };
+        this.onAlertTriggered(broadcastAlert);
       }
     } catch (e) {
       console.error('Error persisting triggered alert:', e);

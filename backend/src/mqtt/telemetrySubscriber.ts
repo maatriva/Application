@@ -117,6 +117,9 @@ export class TelemetrySubscriber {
       if (telemetryData.humidity !== undefined && telemetryData.humidity !== null) {
         await this.evaluateMetric(cleanTopicDeviceId, 'humidity', telemetryData.humidity, timestampStr);
       }
+      if (telemetryData.cryDetected !== undefined && telemetryData.cryDetected !== null) {
+        await this.evaluateMetric(cleanTopicDeviceId, 'cry_detection', telemetryData.cryDetected ? 1.0 : 0.0, timestampStr);
+      }
 
     } catch (e) {
       console.error(`[TelemetrySubscriber] Error processing MQTT telemetry message for device ${deviceId}:`, e);

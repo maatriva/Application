@@ -81,4 +81,47 @@ export class DevicesController {
       res.status(500).json({ error: 'Internal fetch alerts error', details: e.message });
     }
   }
+
+  public static async rename(req: AuthenticatedRequest, res: Response) {
+    const deviceId = req.params.id;
+    const { deviceName } = req.body;
+
+    if (!deviceName) {
+      return res.status(400).json({ error: 'deviceName is required.' });
+    }
+
+    try {
+      const result = await devicesService.renameDevice(deviceId, deviceName);
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ error: 'Internal rename error', details: e.message });
+    }
+  }
+
+  public static async reassign(req: AuthenticatedRequest, res: Response) {
+    const deviceId = req.params.id;
+    const { babyId } = req.body;
+
+    if (!babyId) {
+      return res.status(400).json({ error: 'babyId is required.' });
+    }
+
+    try {
+      const result = await devicesService.reassignBaby(deviceId, babyId);
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ error: 'Internal reassignment error', details: e.message });
+    }
+  }
+
+  public static async unpair(req: AuthenticatedRequest, res: Response) {
+    const deviceId = req.params.id;
+
+    try {
+      const result = await devicesService.unpairDevice(deviceId);
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ error: 'Internal unpairing error', details: e.message });
+    }
+  }
 }

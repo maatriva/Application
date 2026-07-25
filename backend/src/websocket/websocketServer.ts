@@ -78,28 +78,18 @@ export class WebsocketServerManager {
 
 
 
- socket.on('join:baby', (babyId: string) => {
-  if (babyIds.includes(babyId)) {
-    const roomName = `baby:${babyId}`;
-    socket.join(roomName);
-
-    console.log(`[Socket.IO] Socket ${socket.id} joined ${roomName}`);
-
-    socket.emit('joined:baby', {
-      babyId,
-      status: 'success'
-    });
-
-    console.log('[Socket.IO] joined:baby emitted to client');
-
-    // TEMP TEST
-    socket.emit('test:event', {
-      message: 'Hello from server'
-    });
-
-    console.log('[Socket.IO] test:event emitted');
-  }
-});     
+      socket.on('join:baby', async (babyId: string) => {
+        const authorized = await this.isUserAuthorized(userId, babyId);
+        if (authorized) {
+          const roomName = `baby:${babyId}`;
+          socket.join(roomName);
+          console.log(`[Socket.IO] Socket ${socket.id} (User ${userId}) joined room ${roomName}`);
+          socket.emit('joined:baby', { babyId, status: 'success' });
+        } else {
+          console.warn(`[Socket.IO] Socket ${socket.id} (User ${userId}) unauthorized join attempt for baby ${babyId}`);
+          socket.emit('join:error', { babyId, message: 'Unauthorized access to this baby feed.' });
+        }
+      });     
       socket.on('leave:baby', (babyId: string) => {
         const roomName = `baby:${babyId}`;
         socket.leave(roomName);
@@ -195,6 +185,35 @@ export class WebsocketServerManager {
     } catch (e) {
       console.error('[Socket.IO] Error fetching authorized babies for user:', e);
       return [];
+    }
+  }
+
+  public getConnectedClientsCount(): number {
+    return this.io ? this.io.sockets.sockets.size : 0;
+  }
+
+  public async isUserAuthorized(userId: string, babyId: string): Promise<boolean> {
+    try {
+      const count = await prisma.baby.count({
+        where: {
+          id: babyId,
+          deletedAt: null,
+          OR: [
+            { parentId: userId },
+            {
+              caregivers: {
+                some: {
+                  userId,
+                  status: 'accepted',
+                },
+              },
+            },
+          ],
+        },
+      });
+      return count > 0;
+    } catch (_) {
+      return false;
     }
   }
 }
