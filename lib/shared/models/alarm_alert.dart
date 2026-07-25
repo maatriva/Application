@@ -50,15 +50,37 @@ class AlarmAlert extends Equatable {
     };
   }
 
+  AlarmAlert copyWith({
+    String? id,
+    String? severity,
+    String? type,
+    String? message,
+    double? value,
+    double? thresholdLimit,
+    DateTime? timestamp,
+    bool? acknowledged,
+  }) {
+    return AlarmAlert(
+      id: id ?? this.id,
+      severity: severity ?? this.severity,
+      type: type ?? this.type,
+      message: message ?? this.message,
+      value: value ?? this.value,
+      thresholdLimit: thresholdLimit ?? this.thresholdLimit,
+      timestamp: timestamp ?? this.timestamp,
+      acknowledged: acknowledged ?? this.acknowledged,
+    );
+  }
+
   @override
   List<Object?> get props => [
-    id,
-    severity,
-    type,
-    message,
-    value,
-    thresholdLimit,
-    timestamp,
-    acknowledged,
-  ];
+        id,
+        severity,
+        type,
+        message,
+        value,
+        thresholdLimit,
+        timestamp,
+        acknowledged,
+      ];
 }

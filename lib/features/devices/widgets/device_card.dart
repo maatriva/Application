@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
-import '../models/device_model.dart';
+import '../../../shared/models/models.dart';
 
 class DeviceCard extends StatelessWidget {
   final DeviceModel device;
+  final String? assignedBabyName;
   final VoidCallback onTap;
   final ValueChanged<bool>? onToggle;
+  final VoidCallback? onOptionsTap;
 
   const DeviceCard({
     super.key,
     required this.device,
+    this.assignedBabyName,
     required this.onTap,
     this.onToggle,
+    this.onOptionsTap,
   });
 
   @override
@@ -168,6 +172,23 @@ class DeviceCard extends StatelessWidget {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
+                  if (assignedBabyName != null && assignedBabyName!.isNotEmpty) ...[
+                    SizedBox(height: 3.h),
+                    Row(
+                      children: [
+                        Icon(Icons.child_care_rounded, size: 10.r, color: AppColors.primary),
+                        SizedBox(width: 4.w),
+                        Text(
+                          'Assigned to: $assignedBabyName',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 9.sp,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   SizedBox(height: 6.h),
 
                   // Status & Signal & Battery Indicators Row
@@ -265,9 +286,14 @@ class DeviceCard extends StatelessWidget {
               ),
             ),
 
-            // Trailing toggle/switch or Chevron
+            // Trailing toggle/switch, Chevron, or Options menu
             SizedBox(width: 12.w),
-            if (onToggle != null) ...[
+            if (onOptionsTap != null) ...[
+              IconButton(
+                icon: const Icon(Icons.more_vert_rounded, color: Color(0xFFBEB4CD)),
+                onPressed: onOptionsTap,
+              ),
+            ] else if (onToggle != null) ...[
               SizedBox(
                 height: 30.h,
                 child: FittedBox(

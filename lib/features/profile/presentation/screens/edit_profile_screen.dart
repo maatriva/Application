@@ -197,6 +197,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                             name: _nameController.text.trim(),
                             email: _emailController.text.trim(),
                             phone: _phoneController.text.trim(),
+                            relationship: ref.read(profileProvider).relationship,
                           );
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(

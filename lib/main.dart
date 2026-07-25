@@ -1,19 +1,32 @@
-import 'package:flutter/material.dart';
+   import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'core/services/providers.dart';
 import 'core/theme/app_theme.dart';
 import 'routes/app_routes.dart';
 
-void main() {
-  runApp(const ProviderScope(child: MaatrivaApp()));
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  
+  runApp(
+    ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+      child: const MaatrivaApp(),
+    ),
+  );
 }
 
-class MaatrivaApp extends StatelessWidget {
+class MaatrivaApp extends ConsumerWidget {
   const MaatrivaApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final router = ref.watch(goRouterProvider);
     return ScreenUtilInit(
       designSize: const Size(
         390,
@@ -26,7 +39,8 @@ class MaatrivaApp extends StatelessWidget {
           title: 'Maatriva Smart Baby Monitor',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
-          routerConfig: goRouter,
+          routerConfig: router,
+          scaffoldMessengerKey: scaffoldMessengerKey,
         );
       },
     );

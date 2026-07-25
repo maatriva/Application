@@ -40,13 +40,31 @@ class CaregiverInvitation extends Equatable {
     };
   }
 
+  CaregiverInvitation copyWith({
+    String? invitationId,
+    String? email,
+    String? firstName,
+    String? lastName,
+    String? accessLevel,
+    String? status,
+  }) {
+    return CaregiverInvitation(
+      invitationId: invitationId ?? this.invitationId,
+      email: email ?? this.email,
+      firstName: firstName ?? this.firstName,
+      lastName: lastName ?? this.lastName,
+      accessLevel: accessLevel ?? this.accessLevel,
+      status: status ?? this.status,
+    );
+  }
+
   @override
   List<Object?> get props => [
-    invitationId,
-    email,
-    firstName,
-    lastName,
-    accessLevel,
-    status,
-  ];
+        invitationId,
+        email,
+        firstName,
+        lastName,
+        accessLevel,
+        status,
+      ];
 }

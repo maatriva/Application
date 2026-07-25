@@ -8,8 +8,10 @@
       "version": "1.0.0+1",
       "dependencies": [
         "cupertino_icons",
+        "dio",
         "equatable",
         "firebase_messaging",
+        "fl_chart",
         "flutter",
         "flutter_local_notifications",
         "flutter_riverpod",
@@ -20,6 +22,7 @@
         "http",
         "permission_handler",
         "shared_preferences",
+        "socket_io_client",
         "web_socket_channel"
       ],
       "devDependencies": [
@@ -50,6 +53,22 @@
         "stream_channel",
         "test_api",
         "vector_math"
+      ]
+    },
+    {
+      "name": "fl_chart",
+      "version": "0.68.0",
+      "dependencies": [
+        "equatable",
+        "flutter"
+      ]
+    },
+    {
+      "name": "socket_io_client",
+      "version": "3.0.2",
+      "dependencies": [
+        "logging",
+        "socket_io_common"
       ]
     },
     {
@@ -177,6 +196,19 @@
       ]
     },
     {
+      "name": "dio",
+      "version": "5.10.0",
+      "dependencies": [
+        "async",
+        "collection",
+        "dio_web_adapter",
+        "http_parser",
+        "meta",
+        "mime",
+        "path"
+      ]
+    },
+    {
       "name": "flutter_riverpod",
       "version": "2.6.1",
       "dependencies": [
@@ -287,6 +319,18 @@
         "string_scanner",
         "term_glyph"
       ]
+    },
+    {
+      "name": "socket_io_common",
+      "version": "3.1.1",
+      "dependencies": [
+        "logging"
+      ]
+    },
+    {
+      "name": "logging",
+      "version": "1.3.0",
+      "dependencies": []
     },
     {
       "name": "timezone",
@@ -547,11 +591,6 @@
       ]
     },
     {
-      "name": "logging",
-      "version": "1.3.0",
-      "dependencies": []
-    },
-    {
       "name": "flutter_web_plugins",
       "version": "0.0.0",
       "dependencies": [
@@ -569,6 +608,21 @@
         "path_provider_platform_interface",
         "path_provider_windows"
       ]
+    },
+    {
+      "name": "dio_web_adapter",
+      "version": "2.2.0",
+      "dependencies": [
+        "dio",
+        "http_parser",
+        "meta",
+        "web"
+      ]
+    },
+    {
+      "name": "mime",
+      "version": "2.0.0",
+      "dependencies": []
     },
     {
       "name": "state_notifier",

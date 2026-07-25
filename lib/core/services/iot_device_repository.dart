@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import '../../shared/enums/sensor_enums.dart';
 import '../../shared/models/sensor_payload.dart';
 import '../../shared/models/alert_payload.dart';
@@ -75,6 +76,93 @@ class IotDeviceRepository {
         }
       });
 
+  bool _validateSensorPayload(SensorPayload payload) {
+    if (payload.value == null) {
+      if (kDebugMode) {
+        print('[IotDeviceRepository] Validation Error: Null value for ${payload.type.jsonValue}');
+      }
+      return false;
+    }
+
+    final val = payload.value;
+    switch (payload.type) {
+      case SensorType.heartRate:
+        final bpm = (val is num) ? val.toDouble() : double.tryParse(val.toString());
+        if (bpm == null || bpm < 40.0 || bpm > 220.0) {
+          if (kDebugMode) {
+            print('[IotDeviceRepository] Validation Error: Invalid Heart Rate ($bpm bpm)');
+          }
+          return false;
+        }
+        break;
+      case SensorType.breathingRate:
+        final rpm = (val is num) ? val.toDouble() : double.tryParse(val.toString());
+        if (rpm == null || rpm < 10.0 || rpm > 100.0) {
+          if (kDebugMode) {
+            print('[IotDeviceRepository] Validation Error: Invalid Breathing Rate ($rpm rpm)');
+          }
+          return false;
+        }
+        break;
+      case SensorType.bodyTemperature:
+        final temp = (val is num) ? val.toDouble() : double.tryParse(val.toString());
+        if (temp == null || temp < 30.0 || temp > 45.0) {
+          if (kDebugMode) {
+            print('[IotDeviceRepository] Validation Error: Invalid Body Temp ($temp °C)');
+          }
+          return false;
+        }
+        break;
+      case SensorType.roomTemperature:
+        final temp = (val is num) ? val.toDouble() : double.tryParse(val.toString());
+        if (temp == null || temp < 10.0 || temp > 50.0) {
+          if (kDebugMode) {
+            print('[IotDeviceRepository] Validation Error: Invalid Room Temp ($temp °C)');
+          }
+          return false;
+        }
+        break;
+      case SensorType.humidity:
+        final hum = (val is num) ? val.toDouble() : double.tryParse(val.toString());
+        if (hum == null || hum < 0.0 || hum > 100.0) {
+          if (kDebugMode) {
+            print('[IotDeviceRepository] Validation Error: Invalid Humidity ($hum %)');
+          }
+          return false;
+        }
+        break;
+      case SensorType.airQuality:
+        final aqi = (val is num) ? val.toDouble() : double.tryParse(val.toString());
+        if (aqi == null || aqi < 0.0 || aqi > 500.0) {
+          if (kDebugMode) {
+            print('[IotDeviceRepository] Validation Error: Invalid Air Quality ($aqi AQI)');
+          }
+          return false;
+        }
+        break;
+      case SensorType.unknown:
+        if (kDebugMode) {
+          print('[IotDeviceRepository] Validation Error: Unknown sensor type');
+        }
+        return false;
+      default:
+        break;
+    }
+
+    final existing = _latestTelemetry[payload.type];
+    if (existing != null) {
+      if (payload.timestamp.isBefore(existing.timestamp) ||
+          payload.timestamp.isAtSameMomentAs(existing.timestamp)) {
+        if (kDebugMode) {
+          print('[IotDeviceRepository] Validation Error: Duplicate/out-of-order timestamp for ${payload.type.jsonValue}');
+        }
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   void _startRepositoryListeners() {
     // 1. Raw Telemetry Event listener
     final telSub = _webSocketService.telemetryStream.listen((payload) {
@@ -83,19 +171,23 @@ class IotDeviceRepository {
       if (typeStr != null) {
         try {
           final sensorPayload = SensorPayload.fromJson(payload);
-          _latestTelemetry[sensorPayload.type] = sensorPayload;
+          if (_validateSensorPayload(sensorPayload)) {
+            _latestTelemetry[sensorPayload.type] = sensorPayload;
 
-          // Update history buffer
-          final history = _historyCache[sensorPayload.type] ?? [];
-          history.add(sensorPayload);
-          if (history.length > maxCacheSize) {
-            history.removeAt(0);
+            // Update history buffer
+            final history = _historyCache[sensorPayload.type] ?? [];
+            history.add(sensorPayload);
+            if (history.length > maxCacheSize) {
+              history.removeAt(0);
+            }
+            _historyCache[sensorPayload.type] = history;
+
+            _telemetryUpdateController.add(_latestTelemetry);
           }
-          _historyCache[sensorPayload.type] = history;
-
-          _telemetryUpdateController.add(_latestTelemetry);
-        } catch (_) {
-          // Ignore parse errors from malformed telemetry
+        } catch (e) {
+          if (kDebugMode) {
+            print('[IotDeviceRepository] Validation Error: Corrupted telemetry payload ($e)');
+          }
         }
       }
 
@@ -127,7 +219,10 @@ class IotDeviceRepository {
     // 2. Alert warnings listener
     final alertSub = _webSocketService.alertStream.listen((alertData) {
       try {
-        final alert = AlertPayload.fromJson(alertData);
+        final alertMap = alertData is Map && alertData.containsKey('alert')
+            ? alertData['alert'] as Map<String, dynamic>
+            : alertData as Map<String, dynamic>;
+        final alert = AlertPayload.fromJson(alertMap);
         _activeAlerts.removeWhere((a) => a.alertId == alert.alertId);
         if (!alert.acknowledged) {
           _activeAlerts.add(alert);

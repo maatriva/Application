@@ -35,6 +35,18 @@ class UserSession extends Equatable {
     return {'id': id, 'email': email, 'role': role.name};
   }
 
+  UserSession copyWith({
+    String? id,
+    String? email,
+    UserRole? role,
+  }) {
+    return UserSession(
+      id: id ?? this.id,
+      email: email ?? this.email,
+      role: role ?? this.role,
+    );
+  }
+
   @override
   List<Object?> get props => [id, email, role];
 }

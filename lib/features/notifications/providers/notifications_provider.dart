@@ -1,6 +1,10 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/notification_model.dart';
+import '../../../../shared/models/models.dart';
 import '../data/mock_notifications.dart';
+import '../../../../core/services/websocket_service.dart';
+import '../../../../core/services/providers.dart';
 
 class NotificationsState {
   final List<NotificationModel> notifications;
@@ -62,15 +66,158 @@ class NotificationsState {
 }
 
 class NotificationsNotifier extends StateNotifier<NotificationsState> {
-  NotificationsNotifier()
-    : super(
+  final WebSocketService _wsService;
+  StreamSubscription? _alertSubscription;
+
+  NotificationsNotifier({required WebSocketService wsService})
+    : _wsService = wsService,
+      super(
         NotificationsState(
           notifications: List.from(initialMockNotifications),
           selectedCategory: 'All',
           searchQuery: '',
           isLoading: false,
         ),
+      ) {
+    _subscribeToAlerts();
+  }
+
+  void _subscribeToAlerts() {
+    _alertSubscription = _wsService.alertStream.listen((alertData) {
+      final alert = alertData['alert'] as Map<String, dynamic>? ?? alertData;
+
+      final id = alert['id'] ?? alert['alertId'] ?? DateTime.now().millisecondsSinceEpoch.toString();
+      final severity = alert['severity'] as String? ?? 'warning';
+      final type = alert['type'] as String? ?? 'general';
+      final message = alert['message'] as String? ?? 'Safety warning triggered.';
+      final value = alert['value'] as num?;
+      final thresholdLimit = alert['thresholdLimit'] as num?;
+      final deviceId = alert['deviceId'] as String? ?? '';
+
+      final notification = NotificationModel(
+        id: id,
+        title: type.toUpperCase() == 'CRY_DETECTED'
+            ? 'Baby Cry Detected'
+            : 'Alert: ${type.toUpperCase().replaceAll('_', ' ')}',
+        description: message,
+        timestamp: DateTime.now(),
+        category: _mapTypeToCategory(type),
+        priority: _mapSeverityToPriority(severity),
+        deviceResponsible: deviceId,
+        sensorResponsible: type,
+        detailedExplanation: message,
+        recommendedAction: 'Please check the cradle and baby immediately.',
+        aiInsight: value != null && thresholdLimit != null
+            ? 'This critical alert was generated because the parsed metric for $type reached $value, breaching the safe threshold configuration of $thresholdLimit.'
+            : 'Immediate action is required as safety thresholds have been exceeded.',
       );
+
+      // 1. Add alert to local list
+      state = state.copyWith(
+        notifications: [notification, ...state.notifications],
+      );
+
+      // 2. Show in-app notification banner
+      _showInAppNotificationBanner(severity, message);
+    });
+  }
+
+  String _mapTypeToCategory(String type) {
+    type = type.toLowerCase();
+    if (type.contains('heart') || type.contains('breath') || type.contains('temp')) return 'health';
+    if (type.contains('sleep')) return 'sleep';
+    if (type.contains('motion') || type.contains('movement')) return 'activity';
+    if (type.contains('cry')) return 'critical';
+    return 'health';
+  }
+
+  String _mapSeverityToPriority(String severity) {
+    severity = severity.toLowerCase();
+    if (severity == 'emergency' || severity == 'danger' || severity == 'high') return 'high';
+    if (severity == 'warning') return 'medium';
+    return 'low';
+  }
+
+  void _showInAppNotificationBanner(String severity, String message) {
+    final sev = severity.toLowerCase();
+    final bgColor = (sev == 'emergency' || sev == 'high')
+        ? const Color(0xFFFFEBEE)
+        : sev == 'danger'
+            ? const Color(0xFFFFF3E0)
+            : const Color(0xFFE8F5E9);
+    final borderColor = (sev == 'emergency' || sev == 'high')
+        ? const Color(0xFFEF5350)
+        : sev == 'danger'
+            ? const Color(0xFFFFB74D)
+            : const Color(0xFF81C784);
+    final textColor = (sev == 'emergency' || sev == 'high')
+        ? const Color(0xFFC62828)
+        : sev == 'danger'
+            ? const Color(0xFFE65100)
+            : const Color(0xFF2E7D32);
+    final icon = (sev == 'emergency' || sev == 'high')
+        ? Icons.emergency_share_rounded
+        : sev == 'danger'
+            ? Icons.warning_amber_rounded
+            : Icons.info_outline_rounded;
+
+    scaffoldMessengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: borderColor, width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: textColor, size: 24),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${sev.toUpperCase()} ALERT',
+                      style: TextStyle(
+                        color: textColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      message,
+                      style: TextStyle(
+                        color: textColor.withOpacity(0.9),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        backgroundColor: Colors.transparent,
+        behavior: SnackBarBehavior.floating,
+        elevation: 0,
+        duration: const Duration(seconds: 6),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
+  }
 
   void markAsRead(String id) {
     state = state.copyWith(
@@ -119,9 +266,16 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
   void resetNotifications() {
     state = state.copyWith(notifications: List.from(initialMockNotifications));
   }
+
+  @override
+  void dispose() {
+    _alertSubscription?.cancel();
+    super.dispose();
+  }
 }
 
 final notificationsProvider =
     StateNotifierProvider<NotificationsNotifier, NotificationsState>((ref) {
-      return NotificationsNotifier();
+      final wsService = ref.watch(webSocketServiceProvider);
+      return NotificationsNotifier(wsService: wsService);
     });

@@ -54,16 +54,40 @@ class ClientDeviceInfo extends Equatable {
     };
   }
 
+  ClientDeviceInfo copyWith({
+    String? deviceId,
+    String? deviceName,
+    String? type,
+    String? firmwareVersion,
+    String? protocol,
+    int? battery,
+    String? status,
+    DateTime? lastSeen,
+    String? babyId,
+  }) {
+    return ClientDeviceInfo(
+      deviceId: deviceId ?? this.deviceId,
+      deviceName: deviceName ?? this.deviceName,
+      type: type ?? this.type,
+      firmwareVersion: firmwareVersion ?? this.firmwareVersion,
+      protocol: protocol ?? this.protocol,
+      battery: battery ?? this.battery,
+      status: status ?? this.status,
+      lastSeen: lastSeen ?? this.lastSeen,
+      babyId: babyId ?? this.babyId,
+    );
+  }
+
   @override
   List<Object?> get props => [
-    deviceId,
-    deviceName,
-    type,
-    firmwareVersion,
-    protocol,
-    battery,
-    status,
-    lastSeen,
-    babyId,
-  ];
+        deviceId,
+        deviceName,
+        type,
+        firmwareVersion,
+        protocol,
+        battery,
+        status,
+        lastSeen,
+        babyId,
+      ];
 }

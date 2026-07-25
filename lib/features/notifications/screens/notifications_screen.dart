@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
-import '../models/notification_model.dart';
+import '../../../../shared/models/models.dart';
 import '../providers/notifications_provider.dart';
 import '../widgets/notification_card.dart';
 import 'notification_detail_screen.dart';

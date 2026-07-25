@@ -6,20 +6,21 @@ class LiveCameraCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      height: 220,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        color: Colors.black,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
+    return AspectRatio(
+      aspectRatio: 1.6,
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(28),
+          color: Colors.black,
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withOpacity(0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
         children: [
@@ -178,6 +179,7 @@ class LiveCameraCard extends StatelessWidget {
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -204,12 +206,16 @@ class LiveCameraCard extends StatelessWidget {
         children: [
           Icon(icon, color: Colors.greenAccent, size: 10),
           const SizedBox(width: 4),
-          Text(
-            '$title $value',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 7,
-              fontWeight: FontWeight.bold,
+          Flexible(
+            child: Text(
+              '$title $value',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 7,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ],

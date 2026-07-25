@@ -9,6 +9,7 @@ class SummaryCard extends StatelessWidget {
   final IconData icon;
   final Color iconBgColor;
   final Color iconColor;
+  final VoidCallback? onTap;
 
   const SummaryCard({
     super.key,
@@ -18,56 +19,84 @@ class SummaryCard extends StatelessWidget {
     required this.icon,
     required this.iconBgColor,
     required this.iconColor,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.cardBg,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: AppColors.softShadow,
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Circular Icon background
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: iconBgColor,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: iconColor, size: 26),
-          ),
-          const SizedBox(height: 12),
-          // Biometric label (e.g. Temperature)
-          Text(
-            label,
-            style: AppTypography.labelSmall.copyWith(
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w500,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 4),
-          // Biometric value with unit (e.g. 24 °C)
-          RichText(
-            textAlign: TextAlign.center,
-            text: TextSpan(
-              style: AppTypography.metricValue,
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.cardBg,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: AppColors.softShadow,
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final double height = constraints.maxHeight;
+            // Adjust sizes based on constraints
+            final double iconSize = height > 110 ? 44.0 : 32.0;
+            final double spacing = height > 110 ? 8.0 : 4.0;
+
+            return Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                TextSpan(text: value),
-                if (unit.isNotEmpty) ...[
-                  const TextSpan(text: ' '),
-                  TextSpan(text: unit, style: AppTypography.metricUnit),
-                ],
+                Container(
+                  width: iconSize,
+                  height: iconSize,
+                  decoration: BoxDecoration(
+                    color: iconBgColor,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: iconColor, size: iconSize * 0.5),
+                ),
+                SizedBox(height: spacing),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: AppTypography.labelSmall.copyWith(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w500,
+                      fontSize: height > 110 ? 11 : 9,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                SizedBox(height: spacing * 0.5),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: RichText(
+                      textAlign: TextAlign.center,
+                      text: TextSpan(
+                        style: AppTypography.metricValue.copyWith(
+                          fontSize: height > 110 ? 20 : 16,
+                        ),
+                        children: [
+                          TextSpan(text: value),
+                          if (unit.isNotEmpty) ...[
+                            const TextSpan(text: ' '),
+                            TextSpan(
+                              text: unit,
+                              style: AppTypography.metricUnit.copyWith(
+                                fontSize: height > 110 ? 12 : 10,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ],
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ),
     );
   }

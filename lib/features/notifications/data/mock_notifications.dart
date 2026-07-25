@@ -1,4 +1,4 @@
-import '../models/notification_model.dart';
+import '../../../../shared/models/models.dart';
 
 final List<NotificationModel> initialMockNotifications = [
   NotificationModel(

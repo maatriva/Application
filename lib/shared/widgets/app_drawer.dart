@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
+import '../../features/profile/provider/profile_provider.dart';
+import '../../features/authentication/presentation/providers/auth_provider.dart';
 
-class AppDrawer extends StatelessWidget {
+class AppDrawer extends ConsumerWidget {
   const AppDrawer({super.key});
 
   void _showAboutDialog(BuildContext context) {
@@ -36,7 +39,7 @@ class AppDrawer extends StatelessWidget {
                 Container(
                   width: 60,
                   height: 60,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: AppColors.primaryLight,
                     shape: BoxShape.circle,
                   ),
@@ -96,8 +99,60 @@ class AppDrawer extends StatelessWidget {
     );
   }
 
+  void _showSignOutDialog(BuildContext context, WidgetRef ref) {
+    Navigator.pop(context); // Close drawer first
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: const Text(
+            'Sign Out?',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          content: const Text(
+            'Are you sure you want to sign out of your MAATRIVA account?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                ref.read(authNotifierProvider.notifier).logout();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                elevation: 0,
+              ),
+              child: const Text('Sign Out'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(profileProvider);
+    final caregiverName = profile.parentName.isNotEmpty ? profile.parentName : 'Caregiver';
+    final caregiverEmail = profile.parentEmail.isNotEmpty ? profile.parentEmail : 'monitoring@maatriva.com';
+    final caregiverAvatar = profile.parentAvatar.isNotEmpty
+        ? profile.parentAvatar
+        : 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=120';
+
     return Drawer(
       backgroundColor: AppColors.background,
       elevation: 0,
@@ -124,21 +179,19 @@ class AppDrawer extends StatelessWidget {
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 2),
               ),
-              child: const CircleAvatar(
-                backgroundImage: NetworkImage(
-                  "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=120",
-                ),
+              child: CircleAvatar(
+                backgroundImage: NetworkImage(caregiverAvatar),
               ),
             ),
             accountName: Text(
-              'Sarah Johnson',
+              caregiverName,
               style: GoogleFonts.inter(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
             ),
             accountEmail: Text(
-              'sarah.johnson@maatriva.com',
+              caregiverEmail,
               style: GoogleFonts.inter(
                 color: Colors.white.withOpacity(0.8),
                 fontSize: 12,
@@ -165,6 +218,15 @@ class AppDrawer extends StatelessWidget {
                       letterSpacing: 1.2,
                     ),
                   ),
+                ),
+                _buildDrawerTile(
+                  context,
+                  icon: Icons.person_outline_rounded,
+                  label: 'Profile',
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.push('/profile');
+                  },
                 ),
                 _buildDrawerTile(
                   context,
@@ -227,7 +289,7 @@ class AppDrawer extends StatelessWidget {
                     vertical: 8,
                   ),
                   child: Text(
-                    'INFORMATION',
+                    'INFORMATION & ACCOUNT',
                     style: GoogleFonts.inter(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
@@ -241,6 +303,14 @@ class AppDrawer extends StatelessWidget {
                   icon: Icons.info_outline_rounded,
                   label: 'About Us',
                   onTap: () => _showAboutDialog(context),
+                ),
+                _buildDrawerTile(
+                  context,
+                  icon: Icons.logout_rounded,
+                  label: 'Sign Out',
+                  iconColor: Colors.redAccent,
+                  labelColor: Colors.redAccent,
+                  onTap: () => _showSignOutDialog(context, ref),
                 ),
               ],
             ),
@@ -268,15 +338,17 @@ class AppDrawer extends StatelessWidget {
     required IconData icon,
     required String label,
     required VoidCallback onTap,
+    Color? iconColor,
+    Color? labelColor,
   }) {
     return ListTile(
-      leading: Icon(icon, color: AppColors.primary, size: 22),
+      leading: Icon(icon, color: iconColor ?? AppColors.primary, size: 22),
       title: Text(
         label,
         style: GoogleFonts.inter(
           fontSize: 14,
           fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
+          color: labelColor ?? AppColors.textPrimary,
         ),
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

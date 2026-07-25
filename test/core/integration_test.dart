@@ -1,12 +1,15 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:maatriva/core/services/api_client.dart';
-import 'package:maatriva/core/services/secure_storage_service.dart';
-import 'package:maatriva/core/services/cache_service.dart';
-import 'package:maatriva/features/devices/data/device_repository.dart';
+import 'package:dio/dio.dart';
+
+import 'package:maatriva/core/network/api_client.dart';
+import 'package:maatriva/core/storage/secure_storage_service.dart';
+import 'package:maatriva/core/storage/cache_service.dart';
+import 'package:maatriva/data/repositories/device_repository_impl.dart';
+import 'package:maatriva/core/config/app_config.dart';
 
 // Hand-written Mock for FlutterSecureStorage implementing the interface
 class MockSecureStorage implements FlutterSecureStorage {
@@ -60,24 +63,23 @@ class MockSecureStorage implements FlutterSecureStorage {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-// Hand-written Mock HTTP client
-class MockHttpClient extends http.BaseClient {
-  final Future<http.Response> Function(http.BaseRequest) requestHandler;
+// Hand-written Mock Dio Adapter
+class MockDioAdapter implements HttpClientAdapter {
+  final Future<ResponseBody> Function(RequestOptions) requestHandler;
 
-  MockHttpClient(this.requestHandler);
+  MockDioAdapter(this.requestHandler);
 
   @override
-  Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    final response = await requestHandler(request);
-    final bodyBytes = response.bodyBytes;
-    return http.StreamedResponse(
-      Stream.value(bodyBytes),
-      response.statusCode,
-      headers: response.headers,
-      contentLength: bodyBytes.length,
-      request: request,
-    );
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    return requestHandler(options);
   }
+
+  @override
+  void close({bool force = false}) {}
 }
 
 void main() {
@@ -90,6 +92,7 @@ void main() {
   late CacheService cacheService;
 
   setUp(() async {
+    AppConfig.isTesting = true;
     mockSecureStorage = MockSecureStorage();
     secureStorageService = SecureStorageService(storage: mockSecureStorage);
 
@@ -134,18 +137,22 @@ void main() {
         userRole: 'parent',
       );
 
-      final mockHttp = MockHttpClient((request) async {
-        expect(request.headers['Authorization'], 'Bearer access_123');
-        return http.Response(
+      final mockAdapter = MockDioAdapter((options) async {
+        expect(options.headers['Authorization'], 'Bearer access_123');
+        return ResponseBody.fromString(
           jsonEncode({'id': 'b1', 'name': 'Baby Liam'}),
           200,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+          },
         );
       });
 
+      final dio = Dio()..httpClientAdapter = mockAdapter;
       final apiClient = ApiClient(
         baseUrl: 'http://localhost',
-        client: mockHttp,
         secureStorage: secureStorageService,
+        dio: dio,
       );
 
       final result = await apiClient.get('/babies/b1');
@@ -163,40 +170,47 @@ void main() {
         );
 
         var requestCount = 0;
-        final mockHttp = MockHttpClient((request) async {
+        final mockAdapter = MockDioAdapter((options) async {
           requestCount++;
           if (requestCount == 1) {
-            // First attempt: return 401 Unauthorized
-            expect(request.url.path, '/babies/b1');
-            return http.Response('{"error": "Unauthorized"}', 401);
+            expect(options.path, '/babies/b1');
+            return ResponseBody.fromString('{"error": "Unauthorized"}', 401);
           } else if (requestCount == 2) {
-            // Second request: Token refresh invocation
-            expect(request.url.path, '/auth/refresh');
-            final body = jsonDecode((request as http.Request).body);
+            expect(options.path, '/auth/refresh');
+            final body = options.data as Map<String, dynamic>;
             expect(body['refreshToken'], 'valid_refresh_123');
-            return http.Response(
+            return ResponseBody.fromString(
               jsonEncode({
                 'token': 'renewed_access_999',
                 'refreshToken': 'valid_refresh_123',
                 'user': {'id': 'u_1', 'role': 'parent'},
               }),
               200,
+              headers: {
+                Headers.contentTypeHeader: [Headers.jsonContentType],
+              },
             );
           } else {
-            // Third request: Replay original request with new token
-            expect(request.url.path, '/babies/b1');
+            expect(options.path, '/babies/b1');
             expect(
-              request.headers['Authorization'],
+              options.headers['Authorization'],
               'Bearer renewed_access_999',
             );
-            return http.Response(jsonEncode({'id': 'b1', 'name': 'Liam'}), 200);
+            return ResponseBody.fromString(
+              jsonEncode({'id': 'b1', 'name': 'Liam'}),
+              200,
+              headers: {
+                Headers.contentTypeHeader: [Headers.jsonContentType],
+              },
+            );
           }
         });
 
+        final dio = Dio()..httpClientAdapter = mockAdapter;
         final apiClient = ApiClient(
           baseUrl: 'http://localhost',
-          client: mockHttp,
           secureStorage: secureStorageService,
+          dio: dio,
         );
 
         final result = await apiClient.get('/babies/b1');
@@ -224,18 +238,22 @@ void main() {
         };
         await cacheService.cacheVitals('ESP32-948210', cachedTelemetryMap);
 
-        // Setup HTTP Client to simulate networking failure
-        final mockHttp = MockHttpClient((request) async {
-          throw Exception('Network unreachable');
+        // Setup mock adapter to fail, simulating offline network state
+        final mockAdapter = MockDioAdapter((options) async {
+          throw DioException(
+            requestOptions: options,
+            type: DioExceptionType.connectionError,
+          );
         });
 
+        final dio = Dio()..httpClientAdapter = mockAdapter;
         final apiClient = ApiClient(
           baseUrl: 'http://localhost',
-          client: mockHttp,
           secureStorage: secureStorageService,
+          dio: dio,
         );
 
-        final repository = DeviceRepository(
+        final repository = DeviceRepositoryImpl(
           apiClient: apiClient,
           cacheService: cacheService,
         );

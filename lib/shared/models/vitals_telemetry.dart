@@ -39,6 +39,22 @@ class VitalsTelemetry extends Equatable {
     };
   }
 
+  VitalsTelemetry copyWith({
+    String? sensorType,
+    double? value,
+    String? unit,
+    String? quality,
+    DateTime? timestamp,
+  }) {
+    return VitalsTelemetry(
+      sensorType: sensorType ?? this.sensorType,
+      value: value ?? this.value,
+      unit: unit ?? this.unit,
+      quality: quality ?? this.quality,
+      timestamp: timestamp ?? this.timestamp,
+    );
+  }
+
   @override
   List<Object?> get props => [sensorType, value, unit, quality, timestamp];
 }

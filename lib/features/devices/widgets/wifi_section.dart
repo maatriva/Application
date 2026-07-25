@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
-import '../models/device_model.dart';
+import '../../../shared/models/models.dart';
 
 class WifiSection extends StatefulWidget {
   final DeviceModel device;

@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
+import '../../../notifications/providers/notifications_provider.dart';
 
-class DashboardHeader extends StatelessWidget implements PreferredSizeWidget {
+class DashboardHeader extends ConsumerWidget implements PreferredSizeWidget {
   const DashboardHeader({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unreadCount = ref.watch(notificationsProvider.select((s) => s.unreadCount));
+
     return Container(
       color: AppColors.background,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -52,18 +56,19 @@ class DashboardHeader extends StatelessWidget implements PreferredSizeWidget {
                     size: 28,
                   ),
                 ),
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    width: 10,
-                    height: 10,
-                    decoration: const BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
+                if (unreadCount > 0)
+                  Positioned(
+                    right: 8,
+                    top: 8,
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ],
