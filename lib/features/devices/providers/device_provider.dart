@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../domain/repositories/device_repository.dart';
+import '../../../../shared/models/client_device_info.dart';
 import '../../../../shared/models/device_model.dart';
 import '../models/activity_model.dart';
 
@@ -65,7 +66,7 @@ class DeviceNotifier extends StateNotifier<DeviceState> {
           id: d.deviceId,
           name: d.deviceName,
           type: d.type,
-          status: d.status == 'online' || d.status == 'Connected' ? 'Connected' : 'Offline',
+          status: d.status == 'online' || d.status == 'ONLINE' || d.status == 'Connected' || d.status == 'PAIRED' ? 'Connected' : 'Offline',
           lastSynced: 'Just now',
           firmwareVersion: d.firmwareVersion,
           latestFirmwareVersion: d.firmwareVersion,
@@ -334,9 +335,7 @@ class DeviceNotifier extends StateNotifier<DeviceState> {
 
     // Call Repository to pair
     await _deviceRepo.pairDevice(
-      deviceId: deviceId,
-      deviceName: name,
-      type: deviceType,
+      registrationKey: 'REG-$deviceId',
       babyId: 'baby_mock_123',
     );
 
@@ -395,21 +394,18 @@ class DeviceNotifier extends StateNotifier<DeviceState> {
     await loadDevices();
   }
 
-  Future<void> pairNewDevice({
-    required String deviceId,
-    required String deviceName,
-    required String type,
+  Future<ClientDeviceInfo> pairNewDevice({
+    required String registrationKey,
     required String babyId,
   }) async {
     state = state.copyWith(isScanning: true, clearError: true);
     try {
-      await _deviceRepo.pairDevice(
-        deviceId: deviceId,
-        deviceName: deviceName,
-        type: type,
+      final pairedDevice = await _deviceRepo.pairDevice(
+        registrationKey: registrationKey,
         babyId: babyId,
       );
       await loadDevices();
+      return pairedDevice;
     } catch (e) {
       state = state.copyWith(
         isScanning: false,

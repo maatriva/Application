@@ -76,12 +76,13 @@ model Device {
   deviceId        String   @id @map("device_id") @db.VarChar(100)
   deviceName      String   @map("device_name")
   type            String   // 'hub', 'sock', 'camera', 'environmental'
-  firmwareVersion String   @map("firmware_version") @db.VarChar(50)
-  protocol        String   @db.VarChar(50) // 'BLE', 'Wi-Fi'
+  firmwareVersion String   @default("1.0.0") @map("firmware_version") @db.VarChar(50)
+  protocol        String   @default("Wi-Fi") @db.VarChar(50) // 'BLE', 'Wi-Fi'
   battery         Int?
   paired          Boolean  @default(false)
   lastSeen        DateTime @default(now()) @map("last_seen") @db.Timestamptz
-  status          String   @default("offline") @db.VarChar(50) // 'online', 'offline', 'error'
+  status          String   @default("UNPAIRED") @db.VarChar(50) // 'online', 'offline', 'error', 'UNPAIRED', 'PAIRED'
+  registrationKey String   @unique @map("registration_key") @db.VarChar(100)
 
   assignments DeviceAssignment[]
 

@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAATRIVA - Cradle Camera Simulator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    :root {
+      --bg-gradient: linear-gradient(135deg, #0f081d 0%, #1c0e35 50%, #090410 100%);
+      --accent-color: #ec407a;
+      --accent-hover: #f06292;
+      --secondary-color: #6200ea;
+      --card-bg: rgba(255, 255, 255, 0.04);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --text-main: #f5f3f7;
+      --text-sub: #b3a9c2;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow-x: hidden;
+    }
+
+    h1, h2, h3 {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 600px;
+      padding: 24px;
+    }
+
+    /* Glassmorphic Card */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 40px;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(236, 64, 122, 0.05) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .logo-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 32px;
+      z-index: 1;
+      position: relative;
+    }
+
+    .logo-badge {
+      background: linear-gradient(135deg, var(--accent-color), var(--secondary-color));
+      color: white;
+      font-weight: 800;
+      font-size: 11px;
+      padding: 6px 14px;
+      border-radius: 30px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      box-shadow: 0 4px 15px rgba(236, 64, 122, 0.3);
+    }
+
+    .title {
+      font-size: 28px;
+      text-align: center;
+      background: linear-gradient(120deg, #ffffff, #d3c4e3);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .sub-title {
+      font-size: 14px;
+      color: var(--text-sub);
+      text-align: center;
+      margin-top: 4px;
+    }
+
+    /* Form Fields */
+    .form-group {
+      margin-bottom: 24px;
+      position: relative;
+      z-index: 1;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-sub);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    input, select {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 14px 18px;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 15px;
+      transition: all 0.2s ease;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--accent-color);
+      box-shadow: 0 0 12px rgba(236, 64, 122, 0.2);
+      background: rgba(0, 0, 0, 0.3);
+    }
+
+    /* Premium Button */
+    .btn {
+      width: 100%;
+      background: linear-gradient(135deg, var(--accent-color), #f48fb1);
+      border: none;
+      border-radius: 12px;
+      padding: 16px;
+      color: white;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 8px 25px rgba(236, 64, 122, 0.3);
+      transition: all 0.3s ease;
+      z-index: 1;
+      position: relative;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(236, 64, 122, 0.45);
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .btn:disabled {
+      background: #4a3b5c;
+      color: #7b6f8c;
+      box-shadow: none;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Video feed wrapper */
+    .video-wrapper {
+      position: relative;
+      border-radius: 18px;
+      overflow: hidden;
+      border: 1px solid var(--card-border);
+      background: #000;
+      margin-bottom: 24px;
+      aspect-ratio: 16/9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .video-overlay {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      background: rgba(211, 47, 47, 0.85);
+      color: white;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 6px 12px;
+      border-radius: 20px;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    }
+
+    .pulse {
+      width: 6px;
+      height: 6px;
+      background-color: white;
+      border-radius: 50%;
+      animation: pulse-anim 1.5s infinite;
+    }
+
+    @keyframes pulse-anim {
+      0% { transform: scale(0.9); opacity: 0.5; }
+      50% { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(0.9); opacity: 0.5; }
+    }
+
+    .status-panel {
+      background: rgba(0, 0, 0, 0.15);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 24px;
+      font-size: 13px;
+      border: 1px solid rgba(255, 255, 255, 0.02);
+    }
+
+    .status-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .status-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .status-value {
+      font-weight: 600;
+      color: #69f0ae;
+    }
+
+    .error-msg {
+      color: #ff5252;
+      background: rgba(255, 82, 82, 0.1);
+      border: 1px solid rgba(255, 82, 82, 0.2);
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 13px;
+      margin-bottom: 24px;
+      display: none;
+    }
+
+    .section {
+      display: none;
+    }
+
+    .section.active {
+      display: block;
+    }
+
+    /* Animations */
+    .fade-in {
+      animation: fadeIn 0.4s ease forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="card">
+
+      <div class="logo-container">
+        <span class="logo-badge">MAATRIVA</span>
+        <h2 class="title">Cradle Simulator</h2>
+        <p class="sub-title" id="page-subtitle">Baby Monitor Camera Source</p>
+      </div>
+
+      <!-- ERROR MESSAGE -->
+      <div id="error-box" class="error-msg"></div>
+
+      <!-- SECTION 1: LOGIN -->
+      <div id="section-login" class="section active fade-in">
+        <div class="form-group">
+          <label for="login-email">Developer/Parent Email</label>
+          <input type="email" id="login-email" value="maatriva@example.com" placeholder="Enter email">
+        </div>
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" value="Password@123" placeholder="Enter password">
+        </div>
+        <button id="btn-login" class="btn">Authenticate Simulator</button>
+      </div>
+
+      <!-- SECTION 2: BABY SELECTION -->
+      <div id="section-select" class="section fade-in">
+        <div class="form-group">
+          <label for="baby-select">Select Baby to Monitor</label>
+          <select id="baby-select"></select>
+        </div>
+        <button id="btn-start" class="btn">Initialize Stream & Connect</button>
+      </div>
+
+      <!-- SECTION 3: STREAMING ACTIVE -->
+      <div id="section-streaming" class="section fade-in">
+        <div class="video-wrapper">
+          <div class="video-overlay">
+            <span class="pulse"></span>
+            <span>CRADLE LIVE STREAM</span>
+          </div>
+          <video id="local-video" autoplay playsinline muted></video>
+        </div>
+
+        <div class="status-panel">
+          <div class="status-item">
+            <span>Baby ID:</span>
+            <span id="stat-baby-id" class="status-value" style="color: var(--text-sub)">-</span>
+          </div>
+          <div class="status-item">
+            <span>Socket Connection:</span>
+            <span id="stat-socket" class="status-value">Connecting...</span>
+          </div>
+          <div class="status-item">
+            <span>Active Viewers:</span>
+            <span id="stat-viewers" class="status-value">0</span>
+          </div>
+        </div>
+
+        <button id="btn-stop" class="btn" style="background: linear-gradient(135deg, #d32f2f, #ff8a80); box-shadow: 0 8px 25px rgba(211, 47, 47, 0.3);">Stop Streaming</button>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    const CONFIG = {
+      apiBase: window.location.origin
+    };
+
+    let token = '';
+    let selectedBabyId = '';
+    let localStream = null;
+    let socket = null;
+    const peerConnections = new Map(); // viewerSocketId -> RTCPeerConnection
+
+    // Elements
+    const errorBox = document.getElementById('error-box');
+    const btnLogin = document.getElementById('btn-login');
+    const btnStart = document.getElementById('btn-start');
+    const btnStop = document.getElementById('btn-stop');
+    const babySelect = document.getElementById('baby-select');
+    const localVideo = document.getElementById('local-video');
+
+    const secLogin = document.getElementById('section-login');
+    const secSelect = document.getElementById('section-select');
+    const secStreaming = document.getElementById('section-streaming');
+
+    const statBabyId = document.getElementById('stat-baby-id');
+    const statSocket = document.getElementById('stat-socket');
+    const statViewers = document.getElementById('stat-viewers');
+    const pageSubtitle = document.getElementById('page-subtitle');
+
+    function showError(msg) {
+      errorBox.textContent = msg;
+      errorBox.style.display = 'block';
+    }
+
+    function clearError() {
+      errorBox.style.display = 'none';
+    }
+
+    function switchSection(sec) {
+      [secLogin, secSelect, secStreaming].forEach(s => s.classList.remove('active'));
+      sec.classList.add('active');
+    }
+
+    // Login action
+    btnLogin.addEventListener('click', async () => {
+      clearError();
+      btnLogin.disabled = true;
+      btnLogin.textContent = 'Authenticating...';
+
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+
+      try {
+        const response = await fetch(`${CONFIG.apiBase}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          throw new Error(result.message || 'Login failed.');
+        }
+
+        token = result.data.accessToken;
+        pageSubtitle.textContent = 'Select Baby Monitor Room';
+        await fetchBabies();
+        switchSection(secSelect);
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        btnLogin.disabled = false;
+        btnLogin.textContent = 'Authenticate Simulator';
+      }
+    });
+
+    // Fetch Authorized Babies list
+    async function fetchBabies() {
+      try {
+        const response = await fetch(`${CONFIG.apiBase}/babies`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          throw new Error(result.message || 'Failed to fetch babies.');
+        }
+
+        babySelect.innerHTML = '';
+        if (result.data.length === 0) {
+          showError('No authorized babies found for this account.');
+          btnStart.disabled = true;
+          return;
+        }
+
+        result.data.forEach(baby => {
+          const opt = document.createElement('option');
+          opt.value = baby.id;
+          opt.textContent = `${baby.name} (${baby.gender})`;
+          babySelect.appendChild(opt);
+        });
+      } catch (err) {
+        showError(err.message);
+      }
+    }
+
+    // Start Streaming action
+    btnStart.addEventListener('click', async () => {
+      clearError();
+      selectedBabyId = babySelect.value;
+      if (!selectedBabyId) return;
+
+      btnStart.disabled = true;
+      btnStart.textContent = 'Accessing Camera...';
+
+      try {
+        // 1. Get User Media
+        localStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 24 }
+          },
+          audio: true
+        });
+        localVideo.srcObject = localStream;
+        pageSubtitle.textContent = 'Cradle Camera Broadcasting';
+        statBabyId.textContent = selectedBabyId;
+
+        // 2. Initialize Socket.IO connection
+        initSocket();
+
+        switchSection(secStreaming);
+      } catch (err) {
+        showError(`Camera Access Error: ${err.message}. Please allow camera/microphone permissions.`);
+        btnStart.disabled = false;
+        btnStart.textContent = 'Initialize Stream & Connect';
+      }
+    });
+
+    // Socket.IO signaling initialization
+    function initSocket() {
+      socket = io(CONFIG.apiBase, {
+        auth: { token },
+        transports: ['websocket']
+      });
+
+      socket.on('connect', () => {
+        statSocket.textContent = 'Connected (Secure)';
+        statSocket.style.color = '#69f0ae';
+        
+        // Register camera to the baby room
+        socket.emit('join-room', { babyId: selectedBabyId, role: 'camera' });
+      });
+
+      socket.on('disconnect', (reason) => {
+        statSocket.textContent = `Disconnected: ${reason}`;
+        statSocket.style.color = '#ff5252';
+        clearAllPeerConnections();
+      });
+
+      socket.on('connect_error', (err) => {
+        statSocket.textContent = `Error: ${err.message}`;
+        statSocket.style.color = '#ff5252';
+        showError(`Signaling Server Connection Error: ${err.message}`);
+      });
+
+      // Handle a new viewer joining
+      socket.on('viewer-joined', async (data) => {
+        const { viewerSocketId } = data;
+        console.log(`Viewer joined: ${viewerSocketId}. Creating WebRTC PeerConnection.`);
+        
+        // Setup RTCPeerConnection for viewer
+        const pc = new RTCPeerConnection({
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
+        });
+
+        peerConnections.set(viewerSocketId, pc);
+        updateViewerCount();
+
+        // Add local tracks to peer connection
+        localStream.getTracks().forEach(track => {
+          pc.addTrack(track, localStream);
+        });
+
+        // ICE candidates
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            socket.emit('ice-candidate', {
+              babyId: selectedBabyId,
+              candidate: event.candidate,
+              targetSocketId: viewerSocketId
+            });
+          }
+        };
+
+        // Create Offer
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          
+          socket.emit('offer', {
+            babyId: selectedBabyId,
+            sdp: offer,
+            targetSocketId: viewerSocketId
+          });
+        } catch (e) {
+          console.error('Failed to create offer for viewer:', viewerSocketId, e);
+        }
+      });
+
+      // Handle incoming answer from viewer
+      socket.on('answer', async (data) => {
+        const { senderSocketId, sdp } = data;
+        console.log(`Received answer from viewer: ${senderSocketId}`);
+        const pc = peerConnections.get(senderSocketId);
+        if (pc) {
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+          } catch (e) {
+            console.error('Failed to set remote description for viewer:', senderSocketId, e);
+          }
+        }
+      });
+
+      // Handle ICE candidates from viewer
+      socket.on('ice-candidate', async (data) => {
+        const { senderSocketId, candidate } = data;
+        const pc = peerConnections.get(senderSocketId);
+        if (pc && candidate) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (e) {
+            console.error('Failed to add ICE candidate from viewer:', senderSocketId, e);
+          }
+        }
+      });
+
+      // Handle viewer left
+      socket.on('viewer-left', (data) => {
+        const { viewerSocketId } = data;
+        console.log(`Viewer left: ${viewerSocketId}. Disposing connection.`);
+        closePeerConnection(viewerSocketId);
+      });
+    }
+
+    function closePeerConnection(viewerId) {
+      const pc = peerConnections.get(viewerId);
+      if (pc) {
+        pc.close();
+        peerConnections.delete(viewerId);
+        updateViewerCount();
+      }
+    }
+
+    function clearAllPeerConnections() {
+      for (const [viewerId, pc] of peerConnections.entries()) {
+        pc.close();
+      }
+      peerConnections.clear();
+      updateViewerCount();
+    }
+
+    function updateViewerCount() {
+      statViewers.textContent = peerConnections.size;
+    }
+
+    // Stop Streaming action
+    btnStop.addEventListener('click', () => {
+      // Stop media tracks
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+      }
+      localVideo.srcObject = null;
+
+      // Disconnect socket
+      if (socket) {
+        socket.emit('leave-room', { babyId: selectedBabyId });
+        socket.disconnect();
+        socket = null;
+      }
+
+      clearAllPeerConnections();
+      
+      btnStart.disabled = false;
+      btnStart.textContent = 'Initialize Stream & Connect';
+      pageSubtitle.textContent = 'Baby Monitor Camera Source';
+
+      switchSection(secSelect);
+    });
+
+    // Cleanup on window close
+    window.addEventListener('beforeunload', () => {
+      if (socket) {
+        socket.disconnect();
+      }
+      clearAllPeerConnections();
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+      }
+    });
+  </script>
+</body>
+</html>

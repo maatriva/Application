@@ -3,12 +3,17 @@ import '../../shared/models/vitals_telemetry.dart';
 
 /// Contract definition for managing paired cradle devices and retrieving telemetry logs.
 abstract class DeviceRepository {
-  Future<void> pairDevice({
+  Future<ClientDeviceInfo> registerDevice({
     required String deviceId,
     required String deviceName,
     required String type,
-    String firmwareVersion = '1.0.0',
-    String protocol = 'Wi-Fi',
+    String? registrationKey,
+    String? firmwareVersion,
+    String? protocol,
+  });
+
+  Future<ClientDeviceInfo> pairDevice({
+    required String registrationKey,
     required String babyId,
   });
 

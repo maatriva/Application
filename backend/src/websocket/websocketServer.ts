@@ -8,6 +8,8 @@ export class WebsocketServerManager {
   private static instance?: WebsocketServerManager;
   private io?: SocketIOServer;
 
+  private activeCameras = new Map<string, string>(); // babyId -> socketId
+
   private constructor() {}
 
   public static getInstance(): WebsocketServerManager {
@@ -95,6 +97,101 @@ export class WebsocketServerManager {
         socket.leave(roomName);
         console.log(`[Socket.IO] Socket ${socket.id} (User ${userId}) left room ${roomName}`);
         socket.emit('left:baby', { babyId });
+      });
+
+      // --- WebRTC Signaling Events ---
+      socket.on('join-room', async (data: { babyId: string; role: 'camera' | 'viewer' }) => {
+        const { babyId, role } = data;
+        const authorized = await this.isUserAuthorized(userId, babyId);
+        if (!authorized) {
+          console.warn(`[Socket.IO] Socket ${socket.id} (User ${userId}) unauthorized join-room attempt for baby ${babyId}`);
+          socket.emit('join:error', { babyId, message: 'Unauthorized access to this baby stream.' });
+          return;
+        }
+
+        const roomName = `webrtc:baby:${babyId}`;
+        socket.join(roomName);
+        console.log(`[Socket.IO] Socket ${socket.id} (User ${userId}) joined WebRTC room ${roomName} as ${role}`);
+
+        if (role === 'camera') {
+          this.activeCameras.set(babyId, socket.id);
+          // Notify room that camera is online
+          socket.to(roomName).emit('camera-status', { babyId, status: 'online', cameraSocketId: socket.id });
+          socket.emit('camera-status', { babyId, status: 'online', cameraSocketId: socket.id });
+          console.log(`[Socket.IO] Camera registered for baby ${babyId}: ${socket.id}`);
+        } else if (role === 'viewer') {
+          const cameraSocketId = this.activeCameras.get(babyId);
+          if (cameraSocketId) {
+            // Tell the camera to initiate connection with this viewer
+            this.io?.to(cameraSocketId).emit('viewer-joined', { babyId, viewerSocketId: socket.id });
+            socket.emit('camera-status', { babyId, status: 'online', cameraSocketId });
+          } else {
+            socket.emit('camera-status', { babyId, status: 'offline' });
+          }
+        }
+      });
+
+      socket.on('leave-room', (data: { babyId: string }) => {
+        const { babyId } = data;
+        const roomName = `webrtc:baby:${babyId}`;
+        socket.leave(roomName);
+        console.log(`[Socket.IO] Socket ${socket.id} left WebRTC room ${roomName}`);
+        
+        const cameraSocketId = this.activeCameras.get(babyId);
+        if (cameraSocketId) {
+          if (cameraSocketId === socket.id) {
+            this.activeCameras.delete(babyId);
+            this.io?.to(roomName).emit('camera-status', { babyId, status: 'offline' });
+          } else {
+            this.io?.to(cameraSocketId).emit('viewer-left', { babyId, viewerSocketId: socket.id });
+          }
+        }
+      });
+
+      socket.on('offer', (data: { babyId: string; sdp: any; targetSocketId: string }) => {
+        const { babyId, sdp, targetSocketId } = data;
+        this.io?.to(targetSocketId).emit('offer', {
+          babyId,
+          sdp,
+          senderSocketId: socket.id,
+        });
+      });
+
+      socket.on('answer', (data: { babyId: string; sdp: any; targetSocketId: string }) => {
+        const { babyId, sdp, targetSocketId } = data;
+        this.io?.to(targetSocketId).emit('answer', {
+          babyId,
+          sdp,
+          senderSocketId: socket.id,
+        });
+      });
+
+      socket.on('ice-candidate', (data: { babyId: string; candidate: any; targetSocketId: string }) => {
+        const { babyId, candidate, targetSocketId } = data;
+        this.io?.to(targetSocketId).emit('ice-candidate', {
+          babyId,
+          candidate,
+          senderSocketId: socket.id,
+        });
+      });
+
+      socket.on('disconnecting', () => {
+        for (const room of socket.rooms) {
+          if (room.startsWith('webrtc:baby:')) {
+            const babyId = room.replace('webrtc:baby:', '');
+            const cameraSocketId = this.activeCameras.get(babyId);
+            if (cameraSocketId) {
+              if (cameraSocketId === socket.id) {
+                this.activeCameras.delete(babyId);
+                socket.to(room).emit('camera-status', { babyId, status: 'offline' });
+                console.log(`[Socket.IO] Camera ${socket.id} disconnected. Baby ${babyId} stream is offline.`);
+              } else {
+                this.io?.to(cameraSocketId).emit('viewer-left', { babyId, viewerSocketId: socket.id });
+                console.log(`[Socket.IO] Viewer ${socket.id} disconnected from baby ${babyId} stream.`);
+              }
+            }
+          }
+        }
       });
 
       socket.on('disconnect', (reason) => {

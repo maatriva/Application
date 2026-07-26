@@ -15,6 +15,8 @@ router.post('/cry/start', DebugController.startCry);
 router.post('/cry/stop', DebugController.stopCry);
 router.post('/sensor/failure', DebugController.triggerSensorFailure);
 router.get('/status', DebugController.getStatus);
+router.get('/camera-simulator', DebugController.cameraSimulator);
+
 
 // Support both DELETE and POST for resettings
 router.delete('/reset', DebugController.resetData);

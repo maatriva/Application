@@ -11,6 +11,8 @@ import '../storage/secure_storage_service.dart';
 // Core Services
 import 'iot_device_repository.dart';
 import 'websocket_service.dart';
+import 'webrtc_service.dart';
+
 
 // Domain Repositories
 import '../../domain/repositories/auth_repository.dart';
@@ -91,6 +93,17 @@ final webSocketServiceProvider = Provider<WebSocketService>((ref) {
     service.dispose();
   });
   return service;
+});
+
+// WebRTC Service StateNotifierProvider
+final webrtcServiceProvider = StateNotifierProvider<WebrtcNotifier, WebrtcState>((ref) {
+  final ws = ref.watch(webSocketServiceProvider);
+  final notifier = WebrtcNotifier(ws);
+
+  ref.onDispose(() {
+    notifier.dispose();
+  });
+  return notifier;
 });
 
 // IotDeviceRepository provider

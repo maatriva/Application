@@ -1,0 +1,390 @@
+openapi: 3.0.3
+info:
+  title: MAATRIVA IoT Telemetry API
+  description: API documentation for MAATRIVA Smart Cradle ecosystem backend, including the Telemetry Ingestion Module and Onboarding Flow.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+    description: Development Local server
+  - url: https://staging-api.maatriva.cloud
+    description: Staging Environment
+  - url: https://api.maatriva.co.in
+    description: Production Environment
+
+paths:
+  /telemetry:
+    post:
+      summary: Ingest Device Telemetry
+      description: Receives real-time telemetry sensor readings from a registered and paired cradle/simulator. Verifies registration and active assignment, persists the record, evaluates safety alerts, and broadcasts real-time updates via WebSockets.
+      operationId: ingestTelemetry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelemetryIngestPayload'
+      responses:
+        '201':
+          description: Telemetry successfully ingested and stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Telemetry ingested successfully.
+                  data:
+                    $ref: '#/components/schemas/TelemetryRecord'
+        '400':
+          description: Validation error, missing required fields, or unpaired device.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Unknown device ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /telemetry/latest/{babyId}:
+    get:
+      summary: Fetch Latest Telemetry
+      description: Retrieves the most recent telemetry packet stored for a specific baby. Only authorized parents or caregivers can access.
+      operationId: getLatestTelemetry
+      parameters:
+        - name: babyId
+          in: path
+          required: true
+          description: UUID of the baby profile.
+          schema:
+            type: string
+            format: uuid
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Latest telemetry record fetched successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Latest telemetry reading fetched successfully.
+                  data:
+                    $ref: '#/components/schemas/TelemetryRecord'
+        '401':
+          description: Unauthorized access token required.
+        '403':
+          description: Access denied to baby telemetry.
+        '404':
+          description: Baby profile not found.
+
+  /telemetry/history/{babyId}:
+    get:
+      summary: Fetch Telemetry History
+      description: Retrieves historical telemetry packets stored for a specific baby, filtered by date range and limits. Only authorized parents or caregivers can access.
+      operationId: getTelemetryHistory
+      parameters:
+        - name: babyId
+          in: path
+          required: true
+          description: UUID of the baby profile.
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          required: false
+          description: Start ISO date string.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: End ISO date string.
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          description: Max records to return.
+          schema:
+            type: integer
+            default: 100
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Telemetry history logs fetched successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Telemetry history fetched successfully.
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TelemetryRecord'
+
+  /devices/register:
+    post:
+      summary: Factory/Admin Register Device
+      description: Registers a new physical IoT device in the central registry system with status `UNPAIRED`.
+      operationId: registerDevice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - deviceId
+                - deviceName
+                - type
+              properties:
+                deviceId:
+                  type: string
+                  example: MTR-1784793241620
+                deviceName:
+                  type: string
+                  example: Smart Cradle Pro
+                type:
+                  type: string
+                  enum: [Smart Cradle, ESP32 Controller, Camera]
+                  example: Smart Cradle
+                registrationKey:
+                  type: string
+                  example: REG-FA98B823E1
+                firmwareVersion:
+                  type: string
+                  example: 1.0.0
+                protocol:
+                  type: string
+                  example: Wi-Fi
+      responses:
+        '201':
+          description: Device successfully registered.
+        '400':
+          description: Device ID or Registration Key already exists.
+
+  /devices/pair:
+    post:
+      summary: Customer Onboarding Device Pairing
+      description: Pairs a registered device using its unique registrationKey and assigns it to a selected baby.
+      operationId: pairDevice
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - registrationKey
+                - babyId
+              properties:
+                registrationKey:
+                  type: string
+                  example: REG-FA98B823E1
+                babyId:
+                  type: string
+                  format: uuid
+                  example: 550e8400-e29b-41d4-a716-446655440000
+      responses:
+        '200':
+          description: Device successfully paired.
+        '400':
+          description: Device is already paired or validation failed.
+        '404':
+          description: Invalid registration key or Baby not found.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    TelemetryIngestPayload:
+      type: object
+      required:
+        - deviceId
+        - timestamp
+      properties:
+        deviceId:
+          type: string
+          description: Unique identifier of the transmitting device.
+          example: MTR-1784793241620
+        timestamp:
+          type: string
+          format: date-time
+          description: ISO timestamp when readings were generated.
+          example: '2026-07-25T15:30:00Z'
+        heartRate:
+          type: integer
+          description: Heart rate in beats per minute (BPM).
+          example: 128
+        breathingRate:
+          type: integer
+          description: Respiration/breathing rate in breaths per minute.
+          example: 34
+        respirationRate:
+          type: integer
+          description: Respiration/breathing rate in breaths per minute.
+          example: 34
+        bodyTemperature:
+          type: number
+          format: float
+          description: Body temperature of the infant in °C.
+          example: 36.8
+        roomTemperature:
+          type: number
+          format: float
+          description: Ambient room temperature in °C.
+          example: 25.5
+        humidity:
+          type: number
+          format: float
+          description: Room humidity percentage.
+          example: 58
+        oxygenLevel:
+          type: integer
+          description: Blood oxygen saturation level (SPO2) percentage (simulated).
+          example: 98
+        movement:
+          type: string
+          description: General infant movement status.
+          example: NORMAL
+        cryDetected:
+          type: boolean
+          description: Indicator if infant cry sounds were detected.
+          example: false
+        sleepStage:
+          type: string
+          description: Simulated sleep stage category.
+          example: DEEP_SLEEP
+        bedTemperature:
+          type: number
+          format: float
+          description: Mattress/bed temperature in °C.
+          example: 35.0
+        batteryLevel:
+          type: integer
+          description: Device battery percentage.
+          example: 92
+        signalStrength:
+          type: integer
+          description: Wi-Fi RSSI signal strength (dBm).
+          example: -48
+        airQuality:
+          type: integer
+          description: Air quality index (AQI) value.
+          example: 50
+
+    TelemetryRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        deviceId:
+          type: string
+          example: MTR-1784793241620
+        babyId:
+          type: string
+          format: uuid
+          example: 7bf2b123-ab3c-4d32-aa91-3444abef77b1
+        timestamp:
+          type: string
+          format: date-time
+          example: '2026-07-25T15:30:00Z'
+        heartRate:
+          type: integer
+          nullable: true
+          example: 128
+        respirationRate:
+          type: integer
+          nullable: true
+          example: 34
+        bodyTemperature:
+          type: number
+          format: float
+          nullable: true
+          example: 36.8
+        roomTemperature:
+          type: number
+          format: float
+          nullable: true
+          example: 25.5
+        humidity:
+          type: number
+          format: float
+          nullable: true
+          example: 58
+        movementDetected:
+          type: boolean
+          nullable: true
+          example: true
+        cryDetected:
+          type: boolean
+          nullable: true
+          example: false
+        sleepStage:
+          type: string
+          nullable: true
+          example: DEEP_SLEEP
+        airQuality:
+          type: integer
+          nullable: true
+          example: 50
+        batteryLevel:
+          type: integer
+          nullable: true
+          example: 92
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-07-25T15:31:00Z'
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: Validation failed.
+        errors:
+          type: array
+          items:
+            type: string
+          example: [deviceId is required.]

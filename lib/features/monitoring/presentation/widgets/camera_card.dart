@@ -1,11 +1,65 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
+import 'package:maatriva/core/services/providers.dart';
+import 'package:maatriva/core/services/webrtc_service.dart';
+import 'package:maatriva/features/dashboard/presentation/providers/dashboard_provider.dart';
 
-class CameraCard extends StatelessWidget {
+class CameraCard extends ConsumerStatefulWidget {
   const CameraCard({super.key});
 
   @override
+  ConsumerState<CameraCard> createState() => _CameraCardState();
+}
+
+class _CameraCardState extends ConsumerState<CameraCard> {
+  @override
+  void dispose() {
+    // Clean up WebRTC connection when screen/card is disposed
+    Future.microtask(() {
+      if (mounted) {
+        ref.read(webrtcServiceProvider.notifier).disconnectStream();
+      }
+    });
+    super.dispose();
+  }
+
+  void _togglePlay(String? babyId) {
+    if (babyId == null) return;
+    final webrtcState = ref.read(webrtcServiceProvider);
+    final notifier = ref.read(webrtcServiceProvider.notifier);
+
+    if (webrtcState.status == WebrtcStatus.disconnected ||
+        webrtcState.status == WebrtcStatus.error ||
+        webrtcState.status == WebrtcStatus.offline) {
+      notifier.connectStream(babyId);
+    } else {
+      notifier.disconnectStream();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final dashboardState = ref.watch(dashboardProvider);
+    final webrtcState = ref.watch(webrtcServiceProvider);
+    final webrtcNotifier = ref.read(webrtcServiceProvider.notifier);
+
+    final baby = dashboardState.baby;
+    final babyId = baby?.id;
+    final babyName = baby?.name ?? 'Baby';
+
+    // Extract real telemetry if available
+    final telemetryMap = dashboardState.latestTelemetry;
+    final batteryVal = telemetryMap?['battery_level']?.value;
+    final roomTempVal = telemetryMap?['room_temperature']?.value;
+    final humidityVal = telemetryMap?['humidity']?.value;
+    final sleepStageStr = telemetryMap?['sleep_stage']?.unit ?? 'Asleep';
+
+    final batteryText = batteryVal != null ? '${batteryVal.toInt()}%' : '92%';
+    final tempText = roomTempVal != null ? '${roomTempVal.toStringAsFixed(1)}°C' : '22.4°C';
+    final humidityText = humidityVal != null ? '${humidityVal.toInt()}%' : '55%';
+
     return Container(
       width: double.infinity,
       height: 230,
@@ -17,32 +71,32 @@ class CameraCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: Stack(
         children: [
-          // Simulated Video Feed
+          // 1. Video Render Area based on WebRTC Status
           Positioned.fill(
-            child: Image.network(
-              'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=800&q=80',
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  color: const Color(0xFF1E112C),
-                  child: const Center(
-                    child: Icon(
-                      Icons.child_care_rounded,
-                      color: Colors.white24,
-                      size: 64,
-                    ),
+            child: _buildVideoFeed(webrtcState, webrtcNotifier),
+          ),
+
+          // 2. Scan line / Infrared visual overlay
+          if (webrtcState.status == WebrtcStatus.streaming)
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.02),
+                  // Subtle vertical gradient to look like infrared scan line
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.green.withOpacity(0.02),
+                      Colors.transparent,
+                      Colors.green.withOpacity(0.01),
+                    ],
                   ),
-                );
-              },
+                ),
+              ),
             ),
-          ),
 
-          // Scan line / Soft Green Tint effect to mimic infrared baby monitor
-          Positioned.fill(
-            child: Container(color: Colors.white.withOpacity(0.04)),
-          ),
-
-          // Stats Header Overlay
+          // 3. Stats Header Overlay
           Positioned(
             left: 14,
             right: 14,
@@ -70,7 +124,7 @@ class CameraCard extends StatelessWidget {
                   ],
                 ),
                 Text(
-                  'BATTERY 92%   |   TEMP 22.4°C   HUMIDITY 55%',
+                  'BATTERY $batteryText   |   TEMP $tempText   HUMIDITY $humidityText',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.6),
                     fontSize: 8,
@@ -82,43 +136,75 @@ class CameraCard extends StatelessWidget {
             ),
           ),
 
-          // "LIVE MONITORING" Red Badge
-          Positioned(
-            left: 14,
-            top: 34,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFD32F2F),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 5,
-                    height: 5,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
+          // 4. "LIVE" Red Badge
+          if (webrtcState.status == WebrtcStatus.streaming)
+            Positioned(
+              left: 14,
+              top: 34,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD32F2F),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 5,
+                      height: 5,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  const Text(
-                    'LIVE MONITORING',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 8,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
+                    const SizedBox(width: 6),
+                    const Text(
+                      'LIVE MONITORING',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
 
-          // Bottom Bar Overlay (Info and Controls)
+          // 5. Center Play Overlay (Visible when not actively streaming/connecting)
+          if (webrtcState.status == WebrtcStatus.disconnected)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black45,
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.play_circle_outline_rounded,
+                          color: Colors.white,
+                          size: 64,
+                        ),
+                        onPressed: () => _togglePlay(babyId),
+                      ),
+                      const Text(
+                        'Tap to start live video stream',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // 6. Bottom Bar Overlay (Info and Controls)
           Positioned(
             left: 14,
             right: 14,
@@ -133,7 +219,7 @@ class CameraCard extends StatelessWidget {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.black45,
+                    color: Colors.black54,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
@@ -148,7 +234,7 @@ class CameraCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'Baby: Liam | Asleep',
+                        'Baby: $babyName | $sleepStageStr',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 8,
@@ -159,54 +245,282 @@ class CameraCard extends StatelessWidget {
                   ),
                 ),
 
-                // Bottom Right Camera Controls (Zoom, Fullscreen)
+                // Bottom Right Camera Controls (Mute, Fullscreen, Play/Stop)
                 Row(
                   children: [
-                    // Speaker volume icon
-                    Container(
-                      width: 26,
-                      height: 26,
-                      decoration: BoxDecoration(
-                        color: Colors.black38,
-                        shape: BoxShape.circle,
+                    // Mute / Unmute Button
+                    if (webrtcState.status == WebrtcStatus.streaming) ...[
+                      GestureDetector(
+                        onTap: () => webrtcNotifier.toggleMute(),
+                        child: Container(
+                          width: 28,
+                          height: 28,
+                          decoration: const BoxDecoration(
+                            color: Colors.black45,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            webrtcState.isMuted
+                                ? Icons.volume_off_rounded
+                                : Icons.volume_up_rounded,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.volume_up_rounded,
-                        color: Colors.white,
-                        size: 14,
+                      const SizedBox(width: 8),
+                      // Full screen trigger
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const FullscreenVideoPage(),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.fullscreen_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Zoom trigger
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: Colors.white24,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.zoom_in_rounded,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Full screen trigger
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: Colors.white24,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.fullscreen_rounded,
-                        color: Colors.white,
-                        size: 18,
+                      const SizedBox(width: 8),
+                    ],
+                    // Play / Disconnect Switch
+                    GestureDetector(
+                      onTap: () => _togglePlay(babyId),
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: webrtcState.status == WebrtcStatus.streaming
+                              ? const Color(0xFFD32F2F)
+                              : AppColors.primary,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          webrtcState.status == WebrtcStatus.streaming
+                              ? Icons.stop_rounded
+                              : Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
                       ),
                     ),
                   ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVideoFeed(WebrtcState webrtcState, WebrtcNotifier webrtcNotifier) {
+    switch (webrtcState.status) {
+      case WebrtcStatus.streaming:
+        return RTCVideoView(
+          webrtcNotifier.videoRenderer,
+          objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+        );
+      case WebrtcStatus.connecting:
+        return Container(
+          color: const Color(0xFF130924),
+          child: const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(
+                  color: AppColors.primary,
+                  strokeWidth: 3,
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'Establishing secure cradle stream...',
+                  style: TextStyle(
+                    color: Colors.white60,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      case WebrtcStatus.offline:
+        return Container(
+          color: const Color(0xFF1A1125),
+          child: const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.videocam_off_rounded,
+                  color: Colors.white24,
+                  size: 48,
+                ),
+                SizedBox(height: 10),
+                Text(
+                  'Cradle Camera is Offline',
+                  style: TextStyle(
+                    color: Colors.white54,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Make sure your camera device is streaming',
+                  style: TextStyle(
+                    color: Colors.white30,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      case WebrtcStatus.error:
+        return Container(
+          color: const Color(0xFF220D16),
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.error_outline_rounded,
+                  color: Colors.redAccent,
+                  size: 40,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Stream Connection Error',
+                  style: TextStyle(
+                    color: Colors.redAccent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  webrtcState.errorMessage ?? 'An unknown error occurred.',
+                  style: const TextStyle(
+                    color: Colors.white38,
+                    fontSize: 10,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        );
+      case WebrtcStatus.disconnected:
+        // Mock placeholder display
+        return Image.network(
+
+          'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=800&q=80',
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              color: const Color(0xFF1E112C),
+              child: const Center(
+                child: Icon(
+                  Icons.child_care_rounded,
+                  color: Colors.white24,
+                  size: 64,
+                ),
+              ),
+            );
+          },
+        );
+    }
+  }
+}
+
+// Standalone landscape fullscreen presentation page
+class FullscreenVideoPage extends ConsumerWidget {
+  const FullscreenVideoPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final webrtcState = ref.watch(webrtcServiceProvider);
+    final webrtcNotifier = ref.read(webrtcServiceProvider.notifier);
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          // Fullscreen WebRTC Stream
+          Positioned.fill(
+            child: Center(
+              child: webrtcState.status == WebrtcStatus.streaming
+                  ? RTCVideoView(
+                      webrtcNotifier.videoRenderer,
+                      objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+                    )
+                  : const Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    ),
+            ),
+          ),
+          
+          // HUD Close button
+          Positioned(
+            top: 40,
+            left: 20,
+            child: CircleAvatar(
+              backgroundColor: Colors.black54,
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ),
+
+          // Control Overlays
+          Positioned(
+            bottom: 30,
+            left: 0,
+            right: 0,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Mute/Unmute
+                CircleAvatar(
+                  backgroundColor: Colors.black54,
+                  radius: 28,
+                  child: IconButton(
+                    icon: Icon(
+                      webrtcState.isMuted
+                          ? Icons.volume_off_rounded
+                          : Icons.volume_up_rounded,
+                      color: Colors.white,
+                    ),
+                    onPressed: () => webrtcNotifier.toggleMute(),
+                  ),
+                ),
+                const SizedBox(width: 30),
+                // Exit Fullscreen
+                CircleAvatar(
+                  backgroundColor: Colors.black54,
+                  radius: 28,
+                  child: IconButton(
+                    icon: const Icon(Icons.fullscreen_exit_rounded, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
                 ),
               ],
             ),

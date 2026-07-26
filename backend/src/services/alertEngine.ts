@@ -26,6 +26,15 @@ export interface AlertTrigger {
 }
 
 export class AlertEngine {
+  private static instance: AlertEngine | null = null;
+
+  public static getInstance(): AlertEngine {
+    if (!AlertEngine.instance) {
+      AlertEngine.instance = new AlertEngine();
+    }
+    return AlertEngine.instance;
+  }
+
   // Cooldown store: key = deviceId:alertType, value = timestamp of last notification sent
   private cooldowns: Map<string, number> = new Map();
   private readonly cooldownPeriodMs = 120000; // 2 minutes cooldown between duplicate notifications
@@ -33,7 +42,11 @@ export class AlertEngine {
   // Callback hooks for runtime injections
   public onAlertTriggered?: (alert: any) => void;
 
-  constructor() {}
+  constructor() {
+    if (!AlertEngine.instance) {
+      AlertEngine.instance = this;
+    }
+  }
 
   /**
    * Main entry point to evaluate incoming telemetry packet against baby age-specific guidelines.

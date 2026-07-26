@@ -3,6 +3,8 @@ import { prisma } from '../../config/database';
 import { AlertEngine } from '../../services/alertEngine';
 import { TelemetrySubscriber } from '../../mqtt/telemetrySubscriber';
 import { WebsocketServerManager } from '../../websocket/websocketServer';
+import fs from 'fs';
+import path from 'path';
 
 // Instantiate simulator-specific AlertEngine
 const alertEngine = new AlertEngine();
@@ -450,6 +452,36 @@ export class DebugController {
         success: false,
         message: e.message || 'Error resetting debug database data.',
       });
+    }
+  }
+
+  /**
+   * GET /debug/camera-simulator
+   */
+  public static async cameraSimulator(req: Request, res: Response) {
+    try {
+      const paths = [
+        path.join(__dirname, 'camera.html'),
+        path.join(process.cwd(), 'src/modules/debug/camera.html'),
+        path.join(process.cwd(), 'backend/src/modules/debug/camera.html'),
+      ];
+
+      let htmlContent = '';
+      for (const p of paths) {
+        if (fs.existsSync(p)) {
+          htmlContent = fs.readFileSync(p, 'utf8');
+          break;
+        }
+      }
+
+      if (!htmlContent) {
+        throw new Error('camera.html not found in searched locations.');
+      }
+
+      res.setHeader('Content-Type', 'text/html');
+      res.status(200).send(htmlContent);
+    } catch (e: any) {
+      res.status(500).send('Error loading camera simulator: ' + e.message);
     }
   }
 }

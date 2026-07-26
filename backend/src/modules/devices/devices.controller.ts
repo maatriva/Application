@@ -1,29 +1,54 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthenticatedRequest } from '../../middleware/auth.middleware';
 import { DevicesService } from './devices.service';
+import { RegisterDeviceSchema, PairDeviceSchema } from './devices.validation';
+import { ZodIssue } from 'zod';
 
 const devicesService = new DevicesService();
 
 export class DevicesController {
-  public static async pair(req: AuthenticatedRequest, res: Response) {
-    const { deviceId, deviceName, type, firmwareVersion, protocol, babyId } = req.body;
+  public static async register(req: Request, res: Response) {
+    const parseResult = RegisterDeviceSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({
+        error: 'Validation failed.',
+        errors: parseResult.error.issues.map((err: ZodIssue) => err.message),
+      });
+    }
 
-    if (!deviceId || !deviceName || !type || !babyId) {
-      return res.status(400).json({ error: 'deviceId, deviceName, type, and babyId are required.' });
+    try {
+      const result = await devicesService.registerDevice(parseResult.data);
+      res.status(201).json(result);
+    } catch (e: any) {
+      const status = e.statusCode || 500;
+      res.status(status).json({ error: e.message || 'Internal registration error' });
+    }
+  }
+
+  public static async pair(req: AuthenticatedRequest, res: Response) {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized.' });
+    }
+
+    const parseResult = PairDeviceSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({
+        error: 'Validation failed.',
+        errors: parseResult.error.issues.map((err: ZodIssue) => err.message),
+      });
     }
 
     try {
       const result = await devicesService.pairDevice({
-        deviceId,
-        deviceName,
-        type,
-        firmwareVersion,
-        protocol,
-        babyId,
+        registrationKey: parseResult.data.registrationKey,
+        babyId: parseResult.data.babyId,
+        userId,
       });
-      res.status(201).json(result);
+      res.status(200).json(result);
     } catch (e: any) {
-      res.status(500).json({ error: 'Internal pairing error', details: e.message });
+      const status = e.statusCode || 500;
+      res.status(status).json({ error: e.message || 'Internal pairing error' });
     }
   }
 

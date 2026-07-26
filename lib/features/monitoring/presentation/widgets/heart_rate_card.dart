@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
+import 'package:maatriva/features/dashboard/presentation/providers/dashboard_provider.dart';
 
-class HeartRateCard extends StatelessWidget {
+class HeartRateCard extends ConsumerWidget {
   const HeartRateCard({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final dashboardState = ref.watch(dashboardProvider);
+    final telemetryMap = dashboardState.latestTelemetry;
+    final heartRateVal = telemetryMap?['heart_rate']?.value;
+    final heartRateText = heartRateVal != null ? heartRateVal.toInt().toString() : '115';
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -32,9 +39,9 @@ class HeartRateCard extends StatelessWidget {
                   color: const Color(0xFFFFEBEE),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Text(
-                  'STABLE',
-                  style: TextStyle(
+                child: Text(
+                  heartRateVal != null && (heartRateVal < 100 || heartRateVal > 150) ? 'ALERT' : 'STABLE',
+                  style: const TextStyle(
                     color: Color(0xFFC62828),
                     fontSize: 8,
                     fontWeight: FontWeight.bold,
@@ -47,18 +54,18 @@ class HeartRateCard extends StatelessWidget {
           const SizedBox(height: 12),
 
           // Heart Rate Value
-          const Text.rich(
+          Text.rich(
             TextSpan(
               children: [
                 TextSpan(
-                  text: '115 ',
-                  style: TextStyle(
+                  text: '$heartRateText ',
+                  style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary,
                   ),
                 ),
-                TextSpan(
+                const TextSpan(
                   text: 'BPM',
                   style: TextStyle(
                     fontSize: 10,
@@ -71,7 +78,7 @@ class HeartRateCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          // Mini bar chart
+          // Mini bar chart (simulated waves)
           Expanded(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

@@ -4,6 +4,9 @@ import { authenticateToken } from '../../middleware/auth.middleware';
 
 const router = Router();
 
+// Ingestion endpoint does NOT require JWT authentication
+router.post('/', TelemetryController.ingest);
+
 // Apply authentication token middleware
 router.use(authenticateToken);
 

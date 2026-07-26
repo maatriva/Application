@@ -17,26 +17,51 @@ class DeviceRepositoryImpl implements DeviceRepository {
         _cacheService = cacheService;
 
   @override
-  Future<void> pairDevice({
+  Future<ClientDeviceInfo> registerDevice({
     required String deviceId,
     required String deviceName,
     required String type,
-    String firmwareVersion = '1.0.0',
-    String protocol = 'Wi-Fi',
-    required String babyId,
+    String? registrationKey,
+    String? firmwareVersion,
+    String? protocol,
   }) async {
     try {
-      await _apiClient.post(
-        '/devices/pair',
+      final res = await _apiClient.post(
+        '/devices/register',
         body: {
           'deviceId': deviceId,
           'deviceName': deviceName,
           'type': type,
-          'firmwareVersion': firmwareVersion,
-          'protocol': protocol,
+          if (registrationKey != null) 'registrationKey': registrationKey,
+          if (firmwareVersion != null) 'firmwareVersion': firmwareVersion,
+          if (protocol != null) 'protocol': protocol,
+        },
+      );
+      return ClientDeviceInfo.fromJson(res as Map<String, dynamic>);
+    } on ApiException {
+      rethrow;
+    } catch (_) {
+      throw const ApiException(
+        statusCode: 0,
+        message: 'No internet connection or server unreachable.',
+      );
+    }
+  }
+
+  @override
+  Future<ClientDeviceInfo> pairDevice({
+    required String registrationKey,
+    required String babyId,
+  }) async {
+    try {
+      final res = await _apiClient.post(
+        '/devices/pair',
+        body: {
+          'registrationKey': registrationKey,
           'babyId': babyId,
         },
       );
+      return ClientDeviceInfo.fromJson(res as Map<String, dynamic>);
     } on ApiException {
       rethrow;
     } catch (_) {

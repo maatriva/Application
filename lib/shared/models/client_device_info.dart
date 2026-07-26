@@ -11,6 +11,7 @@ class ClientDeviceInfo extends Equatable {
   final String status;
   final DateTime lastSeen;
   final String? babyId;
+  final String? registrationKey;
 
   const ClientDeviceInfo({
     required this.deviceId,
@@ -22,6 +23,7 @@ class ClientDeviceInfo extends Equatable {
     required this.status,
     required this.lastSeen,
     this.babyId,
+    this.registrationKey,
   });
 
   factory ClientDeviceInfo.fromJson(Map<String, dynamic> json) {
@@ -37,6 +39,7 @@ class ClientDeviceInfo extends Equatable {
           ? DateTime.parse(json['lastSeen'] as String)
           : DateTime.now(),
       babyId: json['babyId'] as String?,
+      registrationKey: json['registrationKey'] as String?,
     );
   }
 
@@ -51,6 +54,7 @@ class ClientDeviceInfo extends Equatable {
       'status': status,
       'lastSeen': lastSeen.toIso8601String(),
       if (babyId != null) 'babyId': babyId,
+      if (registrationKey != null) 'registrationKey': registrationKey,
     };
   }
 
@@ -64,6 +68,7 @@ class ClientDeviceInfo extends Equatable {
     String? status,
     DateTime? lastSeen,
     String? babyId,
+    String? registrationKey,
   }) {
     return ClientDeviceInfo(
       deviceId: deviceId ?? this.deviceId,
@@ -75,6 +80,7 @@ class ClientDeviceInfo extends Equatable {
       status: status ?? this.status,
       lastSeen: lastSeen ?? this.lastSeen,
       babyId: babyId ?? this.babyId,
+      registrationKey: registrationKey ?? this.registrationKey,
     );
   }
 
@@ -89,5 +95,6 @@ class ClientDeviceInfo extends Equatable {
         status,
         lastSeen,
         babyId,
+        registrationKey,
       ];
 }

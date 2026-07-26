@@ -334,19 +334,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                         height: 6.r,
                                         decoration: BoxDecoration(
                                           shape: BoxShape.circle,
-                                          color: device.status == 'online' || device.status == 'Connected' ? AppColors.sleepText : Colors.grey,
+                                          color: device.status == 'online' || device.status == 'ONLINE' || device.status == 'Connected' || device.status == 'PAIRED' ? AppColors.sleepText : Colors.grey,
                                         ),
                                       ),
                                       SizedBox(width: 4.w),
                                       Expanded(
                                         child: Text(
-                                          device.status == 'online' || device.status == 'Connected' ? 'Online' : 'Offline',
+                                          device.status == 'online' || device.status == 'ONLINE' || device.status == 'Connected' || device.status == 'PAIRED' ? 'Online' : 'Offline',
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
                                             fontSize: 9.sp,
                                             fontWeight: FontWeight.bold,
-                                            color: device.status == 'online' || device.status == 'Connected' ? AppColors.sleepText : Colors.grey,
+                                            color: device.status == 'online' || device.status == 'ONLINE' || device.status == 'Connected' || device.status == 'PAIRED' ? AppColors.sleepText : Colors.grey,
                                           ),
                                         ),
                                       ),

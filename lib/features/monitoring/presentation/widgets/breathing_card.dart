@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
+import 'package:maatriva/features/dashboard/presentation/providers/dashboard_provider.dart';
 
-class BreathingCard extends StatelessWidget {
+class BreathingCard extends ConsumerWidget {
   const BreathingCard({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final dashboardState = ref.watch(dashboardProvider);
+    final telemetryMap = dashboardState.latestTelemetry;
+    final breathingRateVal = telemetryMap?['breathing_rate']?.value;
+    final breathingRateText = breathingRateVal != null ? breathingRateVal.toInt().toString() : '32';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -34,12 +41,12 @@ class BreathingCard extends StatelessWidget {
           const SizedBox(width: 14),
 
           // Title & Detail description
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
+                const Text(
                   'Breathing Rate',
                   style: TextStyle(
                     fontSize: 15,
@@ -47,10 +54,10 @@ class BreathingCard extends StatelessWidget {
                     color: AppColors.textPrimary,
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
-                  '32 Breaths per minute • Rhythmic',
-                  style: TextStyle(
+                  '$breathingRateText Breaths per minute • Rhythmic',
+                  style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
                     color: AppColors.textSecondary,
@@ -64,18 +71,18 @@ class BreathingCard extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text.rich(
+              Text.rich(
                 TextSpan(
                   children: [
                     TextSpan(
-                      text: '32 ',
-                      style: TextStyle(
+                      text: '$breathingRateText ',
+                      style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                         color: AppColors.primary,
                       ),
                     ),
-                    TextSpan(
+                    const TextSpan(
                       text: 'RPM',
                       style: TextStyle(
                         fontSize: 10,

@@ -4,6 +4,8 @@ import { authenticateToken } from '../../middleware/auth.middleware';
 
 const router = Router();
 
+router.post('/register', DevicesController.register);
+
 router.use(authenticateToken);
 
 router.post('/pair', DevicesController.pair);

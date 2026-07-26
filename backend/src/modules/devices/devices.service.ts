@@ -1,50 +1,124 @@
 import { prisma } from '../../config/database';
+import crypto from 'crypto';
 
 export class DevicesService {
   /**
-   * Pair a cradle/sensor device.
+   * Register a new device.
    */
-  public async pairDevice(data: {
+  public async registerDevice(data: {
     deviceId: string;
     deviceName: string;
     type: string;
+    registrationKey?: string;
     firmwareVersion?: string;
     protocol?: string;
-    babyId: string;
   }) {
-    // 1. Insert device registry if it does not exist, otherwise update status & name
-    await prisma.device.upsert({
-      where: { deviceId: data.deviceId },
-      update: {
-        paired: true,
-        deviceName: data.deviceName,
-      },
-      create: {
-        deviceId: data.deviceId,
-        deviceName: data.deviceName,
-        type: data.type,
-        firmwareVersion: data.firmwareVersion || '1.0.0',
-        protocol: data.protocol || 'Wi-Fi',
-        paired: true,
+    const registrationKey = data.registrationKey || `REG-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
+
+    // Check if device already exists with deviceId or registrationKey
+    const existing = await prisma.device.findFirst({
+      where: {
+        OR: [
+          { deviceId: data.deviceId },
+          { registrationKey: registrationKey },
+        ],
       },
     });
 
-    // 2. Map assignment to baby
-    await prisma.deviceAssignment.upsert({
-      where: {
-        deviceId_babyId: {
-          deviceId: data.deviceId,
-          babyId: data.babyId,
-        },
-      },
-      update: {},
-      create: {
+    if (existing) {
+      const error: any = new Error('Device with this ID or Registration Key already exists.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    return await prisma.device.create({
+      data: {
         deviceId: data.deviceId,
+        deviceName: data.deviceName,
+        type: data.type,
+        registrationKey: registrationKey,
+        firmwareVersion: data.firmwareVersion || '1.0.0',
+        protocol: data.protocol || 'Wi-Fi',
+        paired: false,
+        status: 'UNPAIRED',
+      },
+    });
+  }
+
+  /**
+   * Pair a cradle/sensor device using registration key.
+   */
+  public async pairDevice(data: {
+    registrationKey: string;
+    babyId: string;
+    userId: string;
+  }) {
+    // 1. Verify baby exists
+    const baby = await prisma.baby.findUnique({
+      where: { id: data.babyId },
+    });
+
+    if (!baby || baby.deletedAt !== null) {
+      const error: any = new Error('Baby not found.');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    // 2. Verify baby access (owner is userId)
+    if (baby.parentId !== data.userId) {
+      const error: any = new Error('Unauthorized baby access.');
+      error.statusCode = 403;
+      throw error;
+    }
+
+    // 3. Find registered device by registrationKey
+    const device = await prisma.device.findUnique({
+      where: { registrationKey: data.registrationKey },
+    });
+
+    if (!device) {
+      const error: any = new Error('Invalid registration key.');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    // 4. Verify device is not already paired
+    if (device.paired) {
+      const error: any = new Error('Device is already paired.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    // 5. Associate device with baby via DeviceAssignment
+    await prisma.deviceAssignment.create({
+      data: {
+        deviceId: device.deviceId,
         babyId: data.babyId,
       },
     });
 
-    return { message: 'Device paired successfully.', deviceId: data.deviceId, babyId: data.babyId };
+    // 6. Update device paired status to true and status to PAIRED
+    const updatedDevice = await prisma.device.update({
+      where: { deviceId: device.deviceId },
+      data: {
+        paired: true,
+        status: 'PAIRED',
+        lastSeen: new Date(),
+      },
+    });
+
+    // 7. Return the updated device information
+    return {
+      deviceId: updatedDevice.deviceId,
+      deviceName: updatedDevice.deviceName,
+      type: updatedDevice.type,
+      firmwareVersion: updatedDevice.firmwareVersion,
+      protocol: updatedDevice.protocol,
+      battery: updatedDevice.battery,
+      status: updatedDevice.status,
+      lastSeen: updatedDevice.lastSeen,
+      babyId: data.babyId,
+    };
   }
 
   /**

@@ -1,12 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:math' as math;
 import 'package:maatriva/core/theme/app_colors.dart';
+import 'package:maatriva/features/dashboard/presentation/providers/dashboard_provider.dart';
 
-class BodyTempCard extends StatelessWidget {
+class BodyTempCard extends ConsumerWidget {
   const BodyTempCard({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final dashboardState = ref.watch(dashboardProvider);
+    final telemetryMap = dashboardState.latestTelemetry;
+    final tempVal = telemetryMap?['body_temperature']?.value;
+    final tempText = tempVal != null ? '${tempVal.toStringAsFixed(1)}°' : '36.5°';
+
+    // Map temperature to painter range (normal: 36.5 - 37.5)
+    double progress = 0.72;
+    if (tempVal != null) {
+      // Scale temperature from 35.0 - 39.0 to 0.0 - 1.0 progress
+      progress = ((tempVal - 35.0) / 4.0).clamp(0.0, 1.0);
+    }
+
+    final isNormal = tempVal == null || (tempVal >= 36.2 && tempVal <= 37.8);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -25,13 +41,13 @@ class BodyTempCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE3F2FD),
+                  color: isNormal ? const Color(0xFFE3F2FD) : const Color(0xFFFFEBEE),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Text(
-                  'NORMAL',
+                child: Text(
+                  isNormal ? 'NORMAL' : 'ALERT',
                   style: TextStyle(
-                    color: Color(0xFF1E88E5),
+                    color: isNormal ? const Color(0xFF1E88E5) : const Color(0xFFC62828),
                     fontSize: 8,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.5,
@@ -52,12 +68,12 @@ class BodyTempCard extends StatelessWidget {
                     width: 76,
                     height: 76,
                     child: CustomPaint(
-                      painter: TemperatureCirclePainter(value: 0.72),
+                      painter: TemperatureCirclePainter(value: progress),
                     ),
                   ),
-                  const Text(
-                    '36.5°',
-                    style: TextStyle(
+                  Text(
+                    tempText,
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: AppColors.textPrimary,
@@ -94,29 +110,20 @@ class TemperatureCirclePainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
 
-    final backgroundPaint = Paint()
-      ..color = const Color(0xFFECEFF1)
-      ..strokeWidth = 6
-      ..style = PaintingStyle.stroke;
+    final bgPaint = Paint()
+      ..color = const Color(0xFFEEEEEE)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 6;
 
     final progressPaint = Paint()
-      ..color = const Color(0xFF0288D1)
-      ..strokeWidth = 6
+      ..color = const Color(0xFF4A90E2)
       ..style = PaintingStyle.stroke
+      ..strokeWidth = 6
       ..strokeCap = StrokeCap.round;
 
-    // Background circle
+    canvas.drawCircle(center, radius - 3, bgPaint);
     canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      -math.pi / 2,
-      2 * math.pi,
-      false,
-      backgroundPaint,
-    );
-
-    // Progress arc
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
+      Rect.fromCircle(center: center, radius: radius - 3),
       -math.pi / 2,
       2 * math.pi * value,
       false,
@@ -125,5 +132,5 @@ class TemperatureCirclePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

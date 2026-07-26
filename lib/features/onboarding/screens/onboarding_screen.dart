@@ -204,9 +204,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         final babyId = babies.first.id;
 
         await deviceRepo.pairDevice(
-          deviceId: _deviceIdController.text.trim(),
-          deviceName: 'Maatriva Smart Cradle',
-          type: 'hub',
+          registrationKey: _deviceIdController.text.trim(),
           babyId: babyId,
         );
 
@@ -1002,7 +1000,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                                 onPressed: () {
                                   // Mock scan sets default cradle serial
                                   setState(() {
-                                    _deviceIdController.text = 'MTR-1784793241620';
+                                    _deviceIdController.text = 'REG-1784793241620';
                                   });
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
@@ -1026,13 +1024,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       ),
                       SizedBox(height: 24.h),
 
-                      // Device ID input
-                      _buildLabel('Device ID / Serial Number'),
+                      // Registration Key input
+                      _buildLabel('Registration Key'),
                       TextFormField(
                         controller: _deviceIdController,
                         style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600),
-                        validator: (v) => v == null || v.isEmpty ? 'Device ID is required to pair.' : null,
-                        decoration: _buildInputDecoration(Icons.fingerprint_rounded, 'e.g. MTR-XXXXXXXXXXXXX'),
+                        validator: (v) => v == null || v.isEmpty ? 'Registration Key is required to pair.' : null,
+                        decoration: _buildInputDecoration(Icons.fingerprint_rounded, 'e.g. REG-XXXXXXXXXXXXX'),
                       ),
                     ],
                   ),

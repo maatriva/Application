@@ -197,7 +197,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
           device: cachedDevice,
           latestTelemetry: cachedTelemetryMap,
         );
-        if (cachedDevice != null && (cachedDevice.status == 'online' || cachedDevice.status == 'Connected')) {
+        if (cachedDevice != null && (cachedDevice.status == 'online' || cachedDevice.status == 'ONLINE' || cachedDevice.status == 'Connected' || cachedDevice.status == 'PAIRED')) {
           _resetHeartbeatTimer();
         }
       } else {
@@ -239,7 +239,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         latestTelemetry: telemetryMap,
       );
 
-      if (device != null && (device.status == 'online' || device.status == 'Connected')) {
+      if (device != null && (device.status == 'online' || device.status == 'ONLINE' || device.status == 'Connected' || device.status == 'PAIRED')) {
         _resetHeartbeatTimer();
       }
     } on ApiException catch (e) {

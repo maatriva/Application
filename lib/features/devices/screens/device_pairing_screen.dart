@@ -83,24 +83,22 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
 
     try {
       final deviceNotifier = ref.read(deviceProvider.notifier);
-      final devId = _deviceIdController.text.trim();
+      final regKey = _deviceIdController.text.trim();
 
       // Execute pairing
-      await deviceNotifier.pairNewDevice(
-        deviceId: devId,
-        deviceName: 'Maatriva Smart Cradle',
-        type: 'Smart Cradle',
+      final pairedDevice = await deviceNotifier.pairNewDevice(
+        registrationKey: regKey,
         babyId: _selectedBaby!.id,
       );
 
       // Successfully paired! Load details
       setState(() {
         _isSuccess = true;
-        _pairedDeviceName = 'Maatriva Smart Cradle';
-        _pairedDeviceId = devId;
-        _pairedFirmware = 'v1.0.0';
-        _pairedBattery = 100;
-        _pairedStatus = 'Online';
+        _pairedDeviceName = pairedDevice.deviceName;
+        _pairedDeviceId = pairedDevice.deviceId;
+        _pairedFirmware = pairedDevice.firmwareVersion;
+        _pairedBattery = pairedDevice.battery ?? 100;
+        _pairedStatus = pairedDevice.status;
       });
 
       // Refresh dashboard to map new device details
@@ -118,12 +116,12 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
 
   void _simulateQRScan() {
     setState(() {
-      _deviceIdController.text = 'MTR-1784793241620';
+      _deviceIdController.text = 'REG-1784793241620';
       _errorMessage = null;
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Device ID scanned successfully from QR!'),
+        content: const Text('Registration Key scanned successfully from QR!'),
         backgroundColor: AppColors.primary,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
@@ -185,7 +183,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
       ),
       SizedBox(height: 6.h),
       Text(
-        'Scan QR code or enter Device ID manually to pair.',
+        'Scan QR code or enter Registration Key manually to pair.',
         style: TextStyle(
           fontSize: 12.sp,
           color: AppColors.textSecondary,
@@ -266,7 +264,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'Device ID / Serial Number',
+                'Registration Key',
                 style: TextStyle(fontSize: 11.sp, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
               ),
             ),
@@ -274,11 +272,11 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
             TextFormField(
               controller: _deviceIdController,
               style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600),
-              validator: (v) => v == null || v.trim().isEmpty ? 'Device ID is required.' : null,
+              validator: (v) => v == null || v.trim().isEmpty ? 'Registration Key is required.' : null,
               decoration: InputDecoration(
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-                hintText: 'e.g. MTR-1784793241620',
+                hintText: 'e.g. REG-1784793241620',
                 hintStyle: TextStyle(fontSize: 13.sp, color: AppColors.textSecondary.withOpacity(0.4)),
                 prefixIcon: Icon(Icons.fingerprint_rounded, color: AppColors.primary.withOpacity(0.7), size: 18.r),
                 filled: true,

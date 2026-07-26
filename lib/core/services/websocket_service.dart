@@ -33,6 +33,9 @@ class WebSocketService with WidgetsBindingObserver {
   WsConnectionState _currentState = WsConnectionState.disconnected;
   String? _selectedBabyId;
   bool _isConnecting = false;
+  
+  // Custom signaling event handlers registry
+  final Map<String, List<Function(dynamic)>> _customHandlers = {};
 
   WebSocketService({
     required this.wsBaseUrl,
@@ -162,6 +165,14 @@ class WebSocketService with WidgetsBindingObserver {
         _log('Socket Error: Room join failure: $data');
       });
 
+      // Re-register any custom signaling handlers on the new socket instance
+      _customHandlers.forEach((event, callbacks) {
+        _log('Re-registering event handler for: $event');
+        for (final cb in callbacks) {
+          _socket!.on(event, cb);
+        }
+      });
+
       _socket!.connect();
     } catch (e) {
       _isConnecting = false;
@@ -259,10 +270,57 @@ class WebSocketService with WidgetsBindingObserver {
     }
   }
 
+  /// Emits an event to the Socket.IO server.
+  void emit(String event, [dynamic data]) {
+    if (_socket != null) {
+      _log('Emitting event: $event');
+      _socket!.emit(event, data);
+    } else {
+      _log('Cannot emit event $event: Socket is null.');
+    }
+  }
+
+  /// Registers a handler for a specific event from the Socket.IO server.
+  void registerHandler(String event, Function(dynamic) callback) {
+    _log('Registering handler for event: $event');
+    _customHandlers.putIfAbsent(event, () => []).add(callback);
+    if (_socket != null) {
+      _socket!.on(event, callback);
+    }
+  }
+
+  /// Unregisters all handlers or a specific handler for a specific event.
+  void unregisterHandler(String event, [Function(dynamic)? callback]) {
+    _log('Unregistering handler for event: $event');
+    if (callback == null) {
+      _customHandlers.remove(event);
+      if (_socket != null) {
+        _socket!.off(event);
+      }
+    } else {
+      final list = _customHandlers[event];
+      if (list != null) {
+        list.remove(callback);
+        if (list.isEmpty) {
+          _customHandlers.remove(event);
+        }
+      }
+      if (_socket != null) {
+        _socket!.off(event);
+        if (_customHandlers.containsKey(event)) {
+          for (final cb in _customHandlers[event]!) {
+            _socket!.on(event, cb);
+          }
+        }
+      }
+    }
+  }
+
   /// Clean resources.
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     disconnect();
+    _customHandlers.clear();
     _telemetryController.close();
     _alertController.close();
     _stateController.close();
