@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'core/config/api_config.dart';
 import 'core/services/providers.dart';
 import 'core/theme/app_theme.dart';
 import 'routes/app_routes.dart';
@@ -10,6 +11,11 @@ import 'routes/app_routes.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
+  
+  final savedCustomUrl = prefs.getString('custom_base_url');
+  if (savedCustomUrl != null && savedCustomUrl.isNotEmpty) {
+    ApiConfig.setCustomBaseUrl(savedCustomUrl);
+  }
   
   runApp(
     ProviderScope(

@@ -5,6 +5,7 @@ dotenv.config();
 
 export const env = {
   PORT: process.env.PORT ? parseInt(process.env.PORT, 10) : 3000,
+  HOST: process.env.HOST || '0.0.0.0',
   NODE_ENV: process.env.NODE_ENV || 'development',
   DATABASE_URL: process.env.DATABASE_URL || 'postgresql://postgres:Arsh1496@localhost:5432/maatriva?schema=public',
   JWT_SECRET: process.env.JWT_SECRET || 'super_jwt_secret_token_1234',

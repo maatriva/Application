@@ -253,3 +253,46 @@ model Invitation {
 
   @@map("invitations")
 }
+
+model MusicTrack {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title          String
+  category       String   @default("Lullabies") // Lullabies, White Noise, Nature Sounds, Womb Sounds, Instrumental, Nursery Rhymes, Regional, Parent Recordings
+  language       String   @default("English")
+  duration       Int      @default(0) // duration in seconds
+  fileSize       Int      @default(0) @map("file_size") // bytes
+  audioFormat    String   @default("mp3") @map("audio_format")
+  bitrate        Int?
+  artist         String   @default("Maatriva Sound Studio")
+  album          String?
+  storageUrl     String   @map("storage_url")
+  fileHash       String?  @map("file_hash")
+  thumbnail      String?
+  uploadedAt     DateTime @default(now()) @map("uploaded_at") @db.Timestamptz
+  uploadedBy     String?  @map("uploaded_by") @db.Uuid
+  isPremium      Boolean  @default(false) @map("is_premium")
+  isActive       Boolean  @default(true) @map("is_active")
+  playCount      Int      @default(0) @map("play_count")
+  favouriteCount Int      @default(0) @map("favourite_count")
+  targetAgeGroup String?  @map("target_age_group")
+  tags           String[] @default([])
+
+  @@index([category])
+  @@index([language])
+  @@index([fileHash])
+  @@map("music_tracks")
+}
+
+model MusicBatchJob {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  status       String   @default("processing") // 'processing', 'completed', 'failed', 'partial'
+  totalFiles   Int      @map("total_files")
+  successCount Int      @default(0) @map("success_count")
+  failedCount  Int      @default(0) @map("failed_count")
+  details      Json     @default("[]")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("music_batch_jobs")
+}
+

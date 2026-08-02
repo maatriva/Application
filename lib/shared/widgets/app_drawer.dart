@@ -3,17 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
+import '../../routes/app_routes.dart';
+import '../../shared/models/user_session.dart';
 import '../../features/profile/provider/profile_provider.dart';
 import '../../features/authentication/presentation/providers/auth_provider.dart';
+import '../../features/dashboard/presentation/providers/dashboard_provider.dart';
 
 class AppDrawer extends ConsumerWidget {
   const AppDrawer({super.key});
 
   void _showAboutDialog(BuildContext context) {
-    Navigator.pop(context); // Close drawer first
     showDialog(
       context: context,
-      builder: (BuildContext context) {
+      builder: (dialogContext) {
         return Dialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(28),
@@ -79,7 +81,7 @@ class AppDrawer extends ConsumerWidget {
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
@@ -100,10 +102,9 @@ class AppDrawer extends ConsumerWidget {
   }
 
   void _showSignOutDialog(BuildContext context, WidgetRef ref) {
-    Navigator.pop(context); // Close drawer first
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
@@ -120,16 +121,18 @@ class AppDrawer extends ConsumerWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text(
                 'Cancel',
                 style: TextStyle(color: AppColors.textSecondary),
               ),
             ),
             ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                ref.read(authNotifierProvider.notifier).logout();
+              onPressed: () async {
+                final router = GoRouter.of(dialogContext);
+                Navigator.of(dialogContext).pop();
+                await ref.read(authNotifierProvider.notifier).logout();
+                router.go(AppRoutes.login);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
@@ -137,6 +140,52 @@ class AppDrawer extends ConsumerWidget {
                 elevation: 0,
               ),
               child: const Text('Sign Out'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showRestrictedAccessDialog(BuildContext context, String featureName) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.lock_outline_rounded, color: Colors.orange, size: 24),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Access Restricted',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'You don\'t have permission to access $featureName.\n\nAs a Caregiver, your authorized access includes:\n• Live Video Monitoring\n• Live Sensor Telemetry\n• Alerts & Notifications\n• In-App Online Music',
+            style: const TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.5),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('Understood'),
             ),
           ],
         );
@@ -152,6 +201,11 @@ class AppDrawer extends ConsumerWidget {
     final caregiverAvatar = profile.parentAvatar.isNotEmpty
         ? profile.parentAvatar
         : 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=120';
+
+    final authState = ref.watch(authNotifierProvider);
+    final baby = ref.watch(dashboardProvider.select((s) => s.baby));
+    final isCaregiver = authState.session?.role == UserRole.caregiver ||
+        baby?.accessLevel == 'LIVE_MONITOR_ONLY';
 
     return Drawer(
       backgroundColor: AppColors.background,
@@ -191,7 +245,7 @@ class AppDrawer extends ConsumerWidget {
               ),
             ),
             accountEmail: Text(
-              caregiverEmail,
+              isCaregiver ? '$caregiverEmail (Caregiver Mode)' : caregiverEmail,
               style: GoogleFonts.inter(
                 color: Colors.white.withOpacity(0.8),
                 fontSize: 12,
@@ -210,7 +264,7 @@ class AppDrawer extends ConsumerWidget {
                     vertical: 8,
                   ),
                   child: Text(
-                    'QUICK ACTIONS',
+                    isCaregiver ? 'CAREGIVER PERMITTED ACTIONS' : 'QUICK ACTIONS',
                     style: GoogleFonts.inter(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
@@ -219,11 +273,73 @@ class AppDrawer extends ConsumerWidget {
                     ),
                   ),
                 ),
+
+                // Permitted for Caregiver: Live Sensors & Monitoring
+                _buildDrawerTile(
+                  context,
+                  icon: Icons.sensors_rounded,
+                  label: 'Live Sensors Dashboard',
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.go('/?tab=0');
+                  },
+                ),
+                _buildDrawerTile(
+                  context,
+                  icon: Icons.videocam_outlined,
+                  label: 'Live Video Feed',
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.go('/?tab=1');
+                  },
+                ),
+                _buildDrawerTile(
+                  context,
+                  icon: Icons.notifications_outlined,
+                  label: 'Alerts & Notifications',
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.push('/notifications');
+                  },
+                ),
+                _buildDrawerTile(
+                  context,
+                  icon: Icons.music_note_outlined,
+                  label: 'Online Music Soother',
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.push('/music');
+                  },
+                ),
+
+                const Divider(height: 24, color: AppColors.divider),
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Text(
+                    'PARENT SECTIONS',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textSecondary.withOpacity(0.5),
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+
                 _buildDrawerTile(
                   context,
                   icon: Icons.person_outline_rounded,
                   label: 'Profile',
+                  isRestricted: isCaregiver,
                   onTap: () {
+                    if (isCaregiver) {
+                      _showRestrictedAccessDialog(context, 'Profile Settings');
+                      return;
+                    }
                     Navigator.pop(context);
                     context.push('/profile');
                   },
@@ -232,7 +348,12 @@ class AppDrawer extends ConsumerWidget {
                   context,
                   icon: Icons.smart_toy_outlined,
                   label: 'AI Assistant',
+                  isRestricted: isCaregiver,
                   onTap: () {
+                    if (isCaregiver) {
+                      _showRestrictedAccessDialog(context, 'AI Assistant');
+                      return;
+                    }
                     Navigator.pop(context);
                     context.push('/ai-assistant');
                   },
@@ -241,25 +362,26 @@ class AppDrawer extends ConsumerWidget {
                   context,
                   icon: Icons.favorite_border_rounded,
                   label: 'Predictive Health',
+                  isRestricted: isCaregiver,
                   onTap: () {
+                    if (isCaregiver) {
+                      _showRestrictedAccessDialog(context, 'Predictive Health Analytics');
+                      return;
+                    }
                     Navigator.pop(context);
                     context.push('/predictive-health');
                   },
                 ),
                 _buildDrawerTile(
                   context,
-                  icon: Icons.music_note_outlined,
-                  label: 'Music Soother',
-                  onTap: () {
-                    Navigator.pop(context);
-                    context.push('/music');
-                  },
-                ),
-                _buildDrawerTile(
-                  context,
                   icon: Icons.share_rounded,
                   label: 'Caregiver Access',
+                  isRestricted: isCaregiver,
                   onTap: () {
+                    if (isCaregiver) {
+                      _showRestrictedAccessDialog(context, 'Caregiver Access Management');
+                      return;
+                    }
                     Navigator.pop(context);
                     context.push('/caregiver-access');
                   },
@@ -268,21 +390,32 @@ class AppDrawer extends ConsumerWidget {
                   context,
                   icon: Icons.shopping_bag_outlined,
                   label: 'Nursery Shop',
+                  isRestricted: isCaregiver,
                   onTap: () {
+                    if (isCaregiver) {
+                      _showRestrictedAccessDialog(context, 'Nursery Shop');
+                      return;
+                    }
                     Navigator.pop(context);
                     context.push('/shop');
                   },
                 ),
                 _buildDrawerTile(
                   context,
-                  icon: Icons.videocam_outlined,
-                  label: 'Live Camera Feed',
+                  icon: Icons.qr_code_scanner_rounded,
+                  label: 'Join Shared Baby (Scan QR)',
+                  isRestricted: isCaregiver,
                   onTap: () {
+                    if (isCaregiver) {
+                      _showRestrictedAccessDialog(context, 'QR Registration');
+                      return;
+                    }
                     Navigator.pop(context);
-                    context.go('/?tab=1');
+                    context.push('/join-shared-baby');
                   },
                 ),
-                const Divider(height: 32, color: AppColors.divider),
+
+                const Divider(height: 24, color: AppColors.divider),
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -340,16 +473,54 @@ class AppDrawer extends ConsumerWidget {
     required VoidCallback onTap,
     Color? iconColor,
     Color? labelColor,
+    bool isRestricted = false,
   }) {
     return ListTile(
-      leading: Icon(icon, color: iconColor ?? AppColors.primary, size: 22),
-      title: Text(
-        label,
-        style: GoogleFonts.inter(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: labelColor ?? AppColors.textPrimary,
-        ),
+      leading: Icon(
+        icon,
+        color: isRestricted
+            ? AppColors.textSecondary.withOpacity(0.4)
+            : (iconColor ?? AppColors.primary),
+        size: 22,
+      ),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isRestricted
+                    ? AppColors.textSecondary.withOpacity(0.6)
+                    : (labelColor ?? AppColors.textPrimary),
+              ),
+            ),
+          ),
+          if (isRestricted)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.lock_rounded, size: 10, color: Colors.orange),
+                  const SizedBox(width: 3),
+                  Text(
+                    'Restricted',
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onTap: onTap,

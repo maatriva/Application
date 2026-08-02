@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../domain/repositories/profile_repository.dart';
@@ -46,8 +47,13 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
   Future<void> loadProfile() async {
     try {
       final profile = await _profileRepo.getProfile();
-      state = profile;
-    } catch (_) {}
+      if (mounted) {
+        state = profile;
+        debugPrint('[PROFILE] ProfileNotifier state updated with profile for ${profile.parentName}.');
+      }
+    } catch (e) {
+      debugPrint('[PROFILE] ProfileNotifier loadProfile error: $e');
+    }
   }
 
   void updateParentProfile({

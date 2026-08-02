@@ -89,6 +89,19 @@ final webSocketServiceProvider = Provider<WebSocketService>((ref) {
     }
   });
 
+  service.caregiverRevokedStream.listen((msg) {
+    debugPrint('[CaregiverRevoked] Revocation event received. Logging out caregiver account...');
+    ref.read(authNotifierProvider.notifier).logout();
+    scaffoldMessengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  });
+
   ref.onDispose(() {
     service.dispose();
   });
@@ -127,7 +140,8 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
 // BabyRepository provider
 final babyRepositoryProvider = Provider<BabyRepository>((ref) {
   final client = ref.watch(apiClientProvider);
-  return BabyRepositoryImpl(apiClient: client);
+  final cache = ref.watch(cacheServiceProvider);
+  return BabyRepositoryImpl(apiClient: client, cacheService: cache);
 });
 
 // DeviceRepository provider

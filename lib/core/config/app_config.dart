@@ -1,47 +1,26 @@
-import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'api_config.dart';
 
-enum AppEnv { dev, staging, prod }
+export 'api_config.dart' show AppEnv;
 
 class AppConfig {
-  // Switch this to AppEnv.staging or AppEnv.prod for Staging/Production environments
-  static const AppEnv environment = AppEnv.dev;
-
-  static const String devBaseUrl = 'http://localhost:3000';
-  static const String devAndroidEmulatorBaseUrl = 'http://10.0.2.2:3000';
+  static AppEnv get environment => ApiConfig.environment;
   
-  static const String stagingBaseUrl = 'https://staging-api.maatriva.cloud';
-  static const String prodBaseUrl = 'https://api.maatriva.co.in';
-
-  static String get apiBaseUrl {
-    switch (environment) {
-      case AppEnv.dev:
-        if (!kIsWeb && Platform.isAndroid) {
-          return devAndroidEmulatorBaseUrl;
-        }
-        return devBaseUrl;
-      case AppEnv.staging:
-        return stagingBaseUrl;
-      case AppEnv.prod:
-        return prodBaseUrl;
-    }
+  static void setEnvironment(AppEnv env) {
+    ApiConfig.setEnvironment(env);
   }
 
-  static String get wsBaseUrl {
-    final httpUrl = apiBaseUrl;
-    if (httpUrl.startsWith('https://')) {
-      return httpUrl.replaceFirst('https://', 'wss://');
-    } else {
-      return httpUrl.replaceFirst('http://', 'ws://');
-    }
-  }
+  static String get apiBaseUrl => ApiConfig.baseUrl;
+  static String get devBaseUrl => ApiConfig.baseUrl;
+  static String get defaultDevIp => ApiConfig.baseUrl;
 
-  static const String apiVersion = 'v1';
+  static String get wsBaseUrl => ApiConfig.wsBaseUrl;
+
+  static const String apiVersion = ApiConfig.apiVersion;
   
-  // 10-second timeouts as requested
-  static const int connectTimeout = 30000; // 30s
-  static const int receiveTimeout = 30000; // 30s
-  static const int sendTimeout = 30000; // 30s
+  static const int connectTimeout = ApiConfig.connectTimeout;
+  static const int receiveTimeout = ApiConfig.receiveTimeout;
+  static const int sendTimeout = ApiConfig.sendTimeout;
   
-  static bool isTesting = false;
+  static bool get isTesting => ApiConfig.isTesting;
+  static set isTesting(bool val) => ApiConfig.isTesting = val;
 }

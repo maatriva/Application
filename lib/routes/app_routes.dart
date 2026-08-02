@@ -9,6 +9,7 @@ import '../features/reports/presentation/screens/predictive_health_screen.dart';
 import '../features/dashboard/presentation/screens/telemetry_history_screen.dart';
 import '../features/caregivers/presentation/screens/caregiver_access_screen.dart';
 import '../features/caregivers/presentation/screens/accept_invite_screen.dart';
+import '../features/caregivers/presentation/screens/join_shared_baby_screen.dart';
 import '../features/shop/presentation/screens/shop_screen.dart';
 import '../features/shop/presentation/screens/product_details_screen.dart';
 import '../features/shop/presentation/screens/cart_screen.dart';
@@ -43,6 +44,7 @@ import '../features/authentication/presentation/providers/auth_provider.dart';
 import '../features/authentication/presentation/screens/login_screen.dart';
 import '../features/authentication/presentation/screens/register_screen.dart';
 import '../features/authentication/presentation/screens/splash_screen.dart';
+import '../shared/models/user_session.dart';
 
 /// Centralized route registry paths definition
 class AppRoutes {
@@ -62,6 +64,7 @@ class AppRoutes {
   static const String telemetryHistory = '/telemetry-history';
   static const String caregiverAccess = '/caregiver-access';
   static const String caregiverAcceptInvite = '/accept-invite';
+  static const String joinSharedBaby = '/join-shared-baby';
   static const String shop = '/shop';
   static const String shopProductDetails = '/shop/product-details';
   static const String shopCart = '/shop/cart';
@@ -128,16 +131,40 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         }
 
         final isGoingToOnboarding = state.matchedLocation == AppRoutes.onboarding;
+        final isGoingToJoinSharedBaby = state.matchedLocation == AppRoutes.joinSharedBaby;
+
+        final isCaregiver = auth.session?.role == UserRole.caregiver;
+
+        // Caregiver role route restrictions: block health, shop, ai, and caregiver management screens
+        if (isCaregiver) {
+          final loc = state.matchedLocation;
+          final isRestrictedRoute = loc == AppRoutes.healthReports ||
+              loc == AppRoutes.predictiveHealth ||
+              loc == AppRoutes.aiAssistant ||
+              loc == AppRoutes.caregiverAccess ||
+              loc == AppRoutes.parentDetails ||
+              loc.startsWith('/shop');
+
+          if (isRestrictedRoute) {
+            return AppRoutes.home;
+          }
+        }
+
         if (!onboarding.isCompleted) {
-          if (!isGoingToOnboarding) {
+          if (!isGoingToOnboarding && !isGoingToJoinSharedBaby) {
             return AppRoutes.onboarding;
           }
           return null;
         } else {
-          // If onboarding is completed and user is on login/register/splash/onboarding, send them home
+          // Role-based login redirection verification
           if (isLoggingInOrRegistering ||
               state.matchedLocation == AppRoutes.splash ||
               isGoingToOnboarding) {
+            if (isCaregiver) {
+              // Caregiver account: redirect right after login to scan QR code screen for time-limited access
+              return AppRoutes.joinSharedBaby;
+            }
+            // Parent account: open baby dashboard directly
             return AppRoutes.home;
           }
         }
@@ -215,6 +242,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           final token = state.uri.queryParameters['token'] ?? '';
           return AcceptInviteScreen(token: token);
         },
+      ),
+      GoRoute(
+        path: AppRoutes.joinSharedBaby,
+        builder: (context, state) => const JoinSharedBabyScreen(),
       ),
       GoRoute(
         path: AppRoutes.shop,

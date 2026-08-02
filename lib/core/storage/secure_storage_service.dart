@@ -4,6 +4,11 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class SecureStorageService {
   final FlutterSecureStorage _storage;
 
+  static String? _cachedAccessToken;
+  static String? _cachedRefreshToken;
+  static String? _cachedUserId;
+  static String? _cachedUserRole;
+
   const SecureStorageService({
     FlutterSecureStorage storage = const FlutterSecureStorage(),
   }) : _storage = storage;
@@ -20,6 +25,11 @@ class SecureStorageService {
     required String userId,
     required String userRole,
   }) async {
+    _cachedAccessToken = accessToken;
+    _cachedRefreshToken = refreshToken;
+    _cachedUserId = userId;
+    _cachedUserRole = userRole;
+
     await Future.wait([
       _storage.write(key: _accessTokenKey, value: accessToken),
       _storage.write(key: _refreshTokenKey, value: refreshToken),
@@ -30,26 +40,51 @@ class SecureStorageService {
 
   /// Get the active access token.
   Future<String?> getAccessToken() async {
-    return await _storage.read(key: _accessTokenKey);
+    if (_cachedAccessToken != null && _cachedAccessToken!.isNotEmpty) {
+      return _cachedAccessToken;
+    }
+    final token = await _storage.read(key: _accessTokenKey);
+    _cachedAccessToken = token;
+    return token;
   }
 
   /// Get the active refresh token.
   Future<String?> getRefreshToken() async {
-    return await _storage.read(key: _refreshTokenKey);
+    if (_cachedRefreshToken != null && _cachedRefreshToken!.isNotEmpty) {
+      return _cachedRefreshToken;
+    }
+    final token = await _storage.read(key: _refreshTokenKey);
+    _cachedRefreshToken = token;
+    return token;
   }
 
   /// Get the logged-in user's ID.
   Future<String?> getUserId() async {
-    return await _storage.read(key: _userIdKey);
+    if (_cachedUserId != null && _cachedUserId!.isNotEmpty) {
+      return _cachedUserId;
+    }
+    final id = await _storage.read(key: _userIdKey);
+    _cachedUserId = id;
+    return id;
   }
 
   /// Get the logged-in user's role.
   Future<String?> getUserRole() async {
-    return await _storage.read(key: _userRoleKey);
+    if (_cachedUserRole != null && _cachedUserRole!.isNotEmpty) {
+      return _cachedUserRole;
+    }
+    final role = await _storage.read(key: _userRoleKey);
+    _cachedUserRole = role;
+    return role;
   }
 
   /// Clears the token store on logout or session expiration.
   Future<void> clearSession() async {
+    _cachedAccessToken = null;
+    _cachedRefreshToken = null;
+    _cachedUserId = null;
+    _cachedUserRole = null;
+
     await Future.wait([
       _storage.delete(key: _accessTokenKey),
       _storage.delete(key: _refreshTokenKey),

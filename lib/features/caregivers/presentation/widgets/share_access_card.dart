@@ -7,11 +7,15 @@ import 'qr_code_card.dart';
 class ShareAccessCard extends StatelessWidget {
   final String qrToken;
   final bool isLoading;
+  final String? qrError;
+  final VoidCallback? onRetry;
 
   const ShareAccessCard({
     super.key,
     required this.qrToken,
     required this.isLoading,
+    this.qrError,
+    this.onRetry,
   });
 
   @override
@@ -57,7 +61,12 @@ class ShareAccessCard extends StatelessWidget {
                 ),
                 child: Container(
                   padding: const EdgeInsets.all(20),
-                  child: QRCodeCard(qrToken: qrToken, isLoading: isLoading),
+                  child: QRCodeCard(
+                    qrToken: qrToken,
+                    isLoading: isLoading,
+                    qrError: qrError,
+                    onRetry: onRetry,
+                  ),
                 ),
               ),
 
@@ -118,6 +127,25 @@ class ShareAccessCard extends StatelessWidget {
             ),
             textAlign: TextAlign.center,
           ),
+          if (qrToken.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: SelectableText(
+                qrToken,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontFamily: 'monospace',
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

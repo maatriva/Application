@@ -75,9 +75,16 @@ class DeviceRepositoryImpl implements DeviceRepository {
   @override
   Future<List<ClientDeviceInfo>> getDevices() async {
     try {
-      final res = await _apiClient.get('/devices') as List;
-      final devices = res
-          .map((json) => ClientDeviceInfo.fromJson(json as Map<String, dynamic>))
+      final res = await _apiClient.get('/devices');
+      List rawList = [];
+      if (res is List) {
+        rawList = res;
+      } else if (res is Map && res['data'] is List) {
+        rawList = res['data'] as List;
+      }
+      final devices = rawList
+          .whereType<Map>()
+          .map((json) => ClientDeviceInfo.fromJson(Map<String, dynamic>.from(json)))
           .toList();
 
       await _cacheService.cacheDevices(devices.map((d) => d.toJson()).toList());
@@ -86,50 +93,41 @@ class DeviceRepositoryImpl implements DeviceRepository {
       if (e is ApiException && e.statusCode != 0) {
         rethrow;
       }
-      // Fallback to cached devices offline
       final cached = _cacheService.getCachedDevices();
       if (cached.isNotEmpty) {
         return cached.map((json) => ClientDeviceInfo.fromJson(json)).toList();
       }
-      if (e is ApiException) {
-        rethrow;
-      }
-      throw const ApiException(
-        statusCode: 0,
-        message: 'No internet connection or server unreachable.',
-      );
+      return [];
     }
   }
 
   @override
   Future<List<VitalsTelemetry>> getLatestTelemetry(String deviceId) async {
     try {
-      final res = await _apiClient.get('/devices/$deviceId/latest') as List;
-      final vitals = res
-          .map((json) => VitalsTelemetry.fromJson(json as Map<String, dynamic>))
+      final res = await _apiClient.get('/devices/$deviceId/latest');
+      List rawList = [];
+      if (res is List) {
+        rawList = res;
+      } else if (res is Map && res['data'] is List) {
+        rawList = res['data'] as List;
+      }
+      final vitals = rawList
+          .whereType<Map>()
+          .map((json) => VitalsTelemetry.fromJson(Map<String, dynamic>.from(json)))
           .toList();
 
       final vitalsMap = {for (var v in vitals) v.sensorType: v.toJson()};
       await _cacheService.cacheVitals(deviceId, vitalsMap);
       return vitals;
     } catch (e) {
-      if (e is ApiException && e.statusCode != 0) {
-        rethrow;
-      }
-      // Fallback to cached telemetry offline
       final cached = _cacheService.getCachedVitals(deviceId);
       if (cached != null) {
         return cached.values
-            .map((json) => VitalsTelemetry.fromJson(json as Map<String, dynamic>))
+            .whereType<Map>()
+            .map((json) => VitalsTelemetry.fromJson(Map<String, dynamic>.from(json)))
             .toList();
       }
-      if (e is ApiException) {
-        rethrow;
-      }
-      throw const ApiException(
-        statusCode: 0,
-        message: 'No internet connection or server unreachable.',
-      );
+      return [];
     }
   }
 

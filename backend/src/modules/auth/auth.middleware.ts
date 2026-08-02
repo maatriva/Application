@@ -20,7 +20,7 @@ export function authenticateToken(req: AuthenticatedRequest, res: Response, next
 
   jwt.verify(token, env.JWT_SECRET, (err, decoded: any) => {
     if (err) {
-      return res.status(403).json({
+      return res.status(401).json({
         success: false,
         message: 'Invalid or expired token.',
       });

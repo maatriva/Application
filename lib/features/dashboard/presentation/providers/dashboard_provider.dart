@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/errors/api_exception.dart';
+import '../../../../core/config/api_config.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../domain/repositories/baby_repository.dart';
 import '../../../../domain/repositories/device_repository.dart';
 import '../../../../domain/repositories/profile_repository.dart';
@@ -71,6 +73,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
   final WebSocketService _wsService;
   final IotDeviceRepository _iotRepo;
   final CacheService _cacheService;
+  final ApiClient _apiClient;
 
   StreamSubscription? _telemetrySubscription;
   StreamSubscription? _deviceStatusSubscription;
@@ -84,12 +87,14 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     required WebSocketService wsService,
     required IotDeviceRepository iotRepo,
     required CacheService cacheService,
+    required ApiClient apiClient,
   })  : _profileRepo = profileRepo,
         _babyRepo = babyRepo,
         _deviceRepo = deviceRepo,
         _wsService = wsService,
         _iotRepo = iotRepo,
         _cacheService = cacheService,
+        _apiClient = apiClient,
         super(DashboardState.initial()) {
     loadDashboard();
     _subscribeToStreams();
@@ -158,6 +163,39 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
   }
 
   Future<void> loadDashboard({bool isRefreshing = false}) async {
+    // 0. Auto-resume pending QR code joins
+    final prefs = _cacheService.sharedPreferences;
+    final pendingJson = prefs.getString('pending_qr_join_data');
+    if (pendingJson != null) {
+      if (kDebugMode) {
+        print('[DashboardNotifier] Found pending QR join data: $pendingJson');
+      }
+      try {
+        final data = jsonDecode(pendingJson);
+        final server = data['server'] as String?;
+        final token = data['token'] as String?;
+        if (token != null) {
+          final resolvedServer = ApiConfig.resolveServerUrl(server);
+          print('[DEBUG] Scanned QR code. Accessing token from resolved server: $resolvedServer');
+          _apiClient.setBaseUrl(resolvedServer);
+
+          print('[DEBUG] Sending accept invitation request to backend...');
+          await _apiClient.post(
+            '/caregivers/accept',
+            body: {'token': token},
+          );
+
+          print('[DEBUG] Invitation accepted on backend. Success response received.');
+          print('[DEBUG] Permission assigned: LIVE_MONITOR_ONLY');
+
+          // Clear cache
+          await prefs.remove('pending_qr_join_data');
+        }
+      } catch (e) {
+        print('[DEBUG] Auto-resume join failed: $e');
+      }
+    }
+
     if (!isRefreshing) {
       final cachedProfileJson = _cacheService.getCachedUserProfile();
       final cachedDevicesJson = _cacheService.getCachedDevices();
@@ -205,57 +243,76 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       }
     }
 
+    ProfileState? profile;
     try {
-      // 1. Fetch parent user profile details
-      final profile = await _profileRepo.getProfile();
+      profile = await _profileRepo.getProfile();
+    } catch (e) {
+      if (kDebugMode) {
+        print('[DashboardNotifier] Profile fetch error: $e');
+      }
+    }
 
-      // 2. Fetch parent's babies
+    BabyProfile? baby;
+    try {
       final babies = await _babyRepo.getBabies();
-      final baby = babies.isNotEmpty ? babies.first : null;
-
+      baby = babies.isNotEmpty ? babies.first : null;
       if (baby != null) {
         _wsService.setSelectedBaby(baby.id);
         await _cacheService.cacheSelectedBaby(baby.toJson());
+        await _cacheService.cacheSelectedBabyId(baby.id);
       }
+    } catch (e) {
+      if (kDebugMode) {
+        print('[DashboardNotifier] Baby fetch error: $e');
+      }
+      final cachedMap = _cacheService.getCachedSelectedBaby();
+      if (cachedMap != null) {
+        baby = BabyProfile.fromJson(cachedMap);
+      }
+    }
 
-      // 3. Fetch paired devices
+    ClientDeviceInfo? device;
+    Map<String, VitalsTelemetry>? telemetryMap;
+    try {
       final devices = await _deviceRepo.getDevices();
-      final device = devices.isNotEmpty ? devices.first : null;
+      device = devices.isNotEmpty ? devices.first : null;
 
-      // 4. Fetch telemetry if a device exists
-      Map<String, VitalsTelemetry>? telemetryMap;
       if (device != null) {
         final telemetryList = await _deviceRepo.getLatestTelemetry(device.deviceId);
         telemetryMap = {for (var v in telemetryList) v.sensorType: v};
-        
         await _cacheService.cacheDevices(devices.map((d) => d.toJson()).toList());
       }
+    } catch (e) {
+      if (kDebugMode) {
+        print('[DashboardNotifier] Devices/telemetry fetch error: $e');
+      }
+    }
 
-      state = DashboardState(
-        isLoading: false,
-        profile: profile,
-        baby: baby,
-        device: device,
-        latestTelemetry: telemetryMap,
-      );
+    final finalProfile = profile ?? state.profile;
+    final finalBaby = baby ?? state.baby;
+    final finalDevice = device ?? state.device;
+    final finalTelemetry = telemetryMap ?? state.latestTelemetry;
 
-      if (device != null && (device.status == 'online' || device.status == 'ONLINE' || device.status == 'Connected' || device.status == 'PAIRED')) {
-        _resetHeartbeatTimer();
-      }
-    } on ApiException catch (e) {
-      if (state.profile == null && state.baby == null) {
-        state = state.copyWith(
-          isLoading: false,
-          errorMessage: e.message,
-        );
-      }
-    } catch (_) {
-      if (state.profile == null && state.baby == null) {
-        state = state.copyWith(
-          isLoading: false,
-          errorMessage: 'No internet connection or server unreachable.',
-        );
-      }
+    // Only set an overall error if we literally failed to fetch both profile AND baby and have no state
+    final hasNoDataAtAll = finalProfile == null && finalBaby == null;
+
+    state = DashboardState(
+      isLoading: false,
+      profile: finalProfile,
+      baby: finalBaby,
+      device: finalDevice,
+      latestTelemetry: finalTelemetry,
+      errorMessage: hasNoDataAtAll
+          ? 'Unable to connect to server. Please check your network connection.'
+          : null,
+    );
+
+    if (finalDevice != null &&
+        (finalDevice.status == 'online' ||
+            finalDevice.status == 'ONLINE' ||
+            finalDevice.status == 'Connected' ||
+            finalDevice.status == 'PAIRED')) {
+      _resetHeartbeatTimer();
     }
   }
 
@@ -291,6 +348,7 @@ final dashboardProvider =
   final wsService = ref.watch(webSocketServiceProvider);
   final iotRepo = ref.watch(iotDeviceRepositoryProvider);
   final cacheService = ref.watch(cacheServiceProvider);
+  final apiClient = ref.watch(apiClientProvider);
 
   return DashboardNotifier(
     profileRepo: profileRepo,
@@ -299,5 +357,6 @@ final dashboardProvider =
     wsService: wsService,
     iotRepo: iotRepo,
     cacheService: cacheService,
+    apiClient: apiClient,
   );
 });

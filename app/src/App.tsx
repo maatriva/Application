@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { PhoneSimulator } from "./components/PhoneSimulator";
 import { CodeExplorer } from "./components/CodeExplorer";
+import { AdminMusicLibrary } from "./components/AdminMusicLibrary";
 import { BabyMetrics } from "./types";
 import { 
   Sliders, 
@@ -12,7 +13,7 @@ import {
   Code, 
   Smartphone, 
   AlertCircle,
-  HelpCircle
+  Music
 } from "lucide-react";
 
 export default function App() {
@@ -29,7 +30,7 @@ export default function App() {
     isLoadingInsight: false
   });
 
-  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<"simulator" | "code">("simulator");
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<"simulator" | "code" | "music">("simulator");
 
   const handleMetricsChange = (newMetrics: Partial<BabyMetrics>) => {
     setMetrics(prev => ({
@@ -142,21 +143,48 @@ export default function App() {
             </div>
           </div>
           
-          <div className="flex gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 rounded-full border border-emerald-100">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-              <span className="text-xs font-medium text-emerald-700">Connected</span>
-            </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-full border border-blue-100">
-              <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-              <span className="text-xs font-medium text-blue-700">Healthy</span>
-            </div>
+          <div className="flex gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/60">
+            <button
+              onClick={() => setActiveWorkspaceTab("simulator")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                activeWorkspaceTab === "simulator"
+                  ? "bg-white text-indigo-600 shadow-sm"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              <span>Nursery Monitor</span>
+            </button>
+
+            <button
+              onClick={() => setActiveWorkspaceTab("music")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                activeWorkspaceTab === "music"
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              <Music className="w-3.5 h-3.5" />
+              <span>Admin Music Library</span>
+            </button>
+
+            <button
+              onClick={() => setActiveWorkspaceTab("code")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                activeWorkspaceTab === "code"
+                  ? "bg-white text-indigo-600 shadow-sm"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              <Code className="w-3.5 h-3.5" />
+              <span>Codebase</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="text-right">
               <p className="text-sm font-bold text-gray-900">Sarah Miller</p>
-              <p className="text-[10px] text-gray-500">Premium Member</p>
+              <p className="text-[10px] text-indigo-600 font-bold">Admin / System Manager</p>
             </div>
             <div className="w-10 h-10 rounded-full bg-indigo-50 border-2 border-indigo-100 shadow-sm flex items-center justify-center font-bold text-indigo-600 text-sm select-none">
               SM
@@ -165,18 +193,34 @@ export default function App() {
         </div>
       </header>
 
-      {/* Hero Welcome Banner */}
-      <header className="bg-white border-b border-indigo-50/70 py-6 px-6">
-        <div className="max-w-7xl mx-auto">
-          <h2 className="text-3xl font-bold text-gray-900 tracking-tight">Good morning, <span className="text-indigo-600">Sarah</span></h2>
-          <p className="text-gray-500 mt-1">
-            Baby Theo is currently <span className="font-semibold text-indigo-600">{metrics.babyStatus.toLowerCase()}</span> soundly in the nursery.
-          </p>
-        </div>
-      </header>
+      {activeWorkspaceTab === "music" ? (
+        <main className="flex-1 w-full max-w-7xl mx-auto py-4">
+          <AdminMusicLibrary />
+        </main>
+      ) : (
+        <>
+          {/* Hero Welcome Banner */}
+          <header className="bg-white border-b border-indigo-50/70 py-6 px-6">
+            <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-3xl font-bold text-gray-900 tracking-tight">Good morning, <span className="text-indigo-600">Sarah</span></h2>
+                <p className="text-gray-500 mt-1">
+                  Baby Theo is currently <span className="font-semibold text-indigo-600">{metrics.babyStatus.toLowerCase()}</span> soundly in the nursery.
+                </p>
+              </div>
 
-      {/* Main Workspace Frame */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0 overflow-hidden">
+              <button
+                onClick={() => setActiveWorkspaceTab("music")}
+                className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs px-5 py-3 rounded-2xl flex items-center gap-2 shadow-md shadow-indigo-100 transition-all cursor-pointer self-start sm:self-auto"
+              >
+                <Music className="w-4 h-4" />
+                <span>🎵 Upload Songs & Manage Music (Admin)</span>
+              </button>
+            </div>
+          </header>
+
+          {/* Main Workspace Frame */}
+          <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0 overflow-hidden">
         
         {/* Left Side: Controller Panel (4 Cols) */}
         <div className="lg:col-span-4 flex flex-col gap-5 h-full overflow-y-auto pr-1">
@@ -370,6 +414,7 @@ export default function App() {
               metrics={metrics}
               onMetricsChange={handleMetricsChange}
               onGenerateAIInsight={generateRealAIInsight}
+              onOpenAdminMusic={() => setActiveWorkspaceTab("music")}
             />
           </div>
 
@@ -383,6 +428,8 @@ export default function App() {
         </div>
 
       </main>
-    </div>
+    </>
+  )}
+</div>
   );
 }

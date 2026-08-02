@@ -105,8 +105,12 @@ class IotDeviceRepository {
         }
         break;
       case SensorType.bodyTemperature:
-        final temp = (val is num) ? val.toDouble() : double.tryParse(val.toString());
-        if (temp == null || temp < 30.0 || temp > 45.0) {
+        var temp = (val is num) ? val.toDouble() : double.tryParse(val.toString());
+        if (temp != null && temp > 45.0 && temp <= 115.0) {
+          // Auto-convert Fahrenheit to Celsius if sent in °F
+          temp = (temp - 32) * 5 / 9;
+        }
+        if (temp == null || temp < 25.0 || temp > 45.0) {
           if (kDebugMode) {
             print('[IotDeviceRepository] Validation Error: Invalid Body Temp ($temp °C)');
           }
@@ -114,8 +118,12 @@ class IotDeviceRepository {
         }
         break;
       case SensorType.roomTemperature:
-        final temp = (val is num) ? val.toDouble() : double.tryParse(val.toString());
-        if (temp == null || temp < 10.0 || temp > 50.0) {
+        var temp = (val is num) ? val.toDouble() : double.tryParse(val.toString());
+        if (temp != null && temp > 50.0 && temp <= 120.0) {
+          // Auto-convert Fahrenheit to Celsius if sent in °F
+          temp = (temp - 32) * 5 / 9;
+        }
+        if (temp == null || temp < 5.0 || temp > 50.0) {
           if (kDebugMode) {
             print('[IotDeviceRepository] Validation Error: Invalid Room Temp ($temp °C)');
           }
@@ -147,17 +155,6 @@ class IotDeviceRepository {
         return false;
       default:
         break;
-    }
-
-    final existing = _latestTelemetry[payload.type];
-    if (existing != null) {
-      if (payload.timestamp.isBefore(existing.timestamp) ||
-          payload.timestamp.isAtSameMomentAs(existing.timestamp)) {
-        if (kDebugMode) {
-          print('[IotDeviceRepository] Validation Error: Duplicate/out-of-order timestamp for ${payload.type.jsonValue}');
-        }
-        return false;
-      }
     }
 
     return true;

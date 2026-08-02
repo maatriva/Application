@@ -3,6 +3,7 @@ import path from "path";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
+import apiRouter from "./src/routes";
 
 dotenv.config();
 
@@ -20,7 +21,31 @@ const ai = new GoogleGenAI({
 
 async function startServer() {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: '100mb' }));
+  app.use(express.urlencoded({ limit: '100mb', extended: true }));
+  app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+  // CORS Middleware setup
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Access-Control-Allow-Request-Private-Network, *');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+    next();
+  });
+
+  // Mount API Router
+  app.use('/', apiRouter);
 
   // Server-side Gemini API route for Smart Baby Monitor AI Insights
   app.post("/api/gemini/insight", async (req, res) => {
@@ -72,8 +97,9 @@ Ensure the tone is reassuring, expert, and warm. Limit the response to 2 to 3 se
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Maatriva server running at http://localhost:${PORT}`);
+  const HOST = process.env.HOST || "0.0.0.0";
+  app.listen(PORT, HOST, () => {
+    console.log(`Maatriva server running at http://${HOST}:${PORT}`);
   });
 }
 

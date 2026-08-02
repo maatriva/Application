@@ -25,6 +25,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _isSubmitting = false;
+  String _selectedRole = 'parent';
 
   @override
   void dispose() {
@@ -35,19 +37,31 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     super.dispose();
   }
 
-  void _onRegister() {
+  void _onRegister() async {
     final isAuthLoading = ref.read(authNotifierProvider).status == AuthStatus.loading;
     final isOnboardingLoading = ref.read(onboardingProvider).isLoading;
-    if (isAuthLoading || isOnboardingLoading) return;
+    if (_isSubmitting || isAuthLoading || isOnboardingLoading) return;
 
     if (_formKey.currentState!.validate()) {
+      setState(() {
+        _isSubmitting = true;
+      });
       FocusScope.of(context).unfocus();
       
-      ref.read(authNotifierProvider.notifier).register(
-            email: _emailController.text.trim(),
-            password: _passwordController.text,
-            fullName: _nameController.text.trim(),
-          );
+      try {
+        await ref.read(authNotifierProvider.notifier).register(
+              email: _emailController.text.trim(),
+              password: _passwordController.text,
+              fullName: _nameController.text.trim(),
+              role: _selectedRole,
+            );
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isSubmitting = false;
+          });
+        }
+      }
     }
   }
 
@@ -55,7 +69,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authNotifierProvider);
     final onboardingState = ref.watch(onboardingProvider);
-    final isLoading = authState.status == AuthStatus.loading ||
+    final isLoading = _isSubmitting ||
+                     authState.status == AuthStatus.loading ||
                      (authState.status == AuthStatus.authenticated && onboardingState.isLoading);
 
     // Listen for authentication errors and display in SnackBar
@@ -443,6 +458,76 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
+                      ),
+                      
+                      SizedBox(height: 16.h),
+                      Text(
+                        'Register as',
+                        style: TextStyle(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      SizedBox(height: 8.h),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => setState(() => _selectedRole = 'parent'),
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: _selectedRole == 'parent'
+                                    ? AppColors.primary
+                                    : Colors.transparent,
+                                side: const BorderSide(
+                                  color: AppColors.primary,
+                                  width: 1.5,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16.r),
+                                ),
+                                padding: EdgeInsets.symmetric(vertical: 12.h),
+                              ),
+                              child: Text(
+                                'Parent',
+                                style: TextStyle(
+                                  color: _selectedRole == 'parent'
+                                      ? Colors.white
+                                      : AppColors.primary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 16.w),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => setState(() => _selectedRole = 'caregiver'),
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: _selectedRole == 'caregiver'
+                                    ? AppColors.primary
+                                    : Colors.transparent,
+                                side: const BorderSide(
+                                  color: AppColors.primary,
+                                  width: 1.5,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16.r),
+                                ),
+                                padding: EdgeInsets.symmetric(vertical: 12.h),
+                              ),
+                              child: Text(
+                                'Caregiver',
+                                style: TextStyle(
+                                  color: _selectedRole == 'caregiver'
+                                      ? Colors.white
+                                      : AppColors.primary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       
                       SizedBox(height: 24.h),

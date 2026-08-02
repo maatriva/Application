@@ -1,3 +1,5 @@
+import 'dart:convert';
+import '../../core/config/app_config.dart';
 import '../../core/network/api_client.dart';
 import '../../core/storage/cache_service.dart';
 import '../../domain/repositories/caregiver_repository.dart';
@@ -76,8 +78,16 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
     String? email,
     String? role,
   }) async {
-    final babyId = _cacheService.getCachedSelectedBabyId();
-    if (babyId == null) throw Exception('No baby profile selected in cache.');
+    // Try the dedicated baby-ID cache first; fall back to the full baby object cache
+    var babyId = _cacheService.getCachedSelectedBabyId();
+    if (babyId == null) {
+      final babyMap = _cacheService.getCachedSelectedBaby();
+      babyId = babyMap?['id'] as String?;
+    }
+    if (babyId == null) throw Exception('No baby profile found. Please go to the dashboard first to load your baby profile.');
+
+    int expiresInMinutes = duration.inMinutes;
+    if (expiresInMinutes <= 0) expiresInMinutes = 60;
 
     final response = await _apiClient.post(
       '/caregivers/invite',
@@ -85,14 +95,29 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
         'babyId': babyId,
         'email': email ?? '*',
         'role': role ?? 'BABYSITTER',
-        'expiresInHours': duration.inHours > 0 ? duration.inHours : 2,
+        'expiresInMinutes': expiresInMinutes,
       },
       requireAuth: true,
     );
 
     final resMap = response as Map<String, dynamic>;
     final invitation = resMap['data'] as Map<String, dynamic>;
-    return invitation['token'] as String;
+    final token = invitation['token'] as String;
+    final expiresAt = invitation['expiresAt'] as String?;
+
+    var server = _apiClient.baseUrl;
+    if (server.contains('localhost') || server.contains('127.0.0.1')) {
+      server = AppConfig.apiBaseUrl;
+    }
+    final qrData = {
+      'server': server,
+      'token': token,
+      'babyId': babyId,
+      'expiresAt': expiresAt,
+      'permissions': permissions,
+    };
+
+    return jsonEncode(qrData);
   }
 
   @override

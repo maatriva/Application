@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
+import '../../features/dashboard/presentation/providers/dashboard_provider.dart';
+import '../../features/authentication/presentation/providers/auth_provider.dart';
+import '../../shared/models/user_session.dart';
 
-class BottomNavigation extends StatelessWidget {
+class BottomNavigation extends ConsumerWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
 
@@ -12,7 +16,12 @@ class BottomNavigation extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authNotifierProvider);
+    final baby = ref.watch(dashboardProvider.select((s) => s.baby));
+    final isCaregiver = authState.session?.role == UserRole.caregiver;
+    final isRestricted = isCaregiver || baby?.accessLevel == 'LIVE_MONITOR_ONLY';
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -34,8 +43,8 @@ class BottomNavigation extends StatelessWidget {
           children: [
             _buildNavItem(0, Icons.home_rounded, 'Home'),
             _buildNavItem(1, Icons.videocam_outlined, 'Live'),
-            _buildNavItem(2, Icons.favorite_rounded, 'Health'),
-            _buildNavItem(3, Icons.shopping_bag_outlined, 'Shop'),
+            if (!isRestricted) _buildNavItem(2, Icons.favorite_rounded, 'Health'),
+            if (!isRestricted) _buildNavItem(3, Icons.shopping_bag_outlined, 'Shop'),
           ],
         ),
       ),

@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { prisma } from '../../config/database';
+import { WebsocketServerManager } from '../../websocket/websocketServer';
 
 export class CaregiversService {
   /**
@@ -11,6 +12,7 @@ export class CaregiversService {
     role: string;
     parentId: string;
     expiresInHours?: number;
+    expiresInMinutes?: number;
   }) {
     // 1. Verify that the baby profile exists
     const baby = await prisma.baby.findUnique({
@@ -28,9 +30,8 @@ export class CaregiversService {
 
     // 3. Generate secure token & expiration
     const token = crypto.randomBytes(32).toString('hex');
-    const hours = data.expiresInHours || 24;
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + hours);
+    const minutes = data.expiresInMinutes || (data.expiresInHours ? data.expiresInHours * 60 : 60);
+    const expiresAt = new Date(Date.now() + minutes * 60 * 1000);
 
     // 4. Create Invitation
     const invitation = await prisma.invitation.create({
@@ -86,7 +87,22 @@ export class CaregiversService {
     }
 
     if (invitation.status !== 'PENDING') {
-      throw { statusCode: 400, message: `Invitation cannot be accepted. Current status: ${invitation.status}` };
+      const existingCaregiver = await prisma.caregiver.findUnique({
+        where: {
+          babyId_userId: {
+            babyId: invitation.babyId,
+            userId,
+          },
+        },
+      });
+
+      if (existingCaregiver && existingCaregiver.status === 'accepted') {
+        throw { statusCode: 400, message: 'Caregiver access is already active for this baby.' };
+      }
+
+      if (invitation.status === 'EXPIRED') {
+        throw { statusCode: 400, message: 'QR Code has expired. Please ask the parent for a new QR code.' };
+      }
     }
 
     if (new Date() > invitation.expiresAt) {
@@ -94,7 +110,7 @@ export class CaregiversService {
         where: { id: invitation.id },
         data: { status: 'EXPIRED' },
       });
-      throw { statusCode: 400, message: 'Invitation has expired.' };
+      throw { statusCode: 400, message: 'QR Code has expired. Please ask the parent for a new QR code.' };
     }
 
     // 2. Fetch logged-in user profile to verify matching email (if email is defined in invite)
@@ -106,8 +122,12 @@ export class CaregiversService {
       throw { statusCode: 404, message: 'User profile not found.' };
     }
 
-    if (invitation.email && invitation.email !== '*' && invitation.email !== user.email.toLowerCase()) {
-      throw { statusCode: 403, message: 'Access denied: Invitation belongs to another user email.' };
+    // 3. Update invitation email to matching user email if it was wildcard or placeholder
+    if (invitation.email !== user.email.toLowerCase()) {
+      await prisma.invitation.update({
+        where: { id: invitation.id },
+        data: { email: user.email.toLowerCase() },
+      });
     }
 
     // 3. Update status to ACCEPTED
@@ -333,6 +353,16 @@ export class CaregiversService {
     await prisma.caregiver.delete({
       where: { id: mappingId },
     });
+
+    // Notify connected caregiver device via real-time WebSocket to log them out automatically
+    try {
+      WebsocketServerManager.getInstance().emitToUser(record.userId, 'caregiver:access_revoked', {
+        babyId: record.babyId,
+        message: `Your caregiver monitoring access for baby ${record.baby.name} has been revoked by the parent.`,
+      });
+    } catch (wsErr) {
+      console.error('[CaregiversService] Error broadcasting socket revocation event:', wsErr);
+    }
 
     // Create Audit Log
     await prisma.auditLog.create({

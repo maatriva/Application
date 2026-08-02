@@ -235,30 +235,7 @@ class DeviceCard extends StatelessWidget {
                         ),
                       ],
 
-                      // Battery indicator if present (>0)
-                      if (device.batteryStatus != -1) ...[
-                        SizedBox(width: 10.w),
-                        Icon(
-                          device.batteryStatus > 80
-                              ? Icons.battery_full_rounded
-                              : (device.batteryStatus > 30
-                                    ? Icons.battery_charging_full_rounded
-                                    : Icons.battery_alert_rounded),
-                          size: 11.sp,
-                          color: device.batteryStatus > 20
-                              ? AppColors.textSecondary
-                              : Colors.red,
-                        ),
-                        SizedBox(width: 2.w),
-                        Text(
-                          '${device.batteryStatus}%',
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 9.sp,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
+
 
                       // Wi-Fi Signal
                       SizedBox(width: 10.w),

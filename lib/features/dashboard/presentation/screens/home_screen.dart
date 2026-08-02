@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/models/vitals_telemetry.dart';
+import '../../../../shared/models/user_session.dart';
+import '../../../authentication/presentation/providers/auth_provider.dart';
 import '../../../onboarding/providers/onboarding_provider.dart';
 import '../../../monitoring/presentation/screens/live_monitoring_screen.dart';
 import '../../../../shared/widgets/bottom_navigation.dart';
@@ -104,42 +105,103 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return 'Your baby is currently $status. Heart rate is $hr bpm and body temperature is ${temp.toStringAsFixed(1)}°C. Ambient nursery parameters are looking optimal for growth.';
   }
 
+  void _showRestrictedAccessDialog(BuildContext context, String featureName) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24.r),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.lock_outline_rounded, color: Colors.orange, size: 24.r),
+              SizedBox(width: 8.w),
+              Expanded(
+                child: Text(
+                  'Access Restricted',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                    fontSize: 18.sp,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'You don\'t have permission to access $featureName.\n\nAs a Caregiver, your authorized access includes:\n• Live Video Monitoring\n• Live Sensor Telemetry\n• Alerts & Notifications\n• In-App Online Music',
+            style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary, height: 1.5),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+              ),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authNotifierProvider);
+    final baby = ref.watch(dashboardProvider.select((s) => s.baby));
+    final isCaregiver = authState.session?.role == UserRole.caregiver;
+    final isLiveMonitorOnly = isCaregiver || baby?.accessLevel == 'LIVE_MONITOR_ONLY';
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: _currentNavIndex == 0 ? const DashboardHeader() : null,
       drawer: const AppDrawer(),
-      body: _buildBody(),
-      floatingActionButton: Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withOpacity(0.4),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
+      body: _buildBody(isLiveMonitorOnly, isCaregiver),
+      floatingActionButton: isLiveMonitorOnly
+          ? null
+          : Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(0.4),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: FloatingActionButton(
+                onPressed: () => context.push('/ai-assistant'),
+                backgroundColor: AppColors.primary,
+                shape: const CircleBorder(),
+                elevation: 0,
+                child: const Icon(
+                  Icons.smart_toy_outlined,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
             ),
-          ],
-        ),
-        child: FloatingActionButton(
-          onPressed: () => context.push('/ai-assistant'),
-          backgroundColor: AppColors.primary,
-          shape: const CircleBorder(),
-          elevation: 0,
-          child: const Icon(
-            Icons.smart_toy_outlined,
-            color: Colors.white,
-            size: 28,
-          ),
-        ),
-      ),
       bottomNavigationBar: BottomNavigation(
         currentIndex: _currentNavIndex,
         onTap: (index) {
           if (index == 2) {
+            if (isLiveMonitorOnly) {
+              _showRestrictedAccessDialog(context, 'Health Analytics');
+              return;
+            }
             context.push('/predictive-health');
           } else if (index == 3) {
+            if (isLiveMonitorOnly) {
+              _showRestrictedAccessDialog(context, 'Nursery Shop');
+              return;
+            }
             context.push('/shop');
           } else {
             setState(() {
@@ -151,10 +213,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(bool isLiveMonitorOnly, bool isCaregiver) {
     switch (_currentNavIndex) {
       case 0:
-        return _buildHomeBody();
+        return _buildHomeBody(isLiveMonitorOnly, isCaregiver);
       case 1:
         return const LiveMonitoringScreen();
       default:
@@ -186,7 +248,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  Widget _buildHomeBody() {
+  Widget _buildHomeBody(bool isLiveMonitorOnly, bool isCaregiver) {
     final isLoading = ref.watch(dashboardProvider.select((s) => s.isLoading));
     if (isLoading) {
       return _buildSkeletonLoader();
@@ -199,6 +261,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final baby = ref.watch(dashboardProvider.select((s) => s.baby));
     if (baby == null) {
+      if (isCaregiver) {
+        return _buildEmptyState(
+          title: 'Join Shared Baby',
+          icon: Icons.qr_code_scanner_rounded,
+          message: 'Scan the QR code generated on the parent\'s device to start live baby monitoring.',
+          actionLabel: 'Scan QR Code',
+          onActionPressed: () {
+            context.push('/join-shared-baby');
+          },
+        );
+      }
       return _buildEmptyState(
         title: 'Register Your Baby',
         icon: Icons.baby_changing_station_rounded,
@@ -246,7 +319,81 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 );
               },
             ),
-            SizedBox(height: 20.h),
+            SizedBox(height: 16.h),
+
+            if (isCaregiver) ...[
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppColors.primary.withOpacity(0.12),
+                      AppColors.secondary.withOpacity(0.08),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(16.r),
+                  border: Border.all(
+                    color: AppColors.primary.withOpacity(0.2),
+                    width: 1.2,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(8.r),
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.qr_code_scanner_rounded, color: Colors.white, size: 18.r),
+                    ),
+                    SizedBox(width: 12.w),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Caregiver Live Access',
+                            style: TextStyle(
+                              fontSize: 13.sp,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          SizedBox(height: 2.h),
+                          Text(
+                            'Time-limited live monitoring authorized by parent.',
+                            style: TextStyle(
+                              fontSize: 11.sp,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => context.push('/join-shared-baby'),
+                      icon: Icon(Icons.sync_rounded, size: 16.r, color: AppColors.primary),
+                      label: Text(
+                        'Scan QR',
+                        style: TextStyle(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+                        backgroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: 16.h),
+            ],
 
             // Unified Baby & Device Summary Card
             Container(
@@ -352,25 +499,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                       ),
                                     ],
                                   ),
-                                  SizedBox(height: 2.h),
-                                  Row(
-                                    children: [
-                                      Icon(Icons.battery_std_rounded, size: 10.r, color: AppColors.textSecondary),
-                                      SizedBox(width: 2.w),
-                                      Expanded(
-                                        child: Text(
-                                          'Battery: ${device.battery ?? 100}%',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: 9.sp,
-                                            color: AppColors.textSecondary,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+
                                   SizedBox(height: 2.h),
                                   Row(
                                     children: [
@@ -405,30 +534,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                       color: AppColors.textPrimary,
                                     ),
                                   ),
-                                  SizedBox(height: 6.h),
-                                  FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: ElevatedButton(
-                                      onPressed: () {
-                                        context.push('/profile/connected-devices/pair');
-                                      },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.primary,
-                                        foregroundColor: Colors.white,
-                                        elevation: 0,
-                                        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
-                                        minimumSize: Size.zero,
-                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(10.r),
+                                  if (!isLiveMonitorOnly) ...[
+                                    SizedBox(height: 6.h),
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: ElevatedButton(
+                                        onPressed: () {
+                                          context.push('/profile/connected-devices/pair');
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.primary,
+                                          foregroundColor: Colors.white,
+                                          elevation: 0,
+                                          padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(10.r),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          'Pair Cradle',
+                                          style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.bold),
                                         ),
                                       ),
-                                      child: Text(
-                                        'Pair Cradle',
-                                        style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.bold),
-                                      ),
                                     ),
-                                  ),
+                                  ],
                                 ],
                               );
                       },
@@ -545,7 +676,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       icon: Icons.favorite_border_rounded,
                       iconBgColor: AppColors.heartBg,
                       iconColor: AppColors.heartIcon,
-                      onTap: () => context.push('/telemetry-history?type=heart_rate'),
+                      onTap: isLiveMonitorOnly ? null : () => context.push('/telemetry-history?type=heart_rate'),
                     );
                   },
                 ),
@@ -559,7 +690,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       icon: Icons.air_rounded,
                       iconBgColor: AppColors.connectBg,
                       iconColor: AppColors.connectText,
-                      onTap: () => context.push('/telemetry-history?type=breathing_rate'),
+                      onTap: isLiveMonitorOnly ? null : () => context.push('/telemetry-history?type=breathing_rate'),
                     );
                   },
                 ),
@@ -573,7 +704,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       icon: Icons.thermostat_outlined,
                       iconBgColor: AppColors.tempBg,
                       iconColor: AppColors.tempIcon,
-                      onTap: () => context.push('/telemetry-history?type=body_temperature'),
+                      onTap: isLiveMonitorOnly ? null : () => context.push('/telemetry-history?type=body_temperature'),
                     );
                   },
                 ),
@@ -587,7 +718,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       icon: Icons.home_outlined,
                       iconBgColor: AppColors.healthBg,
                       iconColor: AppColors.healthText,
-                      onTap: () => context.push('/telemetry-history?type=room_temperature'),
+                      onTap: isLiveMonitorOnly ? null : () => context.push('/telemetry-history?type=room_temperature'),
                     );
                   },
                 ),
@@ -601,7 +732,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       icon: Icons.water_drop_outlined,
                       iconBgColor: AppColors.tempBg,
                       iconColor: AppColors.tempIcon,
-                      onTap: () => context.push('/telemetry-history?type=humidity'),
+                      onTap: isLiveMonitorOnly ? null : () => context.push('/telemetry-history?type=humidity'),
                     );
                   },
                 ),
@@ -615,7 +746,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       icon: Icons.eco_outlined,
                       iconBgColor: AppColors.sleepBg,
                       iconColor: AppColors.sleepText,
-                      onTap: () => context.push('/telemetry-history?type=air_quality'),
+                      onTap: isLiveMonitorOnly ? null : () => context.push('/telemetry-history?type=air_quality'),
                     );
                   },
                 ),
@@ -629,7 +760,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       icon: Icons.nights_stay_outlined,
                       iconBgColor: AppColors.sleepProgressBg,
                       iconColor: AppColors.sleepProgressIcon,
-                      onTap: () => context.push('/telemetry-history?type=sleep_stage'),
+                      onTap: isLiveMonitorOnly ? null : () => context.push('/telemetry-history?type=sleep_stage'),
                     );
                   },
                 ),
@@ -643,7 +774,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       icon: Icons.face_retouching_natural_outlined,
                       iconBgColor: AppColors.cryBg,
                       iconColor: AppColors.cryIcon,
-                      onTap: () => context.push('/telemetry-history?type=cry_detection'),
+                      onTap: isLiveMonitorOnly ? null : () => context.push('/telemetry-history?type=cry_detection'),
                     );
                   },
                 ),
@@ -657,90 +788,106 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       icon: Icons.directions_run_outlined,
                       iconBgColor: AppColors.connectBg,
                       iconColor: AppColors.connectText,
-                      onTap: () => context.push('/telemetry-history?type=movement_detection'),
+                      onTap: isLiveMonitorOnly ? null : () => context.push('/telemetry-history?type=movement_detection'),
                     );
                   },
                 ),
-                Consumer(
-                  builder: (context, ref, child) {
-                    final batteryPercent = ref.watch(dashboardProvider.select((s) =>
-                        s.latestTelemetry?['battery_level']?.value.toInt().toString() ??
-                        s.device?.battery?.toString() ?? '100'));
-                    return SummaryCard(
-                      label: 'Battery Level',
-                      value: batteryPercent,
-                      unit: '%',
-                      icon: Icons.battery_std_rounded,
-                      iconBgColor: AppColors.sleepProgressBg,
-                      iconColor: AppColors.sleepProgressIcon,
-                      onTap: () => context.push('/telemetry-history?type=battery_level'),
-                    );
-                  },
-                ),
+
               ],
             ),
             SizedBox(height: 28.h),
 
             // AI Insight summary
-            Consumer(
-              builder: (context, ref, child) {
-                final state = ref.watch(dashboardProvider);
-                return AIInsightCard(
-                  insight: getAIInsight(state),
-                  isLoading: false,
-                  onRefresh: () => ref.read(dashboardProvider.notifier).refresh(),
-                );
-              },
-            ),
-            SizedBox(height: 28.h),
+            if (!isLiveMonitorOnly) ...[
+              Consumer(
+                builder: (context, ref, child) {
+                  final state = ref.watch(dashboardProvider);
+                  return AIInsightCard(
+                    insight: getAIInsight(state),
+                    isLoading: false,
+                    onRefresh: () => ref.read(dashboardProvider.notifier).refresh(),
+                  );
+                },
+              ),
+              SizedBox(height: 28.h),
+            ],
 
             // Quick Actions grid
             Text('Quick Actions', style: AppTypography.sectionTitle),
             SizedBox(height: 12.h),
-            GridView.count(
-              crossAxisCount: actionsCrossAxisCount,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 8.w,
-              mainAxisSpacing: 8.h,
-              childAspectRatio: actionsChildAspectRatio,
-              children: [
-                QuickActionButton(
-                  icon: Icons.videocam_outlined,
-                  label: 'Live Feed',
-                  onTap: () {
-                    setState(() {
-                      _currentNavIndex = 1;
-                    });
-                  },
-                ),
-                QuickActionButton(
-                  icon: Icons.smart_toy_outlined,
-                  label: 'AI Chat',
-                  onTap: () => context.push('/ai-assistant'),
-                ),
-                QuickActionButton(
-                  icon: Icons.favorite_border_rounded,
-                  label: 'Health Stats',
-                  onTap: () => context.push('/predictive-health'),
-                ),
-                QuickActionButton(
-                  icon: Icons.medical_services_outlined,
-                  label: 'Pediatrician',
-                  onTap: () {},
-                ),
-                QuickActionButton(
-                  icon: Icons.ios_share_rounded,
-                  label: 'Share Info',
-                  onTap: () => context.push('/caregiver-access'),
-                ),
-                QuickActionButton(
-                  icon: Icons.music_note_outlined,
-                  label: 'Lullabies',
-                  onTap: () => context.push('/music'),
-                ),
-              ],
-            ),
+            if (isLiveMonitorOnly)
+              GridView.count(
+                crossAxisCount: 1,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisSpacing: 8.w,
+                mainAxisSpacing: 8.h,
+                childAspectRatio: 4.5,
+                children: [
+                  QuickActionButton(
+                    icon: Icons.videocam_outlined,
+                    label: 'Open Live Camera Stream',
+                    onTap: () {
+                      setState(() {
+                        _currentNavIndex = 1;
+                      });
+                    },
+                  ),
+                ],
+              )
+            else
+              GridView.count(
+                crossAxisCount: actionsCrossAxisCount,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisSpacing: 8.w,
+                mainAxisSpacing: 8.h,
+                childAspectRatio: actionsChildAspectRatio,
+                children: [
+                  QuickActionButton(
+                    icon: Icons.videocam_outlined,
+                    label: 'Live Feed',
+                    onTap: () {
+                      setState(() {
+                        _currentNavIndex = 1;
+                      });
+                    },
+                  ),
+                  QuickActionButton(
+                    icon: Icons.smart_toy_outlined,
+                    label: 'AI Chat',
+                    onTap: isLiveMonitorOnly
+                        ? () => _showRestrictedAccessDialog(context, 'AI Assistant')
+                        : () => context.push('/ai-assistant'),
+                  ),
+                  QuickActionButton(
+                    icon: Icons.favorite_border_rounded,
+                    label: 'Health Stats',
+                    onTap: isLiveMonitorOnly
+                        ? () => _showRestrictedAccessDialog(context, 'Health Analytics')
+                        : () => context.push('/predictive-health'),
+                  ),
+                  QuickActionButton(
+                    icon: Icons.medical_services_outlined,
+                    label: 'Pediatrician',
+                    onTap: isLiveMonitorOnly
+                        ? () => _showRestrictedAccessDialog(context, 'Pediatrician Records')
+                        : () {},
+                  ),
+                  QuickActionButton(
+                    icon: Icons.ios_share_rounded,
+                    label: 'Share Info',
+                    onTap: isLiveMonitorOnly
+                        ? () => _showRestrictedAccessDialog(context, 'Caregiver Access Management')
+                        : () => context.push('/caregiver-access'),
+                  ),
+                  QuickActionButton(
+                    icon: Icons.music_note_outlined,
+                    label: 'Lullabies',
+                    onTap: () => context.push('/music'),
+                  ),
+                ],
+              ),
           ],
         ),
       ),

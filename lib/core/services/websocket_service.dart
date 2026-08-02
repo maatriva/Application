@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:http/http.dart' as http;
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import '../storage/secure_storage_service.dart';
 import '../config/app_config.dart';
@@ -29,10 +31,14 @@ class WebSocketService with WidgetsBindingObserver {
       StreamController<WsConnectionState>.broadcast();
   final StreamController<Map<String, dynamic>> _deviceStatusController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<String> _caregiverRevokedController =
+      StreamController<String>.broadcast();
 
   WsConnectionState _currentState = WsConnectionState.disconnected;
   String? _selectedBabyId;
   bool _isConnecting = false;
+  bool _isRefreshing = false;
+  VoidCallback? onSessionExpired;
   
   // Custom signaling event handlers registry
   final Map<String, List<Function(dynamic)>> _customHandlers = {};
@@ -51,6 +57,8 @@ class WebSocketService with WidgetsBindingObserver {
   Stream<WsConnectionState> get stateStream => _stateController.stream;
   Stream<Map<String, dynamic>> get deviceStatusStream =>
       _deviceStatusController.stream;
+  Stream<String> get caregiverRevokedStream =>
+      _caregiverRevokedController.stream;
   WsConnectionState get currentState => _currentState;
   String? get selectedBabyId => _selectedBabyId;
 
@@ -65,6 +73,101 @@ class WebSocketService with WidgetsBindingObserver {
     _stateController.add(state);
   }
 
+  Future<String?> _getValidTokenOrRefresh(String targetUrl) async {
+    final token = await _secureStorage.getAccessToken();
+    if (token == null) {
+      _log('Access token missing');
+      return null;
+    }
+
+    final parts = token.split('.');
+    if (parts.length != 3) {
+      _log('Invalid access token format');
+      return null;
+    }
+
+    bool isExpired = false;
+    try {
+      var normalized = parts[1].replaceAll('-', '+').replaceAll('_', '/');
+      while (normalized.length % 4 != 0) {
+        normalized += '=';
+      }
+      final payloadString = utf8.decode(base64Url.decode(normalized));
+      final decoded = jsonDecode(payloadString);
+      if (decoded is Map && decoded['exp'] != null) {
+        final expSecs = decoded['exp'] as int;
+        final expDateTime = DateTime.fromMillisecondsSinceEpoch(expSecs * 1000, isUtc: true);
+        final nowUtc = DateTime.now().toUtc();
+        
+        debugPrint('[Auth] Access token expires at $expDateTime');
+        if (nowUtc.isAfter(expDateTime.subtract(const Duration(seconds: 10)))) {
+          debugPrint('[Auth] Token expired');
+          isExpired = true;
+        }
+      }
+    } catch (e) {
+      debugPrint('[Auth] Error parsing access token expiration: $e');
+      isExpired = true;
+    }
+
+    if (!isExpired) {
+      return token;
+    }
+
+    if (_isRefreshing) {
+      _log('Already refreshing token, waiting...');
+      return null;
+    }
+
+    _isRefreshing = true;
+    debugPrint('[Auth] Refreshing access token...');
+
+    try {
+      final refreshToken = await _secureStorage.getRefreshToken();
+      if (refreshToken == null) {
+        throw Exception('Refresh token missing');
+      }
+
+      final response = await http.post(
+        Uri.parse('$targetUrl/auth/refresh'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'refreshToken': refreshToken}),
+      );
+
+      final resJson = jsonDecode(response.body);
+      if (response.statusCode != 200 || resJson['success'] != true) {
+        throw Exception(resJson['message'] ?? 'Refresh request failed');
+      }
+
+      final newAccessToken = resJson['data']['accessToken'] as String;
+      
+      final userId = await _secureStorage.getUserId() ?? '';
+      final userRole = await _secureStorage.getUserRole() ?? 'PARENT';
+      
+      await _secureStorage.saveSession(
+        accessToken: newAccessToken,
+        refreshToken: refreshToken,
+        userId: userId,
+        userRole: userRole,
+      );
+      
+      debugPrint('[Auth] Refresh successful');
+      _isRefreshing = false;
+      return newAccessToken;
+    } catch (e) {
+      debugPrint('[Auth] Token refresh failed: $e');
+      _isRefreshing = false;
+      
+      await _secureStorage.clearSession();
+      await disconnect();
+      
+      if (onSessionExpired != null) {
+        onSessionExpired!();
+      }
+      return null;
+    }
+  }
+
   /// Establishes the Socket.IO connection with authentication token parameters.
   Future<void> connect() async {
     if (_currentState == WsConnectionState.connected || _isConnecting) {
@@ -74,17 +177,42 @@ class WebSocketService with WidgetsBindingObserver {
     _isConnecting = true;
     _updateState(WsConnectionState.connecting);
 
-    final token = await _secureStorage.getAccessToken();
+    final targetUrl = AppConfig.apiBaseUrl;
+
+    final token = await _getValidTokenOrRefresh(targetUrl);
     if (token == null) {
       _isConnecting = false;
       _updateState(WsConnectionState.error);
-      _log('Socket Error: Access token missing.');
-      throw Exception('Cannot establish Socket.IO connection: Access token missing.');
+      _log('Socket Error: Access token missing or refresh failed.');
+      return;
     }
 
-    // Determine target URL for Socket.IO
-    // We use the HTTP API Base URL directly because socket_io_client will perform the upgrade itself.
-    final targetUrl = AppConfig.apiBaseUrl;
+    // Printing required JWT details
+    _log('JWT length: ${token.length}');
+    _log('First 20 characters of the token: ${token.substring(0, token.length > 20 ? 20 : token.length)}');
+
+    final parts = token.split('.');
+    if (parts.length == 3) {
+      try {
+        var normalized = parts[1].replaceAll('-', '+').replaceAll('_', '/');
+        while (normalized.length % 4 != 0) {
+          normalized += '=';
+        }
+        final payloadString = utf8.decode(base64Url.decode(normalized));
+        final decoded = jsonDecode(payloadString);
+        if (decoded is Map && decoded['exp'] != null) {
+          final expTime = DateTime.fromMillisecondsSinceEpoch(decoded['exp'] * 1000);
+          _log('Token expiry: $expTime');
+        }
+      } catch (e) {
+        _log('Token expiry: unknown (error decoding)');
+      }
+    } else {
+      _log('Token expiry: unknown (invalid format)');
+    }
+
+    final authPayload = {'token': token};
+    _log('Socket.IO auth payload: $authPayload');
     _log('Connecting to Socket.IO server at $targetUrl...');
 
     try {
@@ -95,7 +223,7 @@ class WebSocketService with WidgetsBindingObserver {
 
       _socket = IO.io(targetUrl, IO.OptionBuilder()
           .setTransports(['websocket'])
-          .setAuth({'token': token})
+          .setAuth(authPayload)
           .disableAutoConnect()
           .enableReconnection()
           .setReconnectionDelay(1000)
@@ -108,6 +236,7 @@ class WebSocketService with WidgetsBindingObserver {
         _isConnecting = false;
         _log('Socket Connected');
         _log('JWT Authentication Success');
+        debugPrint('[Socket.IO] Authentication successful');
         _updateState(WsConnectionState.connected);
 
         // Join selected baby's room if one is set
@@ -123,10 +252,23 @@ class WebSocketService with WidgetsBindingObserver {
         _updateState(WsConnectionState.disconnected);
       });
 
-      _socket!.onConnectError((err) {
+      _socket!.onConnectError((err) async {
         _isConnecting = false;
         _log('Socket Error: $err');
-        _updateState(WsConnectionState.error);
+        
+        final errMsg = err.toString();
+        if (errMsg.contains('Unauthorized') || errMsg.contains('Invalid token')) {
+          _log('Socket connection rejected due to invalid token. Refreshing...');
+          final refreshedToken = await _getValidTokenOrRefresh(targetUrl);
+          if (refreshedToken != null) {
+            debugPrint('[Socket.IO] Connecting with refreshed JWT');
+            connect();
+          } else {
+            _updateState(WsConnectionState.error);
+          }
+        } else {
+          _updateState(WsConnectionState.error);
+        }
       });
 
       _socket!.onReconnectAttempt((attempt) {
@@ -142,23 +284,31 @@ class WebSocketService with WidgetsBindingObserver {
       // Telemetry, Device Status & Alert listeners
       _socket!.on('telemetry:update', (data) {
         _log('Telemetry Received');
-        if (data is Map<String, dynamic>) {
-          _handleTelemetryUpdate(data);
+        if (data is Map) {
+          _handleTelemetryUpdate(Map<String, dynamic>.from(data));
         }
       });
 
       _socket!.on('device:status', (data) {
         _log('Device Status Updated');
-        if (data is Map<String, dynamic>) {
-          _deviceStatusController.add(data);
+        if (data is Map) {
+          _deviceStatusController.add(Map<String, dynamic>.from(data));
         }
       });
 
       _socket!.on('alert:new', (data) {
         _log('Alert Received');
-        if (data is Map<String, dynamic>) {
-          _alertController.add(data);
+        if (data is Map) {
+          _alertController.add(Map<String, dynamic>.from(data));
         }
+      });
+
+      _socket!.on('caregiver:access_revoked', (data) {
+        _log('Caregiver Access Revoked event received: $data');
+        final msg = (data is Map && data.containsKey('message'))
+            ? data['message'] as String
+            : 'Your caregiver monitoring access has been revoked by the parent.';
+        _caregiverRevokedController.add(msg);
       });
 
       _socket!.on('join:error', (data) {
@@ -184,13 +334,13 @@ class WebSocketService with WidgetsBindingObserver {
 
   /// Sets the selected baby and handles room joining/leaving
   void setSelectedBaby(String? babyId) {
-    if (_selectedBabyId == babyId) return;
+    if (_selectedBabyId == babyId && _socket != null && _socket!.connected) return;
 
     final oldBabyId = _selectedBabyId;
     _selectedBabyId = babyId;
 
     if (_socket != null && _socket!.connected) {
-      if (oldBabyId != null) {
+      if (oldBabyId != null && oldBabyId != babyId) {
         _log('Leaving Baby Room: $oldBabyId');
         _socket!.emit('leave:baby', oldBabyId);
       }
@@ -213,7 +363,8 @@ class WebSocketService with WidgetsBindingObserver {
   }
 
   void _handleTelemetryUpdate(Map<String, dynamic> data) {
-    final telemetry = data['telemetry'] as Map<String, dynamic>?;
+    final rawTelemetry = data['telemetry'];
+    final telemetry = rawTelemetry is Map ? Map<String, dynamic>.from(rawTelemetry) : null;
     if (telemetry == null) return;
 
     final deviceId = telemetry['deviceId'] as String? ?? '';

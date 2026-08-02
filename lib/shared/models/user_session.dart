@@ -5,9 +5,10 @@ enum UserRole { parent, caregiver, doctor, admin }
 
 /// Helper to parse roles from/to JSON string.
 UserRole parseRole(String roleStr) {
+  final clean = roleStr.trim().toLowerCase();
   return UserRole.values.firstWhere(
-    (e) => e.name == roleStr,
-    orElse: () => UserRole.caregiver,
+    (e) => e.name.toLowerCase() == clean,
+    orElse: () => UserRole.parent,
   );
 }
 

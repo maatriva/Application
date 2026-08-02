@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/network/api_client.dart';
 import '../../core/storage/cache_service.dart';
@@ -27,45 +28,32 @@ class AuthRepositoryImpl implements AuthRepository {
     required String lastName,
     String role = 'parent',
   }) async {
+    final requestBody = {
+      'fullName': '$firstName $lastName'.trim(),
+      'email': email,
+      'password': password,
+      'role': role.toUpperCase(),
+    };
+
+    debugPrint('[AUTH] Sending register request for $email...');
     try {
       final res = await _apiClient.post(
         '/auth/register',
-        body: {
-          'fullName': '$firstName $lastName'.trim(),
-          'email': email,
-          'password': password,
-          'role': role.toUpperCase(), // backend enum uses UPPERCASE
-        },
+        body: requestBody,
         requireAuth: false,
       );
 
-      final responseMap = res as Map<String, dynamic>;
-      final dataMap = responseMap['data'] as Map<String, dynamic>;
-      final accessToken = dataMap['accessToken'] as String;
-      final refreshToken = dataMap['refreshToken'] as String;
-      final rawUserMap = dataMap['user'] as Map<String, dynamic>;
-      final userId = rawUserMap['id'] as String;
-      final userRole = rawUserMap['role'] as String;
-
-      await _secureStorage.saveSession(
-        accessToken: accessToken,
-        refreshToken: refreshToken,
-        userId: userId,
-        userRole: userRole,
-      );
-
-      final userMap = Map<String, dynamic>.from(rawUserMap);
-      userMap['role'] = userRole.toLowerCase();
-
-      return UserSession.fromJson(userMap);
+      debugPrint('[AUTH] Register response received.');
+      return await _processAuthResponse(res);
     } on ApiException {
       rethrow;
     } catch (e, stack) {
-      print('AuthRepositoryImpl.register caught error: $e');
-      print(stack);
+      if (kDebugMode) {
+        debugPrint('[AUTH] AuthRepositoryImpl.register caught error: $e\n$stack');
+      }
       throw ApiException(
         statusCode: 0,
-        message: 'No internet connection or server unreachable. Error: $e',
+        message: 'Registration failed: Network connection issue.',
       );
     }
   }
@@ -75,65 +63,121 @@ class AuthRepositoryImpl implements AuthRepository {
     required String email,
     required String password,
   }) async {
+    final requestBody = {
+      'email': email,
+      'password': password,
+    };
+
+    debugPrint('[AUTH] Sending login request for $email...');
     try {
       final res = await _apiClient.post(
         '/auth/login',
-        body: {
-          'email': email,
-          'password': password,
-        },
+        body: requestBody,
         requireAuth: false,
       );
 
-      final responseMap = res as Map<String, dynamic>;
-      final dataMap = responseMap['data'] as Map<String, dynamic>;
-      final accessToken = dataMap['accessToken'] as String;
-      final refreshToken = dataMap['refreshToken'] as String;
-      final rawUserMap = dataMap['user'] as Map<String, dynamic>;
-      final userId = rawUserMap['id'] as String;
-      final userRole = rawUserMap['role'] as String;
-
-      await _secureStorage.saveSession(
-        accessToken: accessToken,
-        refreshToken: refreshToken,
-        userId: userId,
-        userRole: userRole,
-      );
-
-      // Make a local copy of userMap with lowercase role to match parsing logic
-      final userMap = Map<String, dynamic>.from(rawUserMap);
-      userMap['role'] = userRole.toLowerCase();
-
-      return UserSession.fromJson(userMap);
+      debugPrint('[AUTH] Login HTTP 200 response received.');
+      return await _processAuthResponse(res);
     } on ApiException {
       rethrow;
-    } catch (e) {
+    } catch (e, stack) {
+      if (kDebugMode) {
+        debugPrint('[AUTH] AuthRepositoryImpl.login caught error: $e\n$stack');
+      }
       throw const ApiException(
         statusCode: 0,
-        message: 'No internet connection or server unreachable.',
+        message: 'Unable to connect to server. Please check your network connection.',
       );
     }
   }
 
+  Future<UserSession> _processAuthResponse(dynamic res) async {
+    if (res == null || res is! Map) {
+      throw const ApiException(
+        statusCode: 0,
+        message: 'Invalid response structure from authentication server.',
+      );
+    }
+
+    final responseMap = Map<String, dynamic>.from(res as Map);
+    Map<String, dynamic> dataMap = responseMap;
+    if (responseMap.containsKey('data') && responseMap['data'] is Map) {
+      dataMap = Map<String, dynamic>.from(responseMap['data'] as Map);
+    }
+
+    final accessToken = dataMap['accessToken'] as String? ?? dataMap['token'] as String?;
+    final refreshToken = dataMap['refreshToken'] as String? ?? '';
+    
+    if (accessToken == null || accessToken.isEmpty) {
+      throw const ApiException(
+        statusCode: 0,
+        message: 'Authentication token missing in server response.',
+      );
+    }
+
+    Map<String, dynamic> rawUserMap = {};
+    if (dataMap.containsKey('user') && dataMap['user'] is Map) {
+      rawUserMap = Map<String, dynamic>.from(dataMap['user'] as Map);
+    } else {
+      rawUserMap = dataMap;
+    }
+
+    final userId = rawUserMap['id'] as String? ?? rawUserMap['_id'] as String? ?? '';
+    final userRole = rawUserMap['role'] as String? ?? 'PARENT';
+    final email = rawUserMap['email'] as String? ?? '';
+
+    debugPrint('[TOKEN] Saving session tokens: userId=$userId, role=$userRole');
+    await _secureStorage.saveSession(
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      userId: userId,
+      userRole: userRole,
+    );
+    debugPrint('[TOKEN] Session tokens saved successfully to secure storage.');
+
+    final userMap = Map<String, dynamic>.from(rawUserMap);
+    userMap['id'] = userId;
+    userMap['email'] = email;
+    userMap['role'] = userRole;
+
+    return UserSession.fromJson(userMap);
+  }
+
   @override
   Future<void> logout() async {
-    // Fire the network logout request in the background (do not await it)
-    // so that local session teardown completes instantly without waiting for timeouts.
+    String? refreshToken;
+
+    // Local sign-out must never wait for the server.  In particular, when the
+    // device is offline a pending HTTP request used to keep the stored session
+    // alive until it timed out.
     try {
-      final refreshToken = await _secureStorage.getRefreshToken();
-      if (refreshToken != null) {
+      refreshToken = await _secureStorage.getRefreshToken();
+      debugPrint('[AUTH REPO] Initiating signout request to /auth/logout (hasRefreshToken: ${refreshToken != null})');
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        // The access token is deliberately retained only long enough to send
+        // this best-effort revocation request.  The local session is cleared
+        // immediately below regardless of the request result.
         _apiClient.post(
           '/auth/logout',
           body: {
             'refreshToken': refreshToken,
           },
           requireAuth: true,
-        ).catchError((_) {}); // catch background request errors
+        ).then((_) {
+          debugPrint('[AUTH REPO] POST /auth/logout network request delivered successfully.');
+        }).catchError((e) {
+          debugPrint('[AUTH REPO] Non-fatal network error during /auth/logout: $e');
+        });
+      } else {
+        debugPrint('[AUTH REPO] No refresh token stored; skipping POST /auth/logout.');
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[AUTH REPO] Non-fatal network error during /auth/logout: $e');
     } finally {
-      await _cacheService.clearCache(); // Wipes SharedPreferences cache
-      await _secureStorage.clearSession(); // Wipes Secure Storage tokens
+      await Future.wait([
+        _cacheService.clearCache(), // Wipes SharedPreferences cache
+        _secureStorage.clearSession(), // Wipes Secure Storage tokens
+      ]);
     }
   }
 

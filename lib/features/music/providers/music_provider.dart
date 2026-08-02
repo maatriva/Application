@@ -1,9 +1,17 @@
 import 'dart:async';
 import 'dart:math';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/song.dart';
-import '../data/mock_songs.dart';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../data/mock_songs.dart';
+import '../models/song.dart';
+import '../services/audio_service.dart';
+
+// ── Sort mode enum ──────────────────────────────────────────────────────────
+enum SortMode { alphabetical, recentlyPlayed, favorites, duration }
+
+// ── State ───────────────────────────────────────────────────────────────────
 class MusicState {
   final List<Song> songs;
   final Song? currentSong;
@@ -16,11 +24,15 @@ class MusicState {
   final List<Song> recentlyPlayed;
   final Duration? sleepTimerRemaining;
   final Duration? sleepTimerTotal;
-  final String? activeCategory;
+
+  // Filter / sort
+  final String? activeCategory;   // sub-category filter ('Lullabies', 'White Noise', …)
+  final String? activeGenre;      // broad genre filter ('Classic Lullabies', …)
   final String? activePlaylist;
   final String searchQuery;
+  final SortMode sortMode;
 
-  MusicState({
+  const MusicState({
     required this.songs,
     this.currentSong,
     this.isPlaying = false,
@@ -33,26 +45,66 @@ class MusicState {
     this.sleepTimerRemaining,
     this.sleepTimerTotal,
     this.activeCategory,
+    this.activeGenre,
     this.activePlaylist,
     this.searchQuery = '',
+    this.sortMode = SortMode.alphabetical,
   });
 
+  // ── Derived lists ─────────────────────────────────────────────────────────
+  List<Song> get favoriteSongs => songs.where((s) => s.isFavorite).toList();
+
+  /// Full filtered + sorted list used by the library/search view.
   List<Song> get filteredSongs {
-    var filtered = songs;
-    if (activeCategory != null) {
-      filtered = filtered.where((s) => s.category == activeCategory).toList();
+    var list = songs;
+
+    if (activeGenre != null) {
+      list = list.where((s) => s.genre == activeGenre).toList();
+    } else if (activeCategory != null) {
+      list = list.where((s) => s.category == activeCategory).toList();
     }
+
     if (searchQuery.isNotEmpty) {
-      final query = searchQuery.toLowerCase();
-      filtered = filtered
-          .where(
-            (s) =>
-                s.title.toLowerCase().contains(query) ||
-                s.artist.toLowerCase().contains(query),
-          )
+      final q = searchQuery.toLowerCase();
+      list = list
+          .where((s) =>
+              s.title.toLowerCase().contains(q) ||
+              s.artist.toLowerCase().contains(q) ||
+              s.genre.toLowerCase().contains(q) ||
+              s.category.toLowerCase().contains(q))
           .toList();
     }
-    return filtered;
+
+    return _applySort(list);
+  }
+
+  List<Song> _applySort(List<Song> list) {
+    final copy = List<Song>.from(list);
+    switch (sortMode) {
+      case SortMode.alphabetical:
+        copy.sort((a, b) => a.title.compareTo(b.title));
+        break;
+      case SortMode.recentlyPlayed:
+        copy.sort((a, b) {
+          final aTime = a.recentlyPlayedAt;
+          final bTime = b.recentlyPlayedAt;
+          if (aTime == null && bTime == null) return 0;
+          if (aTime == null) return 1;
+          if (bTime == null) return -1;
+          return bTime.compareTo(aTime);
+        });
+        break;
+      case SortMode.favorites:
+        copy.sort((a, b) {
+          if (a.isFavorite == b.isFavorite) return a.title.compareTo(b.title);
+          return a.isFavorite ? -1 : 1;
+        });
+        break;
+      case SortMode.duration:
+        copy.sort((a, b) => a.duration.compareTo(b.duration));
+        break;
+    }
+    return copy;
   }
 
   MusicState copyWith({
@@ -68,10 +120,14 @@ class MusicState {
     Duration? sleepTimerRemaining,
     Duration? sleepTimerTotal,
     String? activeCategory,
+    String? activeGenre,
     String? activePlaylist,
     String? searchQuery,
+    SortMode? sortMode,
     bool clearCurrentSong = false,
     bool clearSleepTimer = false,
+    bool clearCategoryFilter = false,
+    bool clearGenreFilter = false,
   }) {
     return MusicState(
       songs: songs ?? this.songs,
@@ -86,183 +142,216 @@ class MusicState {
       sleepTimerRemaining: clearSleepTimer
           ? null
           : (sleepTimerRemaining ?? this.sleepTimerRemaining),
-      sleepTimerTotal: clearSleepTimer
+      sleepTimerTotal:
+          clearSleepTimer ? null : (sleepTimerTotal ?? this.sleepTimerTotal),
+      activeCategory: clearCategoryFilter
           ? null
-          : (sleepTimerTotal ?? this.sleepTimerTotal),
-      activeCategory: activeCategory == 'All'
+          : (activeCategory == 'All'
+              ? null
+              : (activeCategory ?? this.activeCategory)),
+      activeGenre: clearGenreFilter
           ? null
-          : (activeCategory ?? this.activeCategory),
+          : (activeGenre == 'All' ? null : (activeGenre ?? this.activeGenre)),
       activePlaylist: activePlaylist ?? this.activePlaylist,
       searchQuery: searchQuery ?? this.searchQuery,
+      sortMode: sortMode ?? this.sortMode,
     );
   }
 }
 
+// ── Notifier ─────────────────────────────────────────────────────────────────
 class MusicNotifier extends StateNotifier<MusicState> {
+  final AudioService _audio = AudioService();
+
+  // Progress timer — drives the UI seek bar (the WAV loops, so we track
+  // "virtual" progress separately against the song's stated duration).
   Timer? _playbackTimer;
   Timer? _sleepTimer;
 
   MusicNotifier()
-    : super(MusicState(songs: List.from(rawMockSongs), recentlyPlayed: [])) {
-    // Set first song as default current song if none selected
+      : super(
+          MusicState(
+            songs: List<Song>.from(rawMockSongs),
+            recentlyPlayed: [],
+          ),
+        ) {
+    _audio.setVolume(state.volume);
     if (state.songs.isNotEmpty) {
       state = state.copyWith(currentSong: state.songs.first);
     }
   }
 
-  void selectSong(Song song) {
-    // Add to recently played (avoid duplicates at the front)
+  // ── Song selection ────────────────────────────────────────────────────────
+  Future<void> selectSong(Song song) async {
+    _stopPlaybackTimer();
+
+    // Stamp recentlyPlayedAt on the song
+    final now = DateTime.now();
+    final updatedSongs = state.songs.map((s) {
+      if (s.id == song.id) return s.copyWith(recentlyPlayedAt: now);
+      return s;
+    }).toList();
+
+    final updatedSong = song.copyWith(recentlyPlayedAt: now);
+
+    // Build recently played list
     final recent = List<Song>.from(state.recentlyPlayed);
     recent.removeWhere((s) => s.id == song.id);
-    recent.insert(0, song);
-    if (recent.length > 8) {
-      recent.removeLast();
-    }
+    recent.insert(0, updatedSong);
+    if (recent.length > 10) recent.removeLast();
 
     state = state.copyWith(
-      currentSong: song,
+      songs: updatedSongs,
+      currentSong: updatedSong,
       currentPosition: Duration.zero,
       isPlaying: true,
       recentlyPlayed: recent,
     );
 
+    // Play audio
+    try {
+      await _audio.setVolume(state.volume);
+      if (song.audioPath.isNotEmpty) {
+        await _audio.playAsset(song.audioPath);
+      }
+    } catch (e) {
+      debugPrint('[AudioService] playback error: $e');
+    }
+
     _startPlaybackTimer();
   }
 
-  void togglePlayPause() {
+  // ── Play / Pause ──────────────────────────────────────────────────────────
+  Future<void> togglePlayPause() async {
     if (state.currentSong == null) return;
-
     final nextPlaying = !state.isPlaying;
     state = state.copyWith(isPlaying: nextPlaying);
-
     if (nextPlaying) {
+      await _audio.resume();
       _startPlaybackTimer();
     } else {
+      await _audio.pause();
       _stopPlaybackTimer();
     }
   }
 
-  void setPlaybackSpeed(double speed) {
-    state = state.copyWith(playbackSpeed: speed);
-  }
-
-  void toggleShuffle() {
-    state = state.copyWith(isShuffle: !state.isShuffle);
-  }
-
-  void toggleRepeat() {
-    state = state.copyWith(isRepeat: !state.isRepeat);
-  }
-
-  void setVolume(double vol) {
-    state = state.copyWith(volume: vol.clamp(0.0, 1.0));
-  }
-
-  void setCategoryFilter(String? category) {
-    state = state.copyWith(activeCategory: category);
-  }
-
-  void setPlaylistFilter(String? playlistName) {
-    state = state.copyWith(activePlaylist: playlistName);
-  }
-
-  void setSearchQuery(String query) {
-    state = state.copyWith(searchQuery: query);
-  }
-
-  void toggleFavorite(String songId) {
-    final updatedSongs = state.songs.map((s) {
-      if (s.id == songId) {
-        return s.copyWith(isFavorite: !s.isFavorite);
-      }
-      return s;
-    }).toList();
-
-    Song? updatedCurrentSong = state.currentSong;
-    if (updatedCurrentSong != null && updatedCurrentSong.id == songId) {
-      updatedCurrentSong = updatedCurrentSong.copyWith(
-        isFavorite: !updatedCurrentSong.isFavorite,
-      );
+  // ── Navigation ────────────────────────────────────────────────────────────
+  Future<void> nextTrack() async {
+    final list = _getFilteredSongs();
+    if (list.isEmpty) return;
+    final Song next;
+    if (state.isShuffle) {
+      next = list[Random().nextInt(list.length)];
+    } else {
+      final idx = list.indexWhere((s) => s.id == state.currentSong?.id);
+      next = (idx == -1 || idx == list.length - 1) ? list.first : list[idx + 1];
     }
+    await selectSong(next);
+  }
 
+  Future<void> previousTrack() async {
+    final list = _getFilteredSongs();
+    if (list.isEmpty) return;
+    final Song prev;
+    if (state.isShuffle) {
+      prev = list[Random().nextInt(list.length)];
+    } else {
+      final idx = list.indexWhere((s) => s.id == state.currentSong?.id);
+      prev = (idx == -1 || idx == 0) ? list.last : list[idx - 1];
+    }
+    await selectSong(prev);
+  }
+
+  // ── Seek ──────────────────────────────────────────────────────────────────
+  Future<void> seek(Duration position) async {
+    if (state.currentSong == null) return;
+    final max = state.currentSong!.duration;
+    final clamped = position < Duration.zero
+        ? Duration.zero
+        : (position > max ? max : position);
+    state = state.copyWith(currentPosition: clamped);
+    // Note: audio loops the short WAV; seeking in the simulated progress only.
+  }
+
+  // ── Controls ──────────────────────────────────────────────────────────────
+  void toggleShuffle() => state = state.copyWith(isShuffle: !state.isShuffle);
+  void toggleRepeat() => state = state.copyWith(isRepeat: !state.isRepeat);
+
+  Future<void> setVolume(double vol) async {
+    state = state.copyWith(volume: vol.clamp(0.0, 1.0));
+    await _audio.setVolume(state.volume);
+  }
+
+  void setPlaybackSpeed(double speed) =>
+      state = state.copyWith(playbackSpeed: speed);
+
+  // ── Filters / Sort ────────────────────────────────────────────────────────
+  void setCategoryFilter(String? category) {
     state = state.copyWith(
-      songs: updatedSongs,
-      currentSong: updatedCurrentSong,
+      activeCategory: category,
+      clearGenreFilter: true,
     );
   }
 
-  void seek(Duration position) {
-    if (state.currentSong == null) return;
-    final maxDuration = state.currentSong!.duration;
-    final targetPosition = position > maxDuration
-        ? maxDuration
-        : (position < Duration.zero ? Duration.zero : position);
-    state = state.copyWith(currentPosition: targetPosition);
+  void setGenreFilter(String? genre) {
+    state = state.copyWith(
+      activeGenre: genre,
+      clearCategoryFilter: true,
+    );
   }
 
-  void nextTrack() {
-    final availableSongs = _getFilteredSongs();
-    if (availableSongs.isEmpty) return;
+  void clearAllFilters() {
+    state = state.copyWith(
+      clearCategoryFilter: true,
+      clearGenreFilter: true,
+      searchQuery: '',
+    );
+  }
 
-    if (state.isShuffle) {
-      final random = Random();
-      final randomIndex = random.nextInt(availableSongs.length);
-      selectSong(availableSongs[randomIndex]);
-    } else {
-      final currentIndex = availableSongs.indexWhere(
-        (s) => s.id == state.currentSong?.id,
-      );
-      if (currentIndex == -1 || currentIndex == availableSongs.length - 1) {
-        // Go back to first
-        selectSong(availableSongs.first);
-      } else {
-        selectSong(availableSongs[currentIndex + 1]);
-      }
+  void setPlaylistFilter(String? name) =>
+      state = state.copyWith(activePlaylist: name);
+
+  void setSearchQuery(String query) =>
+      state = state.copyWith(searchQuery: query);
+
+  void setSortMode(SortMode mode) => state = state.copyWith(sortMode: mode);
+
+  // ── Favorites ─────────────────────────────────────────────────────────────
+  void toggleFavorite(String songId) {
+    final updated = state.songs.map((s) {
+      if (s.id == songId) return s.copyWith(isFavorite: !s.isFavorite);
+      return s;
+    }).toList();
+
+    Song? updatedCurrent = state.currentSong;
+    if (updatedCurrent != null && updatedCurrent.id == songId) {
+      updatedCurrent =
+          updatedCurrent.copyWith(isFavorite: !updatedCurrent.isFavorite);
     }
+
+    state = state.copyWith(songs: updated, currentSong: updatedCurrent);
   }
 
-  void previousTrack() {
-    final availableSongs = _getFilteredSongs();
-    if (availableSongs.isEmpty) return;
-
-    if (state.isShuffle) {
-      final random = Random();
-      final randomIndex = random.nextInt(availableSongs.length);
-      selectSong(availableSongs[randomIndex]);
-    } else {
-      final currentIndex = availableSongs.indexWhere(
-        (s) => s.id == state.currentSong?.id,
-      );
-      if (currentIndex == -1 || currentIndex == 0) {
-        // Go to last
-        selectSong(availableSongs.last);
-      } else {
-        selectSong(availableSongs[currentIndex - 1]);
-      }
-    }
-  }
-
+  // ── Sleep timer ───────────────────────────────────────────────────────────
   void setSleepTimer(Duration duration) {
     _sleepTimer?.cancel();
     state = state.copyWith(
       sleepTimerRemaining: duration,
       sleepTimerTotal: duration,
     );
-
-    _sleepTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _sleepTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (state.sleepTimerRemaining == null) {
-        timer.cancel();
+        t.cancel();
         return;
       }
-
-      final nextRemaining =
-          state.sleepTimerRemaining! - const Duration(seconds: 1);
-      if (nextRemaining <= Duration.zero) {
-        timer.cancel();
-        state = state.copyWith(isPlaying: false, clearSleepTimer: true);
+      final next = state.sleepTimerRemaining! - const Duration(seconds: 1);
+      if (next <= Duration.zero) {
+        t.cancel();
+        _audio.pause();
         _stopPlaybackTimer();
+        state = state.copyWith(isPlaying: false, clearSleepTimer: true);
       } else {
-        state = state.copyWith(sleepTimerRemaining: nextRemaining);
+        state = state.copyWith(sleepTimerRemaining: next);
       }
     });
   }
@@ -272,116 +361,90 @@ class MusicNotifier extends StateNotifier<MusicState> {
     state = state.copyWith(clearSleepTimer: true);
   }
 
-  List<Song> _getFilteredSongs() {
-    var list = state.songs;
-
-    // Apply Playlist filter
-    if (state.activePlaylist != null) {
-      list = getSongsForPlaylist(state.activePlaylist!, list);
-    }
-
-    // Apply Category filter
-    if (state.activeCategory != null) {
-      list = list.where((s) => s.category == state.activeCategory).toList();
-    }
-
-    // Apply Search filter
-    if (state.searchQuery.isNotEmpty) {
-      final query = state.searchQuery.toLowerCase();
-      list = list
-          .where(
-            (s) =>
-                s.title.toLowerCase().contains(query) ||
-                s.artist.toLowerCase().contains(query),
-          )
-          .toList();
-    }
-
-    return list;
-  }
-
-  List<Song> getSongsForPlaylist(String playlist, List<Song> allSongs) {
+  // ── Playlist helper ───────────────────────────────────────────────────────
+  List<Song> getSongsForPlaylist(String playlist, List<Song> all) {
     switch (playlist) {
       case 'Favorites':
-        return allSongs.where((s) => s.isFavorite).toList();
+        return all.where((s) => s.isFavorite).toList();
       case 'Newborn Sleep':
-        return allSongs
-            .where(
-              (s) =>
-                  s.category == 'Heartbeat Sounds' ||
-                  s.category == 'White Noise',
-            )
+        return all
+            .where((s) =>
+                s.genre == 'Heartbeat & Womb' || s.genre == 'White Noise')
             .toList();
       case 'Night Sleep':
-        return allSongs
-            .where((s) => s.category == 'Lullabies' || s.category == 'Piano')
+        return all
+            .where((s) =>
+                s.genre == 'Classic Lullabies' || s.genre == 'Instrumental')
             .toList();
       case 'Nap Time':
-        return allSongs
-            .where(
-              (s) =>
-                  s.category == 'Nature Sounds' || s.category == 'Ocean Waves',
-            )
+        return all
+            .where((s) => s.genre == 'Nature Sounds')
             .toList();
       case 'White Noise Collection':
-        return allSongs.where((s) => s.category == 'White Noise').toList();
+        return all.where((s) => s.genre == 'White Noise').toList();
       case 'Calming Sounds':
-        return allSongs
-            .where(
-              (s) => s.category == 'Meditation' || s.category == 'Instrumental',
-            )
-            .toList();
+        return all.where((s) => s.genre == 'Sleep Meditation').toList();
       case 'Classical Collection':
-        return allSongs.where((s) => s.category == 'Classical').toList();
+        return all.where((s) => s.category == 'Classical').toList();
       case 'Nature Collection':
-        return allSongs
-            .where(
-              (s) =>
-                  s.category == 'Nature Sounds' || s.category == 'Rain Sounds',
-            )
-            .toList();
+        return all.where((s) => s.genre == 'Nature Sounds').toList();
       default:
-        return allSongs;
+        return all;
     }
+  }
+
+  // ── Internal helpers ──────────────────────────────────────────────────────
+  List<Song> _getFilteredSongs() {
+    var list = state.songs;
+    if (state.activeGenre != null) {
+      list = list.where((s) => s.genre == state.activeGenre).toList();
+    } else if (state.activeCategory != null) {
+      list = list.where((s) => s.category == state.activeCategory).toList();
+    }
+    if (state.searchQuery.isNotEmpty) {
+      final q = state.searchQuery.toLowerCase();
+      list = list
+          .where((s) =>
+              s.title.toLowerCase().contains(q) ||
+              s.artist.toLowerCase().contains(q) ||
+              s.genre.toLowerCase().contains(q))
+          .toList();
+    }
+    return list;
   }
 
   void _startPlaybackTimer() {
     _playbackTimer?.cancel();
-    _playbackTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (state.currentSong == null || !state.isPlaying) {
-        timer.cancel();
+    _playbackTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted || state.currentSong == null || !state.isPlaying) {
+        t.cancel();
         return;
       }
-
-      // Progress playback speed adjusted
-      final addedSeconds = (1 * state.playbackSpeed).round();
-      final nextPosition =
-          state.currentPosition + Duration(seconds: addedSeconds);
-
-      if (nextPosition >= state.currentSong!.duration) {
+      final added = Duration(seconds: state.playbackSpeed.round());
+      final next = state.currentPosition + added;
+      if (next >= state.currentSong!.duration) {
         if (state.isRepeat) {
           state = state.copyWith(currentPosition: Duration.zero);
         } else {
           nextTrack();
         }
       } else {
-        state = state.copyWith(currentPosition: nextPosition);
+        state = state.copyWith(currentPosition: next);
       }
     });
   }
 
-  void _stopPlaybackTimer() {
-    _playbackTimer?.cancel();
-  }
+  void _stopPlaybackTimer() => _playbackTimer?.cancel();
 
   @override
   void dispose() {
     _playbackTimer?.cancel();
     _sleepTimer?.cancel();
+    _audio.dispose();
     super.dispose();
   }
 }
 
-final musicProvider = StateNotifierProvider<MusicNotifier, MusicState>((ref) {
-  return MusicNotifier();
-});
+// ── Provider ──────────────────────────────────────────────────────────────────
+final musicProvider =
+    StateNotifierProvider<MusicNotifier, MusicState>((ref) => MusicNotifier());

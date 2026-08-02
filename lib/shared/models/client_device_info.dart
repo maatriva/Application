@@ -27,6 +27,12 @@ class ClientDeviceInfo extends Equatable {
   });
 
   factory ClientDeviceInfo.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic raw) {
+      if (raw is DateTime) return raw;
+      if (raw is String) return DateTime.tryParse(raw) ?? DateTime.now();
+      return DateTime.now();
+    }
+
     return ClientDeviceInfo(
       deviceId: json['deviceId'] as String? ?? '',
       deviceName: json['deviceName'] as String? ?? '',
@@ -35,9 +41,7 @@ class ClientDeviceInfo extends Equatable {
       protocol: json['protocol'] as String? ?? 'Wi-Fi',
       battery: json['battery'] as int?,
       status: json['status'] as String? ?? 'offline',
-      lastSeen: json['lastSeen'] != null
-          ? DateTime.parse(json['lastSeen'] as String)
-          : DateTime.now(),
+      lastSeen: parseDate(json['lastSeen']),
       babyId: json['babyId'] as String?,
       registrationKey: json['registrationKey'] as String?,
     );

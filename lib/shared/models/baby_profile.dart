@@ -11,6 +11,7 @@ class BabyProfile extends Equatable {
   final double? birthWeight;
   final double? birthHeight;
   final String? photoUrl;
+  final String? accessLevel;
 
   const BabyProfile({
     required this.id,
@@ -22,23 +23,31 @@ class BabyProfile extends Equatable {
     this.birthWeight,
     this.birthHeight,
     this.photoUrl,
+    this.accessLevel,
   });
 
   factory BabyProfile.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic raw) {
+      if (raw is DateTime) return raw;
+      if (raw is String) return DateTime.tryParse(raw) ?? DateTime.now();
+      return DateTime.now();
+    }
+
     return BabyProfile(
       id: json['id'] as String? ?? '',
       parentId: json['parentId'] as String? ?? '',
       name: json['name'] as String? ?? '',
       birthDate: json['birthDate'] != null
-          ? DateTime.parse(json['birthDate'] as String)
+          ? parseDate(json['birthDate'])
           : (json['dateOfBirth'] != null
-              ? DateTime.parse(json['dateOfBirth'] as String)
+              ? parseDate(json['dateOfBirth'])
               : DateTime.now()),
       gender: json['gender'] as String? ?? 'unknown',
       bloodGroup: json['bloodGroup'] as String?,
       birthWeight: (json['birthWeight'] as num?)?.toDouble(),
       birthHeight: (json['birthHeight'] as num?)?.toDouble(),
       photoUrl: json['photoUrl'] as String?,
+      accessLevel: json['accessLevel'] as String?,
     );
   }
 
@@ -53,6 +62,7 @@ class BabyProfile extends Equatable {
       'birthWeight': birthWeight,
       'birthHeight': birthHeight,
       'photoUrl': photoUrl,
+      'accessLevel': accessLevel,
     };
   }
 
@@ -66,6 +76,7 @@ class BabyProfile extends Equatable {
     double? birthWeight,
     double? birthHeight,
     String? photoUrl,
+    String? accessLevel,
   }) {
     return BabyProfile(
       id: id ?? this.id,
@@ -77,6 +88,7 @@ class BabyProfile extends Equatable {
       birthWeight: birthWeight ?? this.birthWeight,
       birthHeight: birthHeight ?? this.birthHeight,
       photoUrl: photoUrl ?? this.photoUrl,
+      accessLevel: accessLevel ?? this.accessLevel,
     );
   }
 
@@ -91,5 +103,6 @@ class BabyProfile extends Equatable {
         birthWeight,
         birthHeight,
         photoUrl,
+        accessLevel,
       ];
 }

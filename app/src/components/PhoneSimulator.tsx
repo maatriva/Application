@@ -49,6 +49,7 @@ interface PhoneSimulatorProps {
   metrics: BabyMetrics;
   onMetricsChange: (newMetrics: Partial<BabyMetrics>) => void;
   onGenerateAIInsight: () => void;
+  onOpenAdminMusic?: () => void;
 }
 
 interface Product {
@@ -577,7 +578,8 @@ const MOCK_NOTIFICATIONS: NotificationItem[] = [
 export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({
   metrics,
   onMetricsChange,
-  onGenerateAIInsight
+  onGenerateAIInsight,
+  onOpenAdminMusic
 }) => {
   const [activeTab, setActiveTab] = useState<number>(0);
   const [showDrawer, setShowDrawer] = useState<boolean>(false);
@@ -3936,7 +3938,7 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({
                       </div>
                     )}
 
-                    {/* Search Field */}
+                    {/* Search Field & Admin Upload CTA */}
                     <div className="flex gap-2">
                       <div className="flex-1 bg-white border rounded-xl px-2.5 flex items-center gap-2 h-9 shadow-xs">
                         <Search className="w-3.5 h-3.5 text-slate-400" />
@@ -3948,6 +3950,15 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({
                           onChange={(e) => setSimSearch(e.target.value)}
                         />
                       </div>
+                      {onOpenAdminMusic && (
+                        <button
+                          onClick={onOpenAdminMusic}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[10px] px-3 rounded-xl flex items-center gap-1 shadow-xs transition-all cursor-pointer flex-shrink-0"
+                          title="Open Admin Bulk Music Upload System"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Upload
+                        </button>
+                      )}
                     </div>
 
                     {/* horizontal category scroll */}

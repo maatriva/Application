@@ -1285,7 +1285,6 @@ class LiveCameraCard extends StatelessWidget {
                 _buildSidebarStatusText('LULLABY', 'On', Icons.volume_up_rounded),
                 _buildSidebarStatusText('NIGHT LIGHT', 'On', Icons.nights_stay_rounded),
                 _buildSidebarStatusText('AUDIO', 'High', Icons.mic_rounded),
-                _buildSidebarStatusText('BATTERY', '88%', Icons.battery_charging_full_rounded),
               ],
             ),
           ),

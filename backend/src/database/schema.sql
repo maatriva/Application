@@ -121,3 +121,45 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     ip_address VARCHAR(45),
     timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- 10. Music Tracks Table
+CREATE TABLE IF NOT EXISTS music_tracks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title VARCHAR(255) NOT NULL,
+    category VARCHAR(100) NOT NULL DEFAULT 'Lullabies',
+    language VARCHAR(100) NOT NULL DEFAULT 'English',
+    duration INTEGER NOT NULL DEFAULT 0,
+    file_size INTEGER NOT NULL DEFAULT 0,
+    audio_format VARCHAR(20) NOT NULL DEFAULT 'mp3',
+    bitrate INTEGER,
+    artist VARCHAR(255) NOT NULL DEFAULT 'Maatriva Sound Studio',
+    album VARCHAR(255),
+    storage_url TEXT NOT NULL,
+    file_hash VARCHAR(64),
+    thumbnail TEXT,
+    uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    uploaded_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    is_premium BOOLEAN NOT NULL DEFAULT FALSE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    play_count INTEGER NOT NULL DEFAULT 0,
+    favourite_count INTEGER NOT NULL DEFAULT 0,
+    target_age_group VARCHAR(100),
+    tags TEXT[] DEFAULT ARRAY[]::TEXT[]
+);
+
+CREATE INDEX IF NOT EXISTS idx_music_category ON music_tracks(category);
+CREATE INDEX IF NOT EXISTS idx_music_language ON music_tracks(language);
+CREATE INDEX IF NOT EXISTS idx_music_file_hash ON music_tracks(file_hash);
+
+-- 11. Music Batch Jobs Table
+CREATE TABLE IF NOT EXISTS music_batch_jobs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    status VARCHAR(50) NOT NULL DEFAULT 'processing',
+    total_files INTEGER NOT NULL,
+    success_count INTEGER NOT NULL DEFAULT 0,
+    failed_count INTEGER NOT NULL DEFAULT 0,
+    details JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+

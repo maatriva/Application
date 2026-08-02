@@ -93,11 +93,6 @@ class LiveCameraCard extends StatelessWidget {
                   Icons.nights_stay_rounded,
                 ),
                 _buildSidebarStatusText('AUDIO', 'High', Icons.mic_rounded),
-                _buildSidebarStatusText(
-                  'BATTERY',
-                  '88%',
-                  Icons.battery_charging_full_rounded,
-                ),
               ],
             ),
           ),

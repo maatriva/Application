@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
 import 'package:maatriva/core/theme/app_typography.dart';
 import '../providers/music_provider.dart';
+import '../services/music_access_helper.dart';
 import '../widgets/album_art_widget.dart';
 import '../widgets/mini_player.dart';
 
@@ -146,6 +147,10 @@ class PlaylistScreen extends ConsumerWidget {
                                 size: 24,
                               ),
                               onPressed: () {
+                                if (!MusicAccessHelper.canAccessSong(song, ref)) {
+                                  MusicAccessHelper.showCustomMusicRestrictedDialog(context);
+                                  return;
+                                }
                                 if (isCurrent) {
                                   notifier.togglePlayPause();
                                 } else {

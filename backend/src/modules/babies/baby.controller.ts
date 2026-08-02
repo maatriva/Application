@@ -11,9 +11,11 @@ const babyService = new BabyService();
  */
 function formatBabyResponse(baby: any) {
   if (!baby) return null;
-  const { birthDate, deletedAt, ...rest } = baby;
+  const { birthDate, deletedAt, caregivers, ...rest } = baby;
+  const accessLevel = caregivers && caregivers.length > 0 ? caregivers[0].accessLevel : 'parent';
   return {
     ...rest,
+    accessLevel,
     dateOfBirth: birthDate ? birthDate.toISOString().split('T')[0] : null,
   };
 }

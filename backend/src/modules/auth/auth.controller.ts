@@ -109,8 +109,10 @@ export class AuthController {
    * POST /auth/logout
    */
   public static async logout(req: Request, res: Response) {
+    console.log(`[AUTH LOGOUT] Sign-out network request received from IP: ${req.ip || req.socket.remoteAddress}`);
     const parseResult = RefreshSchema.safeParse(req.body);
     if (!parseResult.success) {
+      console.warn(`[AUTH LOGOUT] Sign-out validation failed:`, parseResult.error.issues);
       return res.status(400).json({
         success: false,
         message: 'Validation failed.',
@@ -120,6 +122,7 @@ export class AuthController {
 
     try {
       const result = await authService.logout(parseResult.data.refreshToken);
+      console.log(`[AUTH LOGOUT] User sign-out request processed successfully.`);
 
       res.json({
         success: true,
@@ -127,6 +130,7 @@ export class AuthController {
         data: {},
       });
     } catch (e: any) {
+      console.error(`[AUTH LOGOUT] Sign-out processing error: ${e.message}`);
       const status = e.statusCode || 500;
       res.status(status).json({
         success: false,

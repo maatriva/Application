@@ -43,6 +43,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final _deviceFormKey = GlobalKey<FormState>();
   final _deviceIdController = TextEditingController();
 
+  // Caregiver Setup Controllers
+  final _caregiverFormKey = GlobalKey<FormState>();
+  final _caregiverNameController = TextEditingController();
+  final _caregiverPhoneController = TextEditingController();
+
   final List<OnboardingSlideData> _slides = [
     OnboardingSlideData(
       title: 'Welcome to Maatriva',
@@ -85,6 +90,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     _babyWeightController.dispose();
     _babyHeightController.dispose();
     _deviceIdController.dispose();
+    _caregiverNameController.dispose();
+    _caregiverPhoneController.dispose();
     super.dispose();
   }
 
@@ -250,6 +257,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         return _buildBabyRegister();
       case OnboardingStep.devicePairing:
         return _buildDevicePairing();
+      case OnboardingStep.caregiverSetup:
+        return _buildCaregiverSetup();
       case OnboardingStep.completed:
         // Automatically handled by GoRouter redirect, but return placeholder just in case
         return const Scaffold(
@@ -1135,6 +1144,170 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         fontWeight: FontWeight.w500,
       ),
     );
+  }
+
+  // --- STEP 4: CAREGIVER SETUP SCREEN ---
+  Widget _buildCaregiverSetup() {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(24.r),
+          child: Form(
+            key: _caregiverFormKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(height: 12.h),
+                Text(
+                  'Caregiver Setup',
+                  style: GoogleFonts.outfit(
+                    fontSize: 26.sp,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                SizedBox(height: 8.h),
+                Text(
+                  'Enter your name and phone number to get started with live baby monitoring.',
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                SizedBox(height: 28.h),
+
+                if (_formErrorMessage != null) ...[
+                  Container(
+                    padding: EdgeInsets.all(12.r),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(16.r),
+                      border: Border.all(color: Colors.red.shade100),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 20.r),
+                        SizedBox(width: 10.w),
+                        Expanded(
+                          child: Text(
+                            _formErrorMessage!,
+                            style: TextStyle(fontSize: 12.sp, color: Colors.red.shade800),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: 20.h),
+                ],
+
+                Container(
+                  padding: EdgeInsets.all(20.r),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(28.r),
+                    border: Border.all(
+                      color: AppColors.primary.withOpacity(0.08),
+                      width: 1.5,
+                    ),
+                    boxShadow: AppColors.softShadow,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: CircleAvatar(
+                          radius: 46.r,
+                          backgroundColor: AppColors.primary.withOpacity(0.06),
+                          child: Icon(Icons.shield_outlined, size: 40.r, color: AppColors.primary),
+                        ),
+                      ),
+                      SizedBox(height: 24.h),
+
+                      // Full Name
+                      _buildLabel('Caregiver Name'),
+                      TextFormField(
+                        controller: _caregiverNameController,
+                        style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600),
+                        validator: (v) => v == null || v.trim().isEmpty ? 'Name is required.' : null,
+                        decoration: _buildInputDecoration(Icons.person_outline, 'Enter your name'),
+                      ),
+                      SizedBox(height: 18.h),
+
+                      // Phone Number
+                      _buildLabel('Phone Number'),
+                      TextFormField(
+                        controller: _caregiverPhoneController,
+                        keyboardType: TextInputType.phone,
+                        style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600),
+                        validator: (v) => v == null || v.trim().isEmpty ? 'Phone number is required.' : null,
+                        decoration: _buildInputDecoration(Icons.phone_outlined, 'Enter phone number'),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 36.h),
+
+                ElevatedButton.icon(
+                  onPressed: _isActionLoading ? null : _saveCaregiverSetup,
+                  icon: const Icon(Icons.qr_code_scanner_rounded),
+                  label: Text(
+                    'Continue to QR Scanner',
+                    style: TextStyle(
+                      fontSize: 15.sp,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    minimumSize: Size(double.infinity, 56.h),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28.r),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveCaregiverSetup() async {
+    if (_caregiverFormKey.currentState!.validate()) {
+      setState(() {
+        _isActionLoading = true;
+        _formErrorMessage = null;
+      });
+
+      try {
+        final name = _caregiverNameController.text.trim();
+        final phone = _caregiverPhoneController.text.trim();
+
+        await ref.read(onboardingProvider.notifier).completeCaregiverSetup(
+              name: name,
+              phone: phone,
+            );
+
+        if (mounted) {
+          context.go('/join-shared-baby');
+        }
+      } catch (e) {
+        setState(() {
+          _formErrorMessage = e.toString();
+        });
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isActionLoading = false;
+          });
+        }
+      }
+    }
   }
 }
 

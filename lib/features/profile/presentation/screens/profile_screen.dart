@@ -11,6 +11,7 @@ import '../../provider/profile_provider.dart';
 import '../../../devices/providers/device_provider.dart';
 import '../../../authentication/presentation/providers/auth_provider.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../routes/app_routes.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -508,7 +509,7 @@ class ProfileScreen extends ConsumerWidget {
   void _showSignOutDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24.r),
@@ -525,16 +526,18 @@ class ProfileScreen extends ConsumerWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () => context.pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text(
                 'Cancel',
                 style: TextStyle(color: AppColors.textSecondary),
               ),
             ),
             ElevatedButton(
-              onPressed: () {
-                context.pop();
-                ref.read(authNotifierProvider.notifier).logout();
+              onPressed: () async {
+                final router = GoRouter.of(dialogContext);
+                Navigator.of(dialogContext).pop();
+                await ref.read(authNotifierProvider.notifier).logout();
+                router.go(AppRoutes.login);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,

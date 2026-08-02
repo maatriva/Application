@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/network/api_client.dart';
 import '../../core/storage/cache_service.dart';
@@ -17,20 +18,32 @@ class ProfileRepositoryImpl implements ProfileRepository {
 
   @override
   Future<ProfileState> getProfile() async {
+    debugPrint('[PROFILE] Requesting profile data from /auth/profile...');
     try {
       final res = await _apiClient.get('/auth/profile', requireAuth: true);
-      final responseMap = res as Map<String, dynamic>;
-      final dataMap = responseMap['data'] as Map<String, dynamic>;
-      final fullName = dataMap['fullName'] as String? ?? '';
-      final email = dataMap['email'] as String? ?? '';
+      
+      String fullName = '';
+      String email = '';
+
+      if (res != null && res is Map) {
+        final responseMap = Map<String, dynamic>.from(res);
+        Map<String, dynamic> dataMap = responseMap;
+        if (responseMap.containsKey('data') && responseMap['data'] is Map) {
+          dataMap = Map<String, dynamic>.from(responseMap['data'] as Map);
+        }
+        fullName = dataMap['fullName'] as String? ?? dataMap['name'] as String? ?? '';
+        email = dataMap['email'] as String? ?? '';
+      }
+
+      debugPrint('[PROFILE] Received profile response: name="$fullName", email="$email"');
 
       final cachedMap = _cacheService.getCachedUserProfile();
       ProfileState profile;
 
       if (cachedMap != null) {
         profile = ProfileState.fromJson(cachedMap).copyWith(
-          parentName: fullName,
-          parentEmail: email,
+          parentName: fullName.isNotEmpty ? fullName : null,
+          parentEmail: email.isNotEmpty ? email : null,
         );
       } else {
         // Default Initial State matching profile notifier
@@ -133,16 +146,46 @@ class ProfileRepositoryImpl implements ProfileRepository {
 
       await _cacheService.cacheUserProfile(profile.toJson());
       return profile;
-    } catch (e) {
-      if (e is ApiException && e.statusCode != 0) {
-        rethrow;
-      }
+    } catch (e, stack) {
+      debugPrint('[PROFILE] getProfile network/parsing error: $e\n$stack');
       // Offline/local cached fallback
       final cachedMap = _cacheService.getCachedUserProfile();
       if (cachedMap != null) {
+        debugPrint('[PROFILE] Returning cached profile state.');
         return ProfileState.fromJson(cachedMap);
       }
-      rethrow;
+      
+      debugPrint('[PROFILE] Returning default fallback profile state.');
+      return const ProfileState(
+        parentName: '',
+        parentEmail: '',
+        parentPhone: '',
+        parentAvatar: '',
+        relationship: '',
+        partnerName: '',
+        partnerPhone: '',
+        emergencyContactName: '',
+        emergencyContactPhone: '',
+        babyName: '',
+        babyDob: '',
+        babyGender: '',
+        babyWeight: 0.0,
+        babyHeight: 0.0,
+        babyAvatar: '',
+        allergies: '',
+        pediatricianName: '',
+        pediatricianPhone: '',
+        vaccines: [],
+        devices: [],
+        cryAlerts: true,
+        tempAlerts: true,
+        feedingReminders: false,
+        sleepAnalysisWeekly: true,
+        abnormalHeartRateAlerts: true,
+        twoFactorAuth: false,
+        biometricLogin: true,
+        shareDataWithPediatrician: true,
+      );
     }
   }
 

@@ -17,15 +17,19 @@ class VitalsTelemetry extends Equatable {
   });
 
   factory VitalsTelemetry.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic raw) {
+      if (raw is DateTime) return raw;
+      if (raw is String) return DateTime.tryParse(raw) ?? DateTime.now();
+      return DateTime.now();
+    }
+
     return VitalsTelemetry(
       sensorType:
           json['sensorType'] as String? ?? json['type'] as String? ?? '',
       value: (json['value'] as num?)?.toDouble() ?? 0.0,
       unit: json['unit'] as String? ?? '',
       quality: json['quality'] as String? ?? 'good',
-      timestamp: json['timestamp'] != null
-          ? DateTime.parse(json['timestamp'] as String)
-          : DateTime.now(),
+      timestamp: parseDate(json['timestamp']),
     );
   }
 

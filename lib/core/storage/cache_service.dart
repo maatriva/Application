@@ -7,6 +7,8 @@ class CacheService {
 
   const CacheService(this._prefs);
 
+  SharedPreferences get sharedPreferences => _prefs;
+
   static const String _vitalsCacheKeyPrefix = 'maatriva_cache_vitals_';
   static const String _devicesCacheKey = 'maatriva_cache_devices';
   static const String _userProfileKey = 'maatriva_cache_user_profile';

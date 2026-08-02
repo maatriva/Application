@@ -21,13 +21,29 @@ export class BabyService {
   }
 
   /**
-   * List all non-deleted babies belonging to the parent.
+   * List all non-deleted babies belonging to the parent or assigned to the caregiver.
    */
-  public async listBabies(parentId: string) {
+  public async listBabies(userId: string) {
     return await prisma.baby.findMany({
       where: {
-        parentId,
+        OR: [
+          { parentId: userId },
+          {
+            caregivers: {
+              some: {
+                userId,
+                status: 'accepted',
+              },
+            },
+          },
+        ],
         deletedAt: null,
+      },
+      include: {
+        caregivers: {
+          where: { userId },
+          select: { accessLevel: true }
+        }
       },
       orderBy: {
         createdAt: 'desc',
@@ -36,34 +52,53 @@ export class BabyService {
   }
 
   /**
-   * Get baby details by ID. Verifies parent ownership.
+   * Get baby details by ID. Verifies parent or caregiver ownership/access.
    */
-  public async getBabyById(babyId: string, parentId: string) {
+  public async getBabyById(babyId: string, userId: string) {
     const baby = await prisma.baby.findFirst({
       where: {
         id: babyId,
-        parentId,
         deletedAt: null,
+        OR: [
+          { parentId: userId },
+          {
+            caregivers: {
+              some: {
+                userId,
+                status: 'accepted',
+              },
+            },
+          },
+        ],
+      },
+      include: {
+        caregivers: {
+          where: { userId },
+          select: { accessLevel: true }
+        }
       },
     });
 
     if (!baby) {
       const exists = await prisma.baby.findFirst({
         where: { id: babyId },
+        include: {
+          caregivers: {
+            where: { userId },
+          }
+        }
       });
 
       if (exists) {
-        // If it exists but belongs to another parent or is deleted
-        if (exists.parentId !== parentId) {
-          const error: any = new Error('Access denied to baby profile.');
-          error.statusCode = 403;
-          throw error;
-        }
         if (exists.deletedAt !== null) {
           const error: any = new Error('Baby profile has been deleted.');
           error.statusCode = 404;
           throw error;
         }
+        // If it is not deleted but they don't have access
+        const error: any = new Error('Access denied to baby profile.');
+        error.statusCode = 403;
+        throw error;
       }
 
       const error: any = new Error('Baby profile not found.');

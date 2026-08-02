@@ -221,7 +221,7 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
         case 'Temperature Sensor':
           return [
             {'name': 'Epidermal IR Core', 'status': 'Active', 'ok': true},
-            {'name': 'Battery Voltage Gate', 'status': '3.7V', 'ok': true},
+            {'name': 'Power Adapter Input', 'status': '12V DC', 'ok': true},
             {'name': 'Bluetooth Sync Delay', 'status': '0.4s', 'ok': true},
           ];
         case 'Heart Rate Sensor':
@@ -408,10 +408,8 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
                           value: device.firmwareVersion,
                         ),
                         _buildHeaderStat(
-                          label: 'BATTERY',
-                          value: device.batteryStatus == -1
-                              ? 'Plugged'
-                              : '${device.batteryStatus}%',
+                          label: 'POWER',
+                          value: 'AC Power',
                         ),
                         _buildHeaderStat(
                           label: 'SIGNAL',

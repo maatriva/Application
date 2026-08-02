@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import '../config/app_config.dart';
+import '../config/api_config.dart';
 import '../errors/api_exception.dart';
 import '../storage/secure_storage_service.dart';
+import 'network_diagnostic.dart';
 
 /// Interceptor that appends JWT token credentials to authorized request headers.
 class AuthInterceptor extends Interceptor {
@@ -33,7 +34,11 @@ class RefreshTokenInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    if (err.response?.statusCode == 401) {
+    final isAuthError = err.response?.statusCode == 401 ||
+        (err.response?.statusCode == 403 &&
+            err.response?.data.toString().contains('expired') == true);
+
+    if (isAuthError) {
       final requestOptions = err.requestOptions;
       // Prevent infinite loops on auth specific paths
       if (requestOptions.path.contains('/auth/login') ||
@@ -114,32 +119,33 @@ class RefreshTokenInterceptor extends Interceptor {
   }
 }
 
-/// Helper Interceptor that prints logs for all HTTP requests, responses, and errors.
+/// Helper Interceptor that prints logs for all HTTP requests, responses, and errors in debug mode.
 class LoggingInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    debugPrint('--> [HTTP REQUEST] ${options.method} ${options.uri}');
-    debugPrint('Headers: ${options.headers}');
-    if (options.data != null) {
-      debugPrint('Body: ${options.data}');
+    if (kDebugMode) {
+      debugPrint('--> [HTTP REQUEST] ${options.method} ${options.uri}');
+      if (options.data != null) {
+        debugPrint('Body: ${options.data}');
+      }
     }
     return super.onRequest(options, handler);
   }
 
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
-    debugPrint('<-- [HTTP RESPONSE] ${response.statusCode} ${response.requestOptions.uri}');
-    debugPrint('Body: ${response.data}');
+    if (kDebugMode) {
+      debugPrint('<-- [HTTP RESPONSE] ${response.statusCode} ${response.requestOptions.uri}');
+    }
     return super.onResponse(response, handler);
   }
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
-    debugPrint('<-- [HTTP ERROR] ${err.response?.statusCode} ${err.requestOptions.uri}');
-    debugPrint('Type: ${err.type}');
-    debugPrint('Message: ${err.message}');
-    if (err.response?.data != null) {
-      debugPrint('Error Body: ${err.response?.data}');
+    if (kDebugMode) {
+      debugPrint('<-- [HTTP ERROR] ${err.response?.statusCode} ${err.requestOptions.uri}');
+      debugPrint('Type: ${err.type}');
+      debugPrint('Message: ${err.message}');
     }
     return super.onError(err, handler);
   }
@@ -151,16 +157,23 @@ class ApiClient {
   final SecureStorageService _secureStorage;
   bool _backendInitialized = false;
 
+  String get baseUrl => _dio.options.baseUrl;
+
+  void setBaseUrl(String newUrl) {
+    _dio.options.baseUrl = newUrl;
+    _backendInitialized = false; // Force recheck health of the new endpoint
+  }
+
   ApiClient({
     required String baseUrl,
     required SecureStorageService secureStorage,
     Dio? dio,
   })  : _secureStorage = secureStorage,
         _dio = dio ?? Dio() {
-    _dio.options.baseUrl = baseUrl;
-    _dio.options.connectTimeout = const Duration(milliseconds: AppConfig.connectTimeout);
-    _dio.options.receiveTimeout = const Duration(milliseconds: AppConfig.receiveTimeout);
-    _dio.options.sendTimeout = const Duration(milliseconds: AppConfig.sendTimeout);
+    _dio.options.baseUrl = baseUrl.isNotEmpty ? baseUrl : ApiConfig.baseUrl;
+    _dio.options.connectTimeout = Duration(milliseconds: ApiConfig.connectTimeout);
+    _dio.options.receiveTimeout = Duration(milliseconds: ApiConfig.receiveTimeout);
+    _dio.options.sendTimeout = Duration(milliseconds: ApiConfig.sendTimeout);
     _dio.options.headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -174,36 +187,30 @@ class ApiClient {
   }
 
   Future<void> ensureBackendReady() async {
-    if (_backendInitialized || AppConfig.isTesting) {
+    if (_backendInitialized || ApiConfig.isTesting) {
       _backendInitialized = true;
       return;
     }
     int attempts = 0;
-    while (attempts < 30) {
+    while (attempts < 3) {
       try {
         final response = await _dio.get(
           '/health',
           options: Options(extra: {'requireAuth': false}),
         );
         if (response.statusCode == 200) {
-          final dynamic rawData = response.data;
-          final Map<String, dynamic> data = rawData is Map<String, dynamic>
-              ? rawData
-              : (rawData is String
-                  ? jsonDecode(rawData) as Map<String, dynamic>
-                  : Map<String, dynamic>.from(rawData as Map));
-          if (data['database'] == 'connected') {
-            _backendInitialized = true;
-            return;
-          }
+          _backendInitialized = true;
+          return;
         }
       } catch (e) {
-        print('Backend health check attempt ${attempts + 1} failed: $e');
+        if (kDebugMode) {
+          debugPrint('Backend health check attempt ${attempts + 1} failed: $e');
+        }
       }
       attempts++;
-      await Future.delayed(const Duration(seconds: 1));
+      await Future.delayed(const Duration(milliseconds: 500));
     }
-    throw const ApiException(statusCode: 0, message: 'Server unavailable.');
+    _backendInitialized = true; // Mark initialized to avoid blocking auth calls
   }
 
   Future<dynamic> get(
@@ -212,7 +219,7 @@ class ApiClient {
     Map<String, dynamic>? queryParameters,
   }) async {
     try {
-      if (path != '/health') {
+      if (path != '/health' && !path.startsWith('/auth/')) {
         await ensureBackendReady();
       }
       final response = await _dio.get(
@@ -232,7 +239,7 @@ class ApiClient {
     bool requireAuth = true,
   }) async {
     try {
-      if (path != '/health' && path != '/auth/logout') {
+      if (path != '/health' && !path.startsWith('/auth/')) {
         await ensureBackendReady();
       }
       final response = await _dio.post(
@@ -305,43 +312,13 @@ class ApiClient {
   }
 
   Exception _handleDioError(DioException err) {
-    print('ApiClient._handleDioError caught DioException: $err, type: ${err.type}, message: ${err.message}, response: ${err.response}');
-    final response = err.response;
-    if (response != null) {
-      final statusCode = response.statusCode ?? 500;
-      String message = 'An error occurred';
-      if (statusCode == 401) {
-        message = 'Unauthorized.';
-      } else if (statusCode == 403) {
-        message = 'Access forbidden.';
-      } else if (response.data is Map) {
-        final dataMap = response.data as Map;
-        if (dataMap.containsKey('error')) {
-          message = dataMap['error'] as String;
-        } else if (dataMap.containsKey('message')) {
-          message = dataMap['message'] as String;
-        }
-      } else {
-        message = err.message ?? 'An HTTP network error occurred.';
-      }
-      return ApiException(statusCode: statusCode, message: message);
-    } else {
-      String message = 'No internet connection.';
-      switch (err.type) {
-        case DioExceptionType.connectionTimeout:
-        case DioExceptionType.sendTimeout:
-          message = 'Request timed out.';
-          break;
-        case DioExceptionType.receiveTimeout:
-          message = 'Response timed out.';
-          break;
-        case DioExceptionType.connectionError:
-          message = 'Unable to connect to server.';
-          break;
-        default:
-          message = 'Server unavailable.';
-      }
-      return ApiException(statusCode: 0, message: message);
+    if (kDebugMode) {
+      debugPrint('ApiClient._handleDioError: type=${err.type}, message=${err.message}');
     }
+    final diagnostic = NetworkDiagnostic.diagnoseDioError(err);
+    return ApiException(
+      statusCode: diagnostic.statusCode ?? 0,
+      message: diagnostic.message,
+    );
   }
 }

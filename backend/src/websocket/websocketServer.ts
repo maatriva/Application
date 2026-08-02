@@ -33,16 +33,43 @@ export class WebsocketServerManager {
     // 1. Authenticate all socket connections using JWT middleware
     this.io.use(async (socket, next) => {
       try {
-        const token = (socket.handshake.auth?.token || socket.handshake.query?.token) as string;
+        console.log('[Socket.IO] socket.handshake.auth:', socket.handshake.auth);
+        console.log('[Socket.IO] socket.handshake.headers.authorization:', socket.handshake.headers.authorization);
+
+        let token = (socket.handshake.auth?.token || socket.handshake.query?.token) as string;
+
+        // If not found, try to extract from Authorization header
+        if (!token && socket.handshake.headers.authorization) {
+          const parts = socket.handshake.headers.authorization.split(' ');
+          if (parts.length === 2 && parts[0] === 'Bearer') {
+            token = parts[1];
+          } else {
+            token = socket.handshake.headers.authorization;
+          }
+        }
+
+        // Clean up "Bearer " prefixes if present
+        if (token && token.startsWith('Bearer ')) {
+          token = token.slice(7);
+        }
 
         if (!token) {
           console.warn('[Socket.IO] Connection rejected: Missing token.');
           return next(new Error('Unauthorized: Missing JWT token parameter.'));
         }
 
-        const decoded = jwt.verify(token, env.JWT_SECRET) as any;
+        let decoded: any;
+        try {
+          decoded = jwt.verify(token, env.JWT_SECRET) as any;
+          console.log('[Socket.IO] JWT verification result: SUCCESS');
+        } catch (jwtErr: any) {
+          console.warn(`[Socket.IO] JWT verification result: FAILED (${jwtErr.message})`);
+          throw jwtErr;
+        }
+
         const userId = decoded.userId;
         const role = decoded.role;
+        console.log('[Socket.IO] Authenticated userId:', userId);
 
         // Fetch authorized babies list for this user
         const babyIds = await this.fetchAuthorizedBabies(userId, role);
@@ -66,17 +93,12 @@ export class WebsocketServerManager {
       const { userId, role, babyIds } = socket.data;
       console.log(`[Socket.IO] New connection: Socket ID ${socket.id}, User ID ${userId} (Role: ${role})`);
 
-      // socket.on('join:baby', (babyId: string) => {
-      //   if (babyIds.includes(babyId)) {
-      //     const roomName = `baby:${babyId}`;
-      //     socket.join(roomName);
-      //     console.log(`[Socket.IO] Socket ${socket.id} (User ${userId}) joined room ${roomName}`);
-      //     socket.emit('joined:baby', { babyId, status: 'success' });
-      //   } else {
-      //     console.warn(`[Socket.IO] Socket ${socket.id} (User ${userId}) unauthorized join attempt for baby ${babyId}`);
-      //     socket.emit('join:error', { babyId, message: 'Unauthorized access to this baby feed.' });
-      //   }
-      // });
+      // Automatically join personal user room for direct push notifications & access revocation events
+      if (userId) {
+        const userRoom = `user:${userId}`;
+        socket.join(userRoom);
+        console.log(`[Socket.IO] Socket ${socket.id} joined personal room ${userRoom}`);
+      }
 
 
 
@@ -119,6 +141,17 @@ export class WebsocketServerManager {
           socket.to(roomName).emit('camera-status', { babyId, status: 'online', cameraSocketId: socket.id });
           socket.emit('camera-status', { babyId, status: 'online', cameraSocketId: socket.id });
           console.log(`[Socket.IO] Camera registered for baby ${babyId}: ${socket.id}`);
+
+          // Notify the newly connected camera about existing viewers in the room
+          const room = this.io?.sockets.adapter.rooms.get(roomName);
+          if (room) {
+            for (const socketId of room) {
+              if (socketId !== socket.id) {
+                socket.emit('viewer-joined', { babyId, viewerSocketId: socketId });
+                console.log(`[Socket.IO] Existing viewer ${socketId} notified to newly joined camera ${socket.id}`);
+              }
+            }
+          }
         } else if (role === 'viewer') {
           const cameraSocketId = this.activeCameras.get(babyId);
           if (cameraSocketId) {
@@ -150,29 +183,35 @@ export class WebsocketServerManager {
 
       socket.on('offer', (data: { babyId: string; sdp: any; targetSocketId: string }) => {
         const { babyId, sdp, targetSocketId } = data;
+        console.log('[Socket.IO] Offer received');
         this.io?.to(targetSocketId).emit('offer', {
           babyId,
           sdp,
           senderSocketId: socket.id,
         });
+        console.log('[Socket.IO] Offer forwarded');
       });
 
       socket.on('answer', (data: { babyId: string; sdp: any; targetSocketId: string }) => {
         const { babyId, sdp, targetSocketId } = data;
+        console.log('[Socket.IO] Answer received');
         this.io?.to(targetSocketId).emit('answer', {
           babyId,
           sdp,
           senderSocketId: socket.id,
         });
+        console.log('[Socket.IO] Answer forwarded');
       });
 
       socket.on('ice-candidate', (data: { babyId: string; candidate: any; targetSocketId: string }) => {
         const { babyId, candidate, targetSocketId } = data;
+        console.log('[Socket.IO] ICE candidate received');
         this.io?.to(targetSocketId).emit('ice-candidate', {
           babyId,
           candidate,
           senderSocketId: socket.id,
         });
+        console.log('[Socket.IO] ICE candidate forwarded');
       });
 
       socket.on('disconnecting', () => {
@@ -282,6 +321,14 @@ export class WebsocketServerManager {
     } catch (e) {
       console.error('[Socket.IO] Error fetching authorized babies for user:', e);
       return [];
+    }
+  }
+
+  public emitToUser(userId: string, event: string, payload: any): void {
+    if (this.io) {
+      const room = `user:${userId}`;
+      console.log(`[Socket.IO] Emitting event '${event}' to room ${room}`);
+      this.io.to(room).emit(event, payload);
     }
   }
 

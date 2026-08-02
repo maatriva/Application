@@ -1,0 +1,52 @@
+import '../models/lullaby_genre.dart';
+
+const List<LullabyGenre> mockGenres = [
+  LullabyGenre(
+    id: 'classic',
+    name: 'Classic Lullabies',
+    description: 'Timeless melodies that have soothed babies for generations',
+    emoji: '🎵',
+    colorKey: 'lavender',
+    categories: ['Lullabies'],
+  ),
+  LullabyGenre(
+    id: 'nature',
+    name: 'Nature Sounds',
+    description: 'Rain, ocean, forest & wind to calm your little one',
+    emoji: '🌿',
+    colorKey: 'emerald',
+    categories: ['Nature Sounds', 'Rain Sounds', 'Ocean Waves'],
+  ),
+  LullabyGenre(
+    id: 'whitenoise',
+    name: 'White Noise',
+    description: 'Continuous static, pink & brown noise for deep sleep',
+    emoji: '🌫️',
+    colorKey: 'teal',
+    categories: ['White Noise'],
+  ),
+  LullabyGenre(
+    id: 'instrumental',
+    name: 'Instrumental',
+    description: 'Piano, harp, guitar & classical pieces for quiet nights',
+    emoji: '🎹',
+    colorKey: 'indigo',
+    categories: ['Piano', 'Instrumental', 'Classical'],
+  ),
+  LullabyGenre(
+    id: 'heartbeat',
+    name: 'Heartbeat & Womb',
+    description: 'Familiar prenatal sounds that instantly comfort newborns',
+    emoji: '💗',
+    colorKey: 'rose',
+    categories: ['Heartbeat Sounds'],
+  ),
+  LullabyGenre(
+    id: 'meditation',
+    name: 'Sleep Meditation',
+    description: 'Gentle guided frequencies for deep, restful sleep',
+    emoji: '🌙',
+    colorKey: 'purple',
+    categories: ['Meditation'],
+  ),
+];

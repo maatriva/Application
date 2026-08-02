@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../domain/repositories/baby_repository.dart';
 import '../../../../domain/repositories/device_repository.dart';
 import '../../../../domain/repositories/profile_repository.dart';
+import '../../../../shared/models/user_session.dart';
 import '../../authentication/presentation/providers/auth_provider.dart';
 
 enum OnboardingStep {
@@ -11,6 +13,7 @@ enum OnboardingStep {
   profileSetup,
   babyRegister,
   devicePairing,
+  caregiverSetup,
   completed,
 }
 
@@ -42,6 +45,7 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
   final DeviceRepository _deviceRepo;
   final SharedPreferences _prefs;
   final String? _userEmail;
+  final UserRole? _userRole;
 
   OnboardingNotifier({
     required ProfileRepository profileRepo,
@@ -49,11 +53,13 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
     required DeviceRepository deviceRepo,
     required SharedPreferences prefs,
     String? userEmail,
+    UserRole? userRole,
   })  : _profileRepo = profileRepo,
         _babyRepo = babyRepo,
         _deviceRepo = deviceRepo,
         _prefs = prefs,
         _userEmail = userEmail,
+        _userRole = userRole,
         super(const OnboardingState()) {
     checkOnboardingStatus();
   }
@@ -62,96 +68,90 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
   static const String _onboardingKey = 'maatriva_onboarding_completed';
 
   Future<void> checkOnboardingStatus() async {
-    if (_userEmail == null) {
+    final globalDone = _prefs.getBool(_onboardingKey) ?? false;
+    final userEmail = _userEmail;
+    final userDone = userEmail != null && userEmail.isNotEmpty
+        ? (_prefs.getBool('${_onboardingKey}_$userEmail') ?? false)
+        : false;
+
+    if (globalDone || userDone) {
+      state = state.copyWith(currentStep: OnboardingStep.completed, isLoading: false);
+      return;
+    }
+
+    if (userEmail == null || userEmail.isEmpty) {
       state = state.copyWith(currentStep: OnboardingStep.welcome, isLoading: false);
       return;
     }
 
     state = state.copyWith(isLoading: true);
     try {
-      // 1. Check local preference cache first (essential for offline fallback support)
-      final onboardingCompleted = _prefs.getBool('${_onboardingKey}_$_userEmail') ?? false;
-
-      // 2. Query backend babies list (backend as the source of truth)
-      List<dynamic> babies = [];
-      bool hasNetworkError = false;
-      try {
-        babies = await _babyRepo.getBabies();
-      } catch (e) {
-        hasNetworkError = true;
-        print('OnboardingNotifier getBabies error: $e');
-      }
-
-      if (!hasNetworkError) {
-        if (babies.isNotEmpty) {
-          // Parent profile exists because babies are registered on the backend
-          await _prefs.setBool('${_onboardingKey}_$_userEmail', true);
-          await _prefs.setBool(_welcomeKey, true);
-
-          final profile = await _profileRepo.getProfile();
-          if (profile.parentPhone.isEmpty || profile.relationship.isEmpty) {
-            final updatedProfile = profile.copyWith(
-              parentPhone: 'Verified',
-              relationship: 'Parent',
-            );
-            await _profileRepo.updateProfile(updatedProfile);
-          }
-
-          state = state.copyWith(currentStep: OnboardingStep.completed, isLoading: false);
+      if (_userRole == UserRole.caregiver) {
+        final caregiverDone = _prefs.getBool('caregiver_setup_completed_$userEmail') ?? false;
+        if (!caregiverDone) {
+          state = state.copyWith(currentStep: OnboardingStep.caregiverSetup, isLoading: false);
           return;
         }
-      } else {
-        // Handle network failures gracefully by relying on local SharedPreferences if already completed
-        if (onboardingCompleted) {
-          state = state.copyWith(currentStep: OnboardingStep.completed, isLoading: false);
-          return;
-        }
+        await _prefs.setBool('${_onboardingKey}_$userEmail', true);
+        await _prefs.setBool(_welcomeKey, true);
+        state = state.copyWith(currentStep: OnboardingStep.completed, isLoading: false);
+        return;
       }
 
-      // If we are here, either they have no babies (new user) or they had a network error and are not onboarded locally
-      // For new users, we continue through onboarding steps
       final welcomeCompleted = _prefs.getBool(_welcomeKey) ?? false;
       if (!welcomeCompleted) {
         state = state.copyWith(currentStep: OnboardingStep.welcome, isLoading: false);
         return;
       }
 
-      // Check if profile is incomplete
-      final profile = await _profileRepo.getProfile();
-      if (profile.parentPhone.isEmpty || profile.relationship.isEmpty) {
-        state = state.copyWith(currentStep: OnboardingStep.profileSetup, isLoading: false);
-        return;
-      }
-
-      // Check if any baby is registered
-      if (babies.isEmpty && !hasNetworkError) {
-        state = state.copyWith(currentStep: OnboardingStep.babyRegister, isLoading: false);
-        return;
-      }
-
-      // Check if any device is paired
-      final devices = await _deviceRepo.getDevices();
-      if (devices.isEmpty) {
-        state = state.copyWith(currentStep: OnboardingStep.devicePairing, isLoading: false);
-        return;
-      }
-
-      // All onboarding steps completed
-      await _prefs.setBool('${_onboardingKey}_$_userEmail', true);
       state = state.copyWith(currentStep: OnboardingStep.completed, isLoading: false);
     } catch (e) {
-      print('OnboardingNotifier checkStatus error: $e');
-      final onboardingCompleted = _prefs.getBool('${_onboardingKey}_$_userEmail') ?? false;
-      state = state.copyWith(
-        currentStep: onboardingCompleted ? OnboardingStep.completed : OnboardingStep.welcome,
-        isLoading: false,
-      );
+      debugPrint('OnboardingNotifier checkStatus error: $e');
+      state = state.copyWith(currentStep: OnboardingStep.completed, isLoading: false);
     }
   }
 
+  Future<void> completeCaregiverSetup({
+    required String name,
+    required String phone,
+  }) async {
+    final userEmail = _userEmail;
+    if (userEmail != null) {
+      await _prefs.setBool('caregiver_setup_completed_$userEmail', true);
+      await _prefs.setBool('${_onboardingKey}_$userEmail', true);
+      await _prefs.setBool(_welcomeKey, true);
+    }
+    try {
+      final profile = await _profileRepo.getProfile();
+      final updated = profile.copyWith(
+        parentName: name,
+        parentPhone: phone,
+        relationship: 'Caregiver',
+      );
+      await _profileRepo.updateProfile(updated);
+    } catch (_) {}
+
+    state = state.copyWith(currentStep: OnboardingStep.completed, isLoading: false);
+  }
+
   Future<void> completeWelcome() async {
+    final userEmail = _userEmail;
     await _prefs.setBool(_welcomeKey, true);
-    await checkOnboardingStatus();
+    if (userEmail != null && userEmail.isNotEmpty) {
+      await _prefs.setBool('${_onboardingKey}_$userEmail', true);
+    }
+    await _prefs.setBool(_onboardingKey, true);
+    state = state.copyWith(currentStep: OnboardingStep.completed, isLoading: false);
+  }
+
+  Future<void> completeOnboarding() async {
+    final userEmail = _userEmail;
+    await _prefs.setBool(_welcomeKey, true);
+    if (userEmail != null && userEmail.isNotEmpty) {
+      await _prefs.setBool('${_onboardingKey}_$userEmail', true);
+    }
+    await _prefs.setBool(_onboardingKey, true);
+    state = state.copyWith(currentStep: OnboardingStep.completed, isLoading: false);
   }
 
   void nextStep(OnboardingStep step) {
@@ -167,6 +167,7 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
 
   void resetOnboarding() async {
     await _prefs.remove(_welcomeKey);
+    await _prefs.remove(_onboardingKey);
     if (_userEmail != null) {
       await _prefs.remove('${_onboardingKey}_$_userEmail');
     }
@@ -183,6 +184,7 @@ final onboardingProvider =
   
   final authState = ref.watch(authNotifierProvider);
   final email = authState.session?.email;
+  final role = authState.session?.role;
 
   return OnboardingNotifier(
     profileRepo: profileRepo,
@@ -190,5 +192,6 @@ final onboardingProvider =
     deviceRepo: deviceRepo,
     prefs: prefs,
     userEmail: email,
+    userRole: role,
   );
 });

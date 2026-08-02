@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/services/providers.dart';
@@ -12,6 +13,7 @@ class CaregiverAccessState {
   final List<AccessHistory> accessHistory;
   final String qrToken;
   final bool isGeneratingQR;
+  final String? qrError;  // null = no error
 
   CaregiverAccessState({
     required this.permissions,
@@ -20,6 +22,7 @@ class CaregiverAccessState {
     required this.accessHistory,
     required this.qrToken,
     required this.isGeneratingQR,
+    this.qrError,
   });
 
   CaregiverAccessState copyWith({
@@ -29,6 +32,8 @@ class CaregiverAccessState {
     List<AccessHistory>? accessHistory,
     String? qrToken,
     bool? isGeneratingQR,
+    String? qrError,
+    bool clearQrError = false,
   }) {
     return CaregiverAccessState(
       permissions: permissions ?? this.permissions,
@@ -38,6 +43,7 @@ class CaregiverAccessState {
       accessHistory: accessHistory ?? this.accessHistory,
       qrToken: qrToken ?? this.qrToken,
       isGeneratingQR: isGeneratingQR ?? this.isGeneratingQR,
+      qrError: clearQrError ? null : (qrError ?? this.qrError),
     );
   }
 }
@@ -54,21 +60,24 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
             permissions: {
               'live_monitoring': true,
               'health_data': false,
-              'ai_assistant': true,
+              'ai_assistant': false,
               'notifications': true,
               'emergency_alerts': true,
               'camera_snapshot': false,
+              'custom_music': false,
             },
             selectedDurationLabel: '30 Mins',
             activeSessions: [],
             accessHistory: [],
-            qrToken: 'MAATRIVA_MOCK_SECURE_TOKEN_7F8D2E',
-            isGeneratingQR: false,
+            qrToken: '',
+            isGeneratingQR: true,
           ),
         ) {
     loadSessions();
     _startTimer();
     _startPolling();
+    // Auto-generate a real invite token on startup
+    _generateNewQR(silent: false);
   }
 
   Future<void> loadSessions() async {
@@ -139,6 +148,15 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
     _generateNewQR(silent: false);
   }
 
+  void shareLiveMonitoring() {
+    state = state.copyWith(selectedDurationLabel: '24 Hours');
+    _generateNewQR(
+      silent: false,
+      email: '*',
+      role: 'LIVE_MONITOR_ONLY',
+    );
+  }
+
   void _generateNewQR({
     required bool silent,
     String? email,
@@ -150,6 +168,10 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
 
     Duration duration;
     switch (state.selectedDurationLabel.toLowerCase()) {
+      case '24 hours':
+      case '24 hrs':
+        duration = const Duration(hours: 24);
+        break;
       case '30 mins':
       case '30 minutes':
         duration = const Duration(minutes: 30);
@@ -173,18 +195,29 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
         email: email,
         role: role,
       );
+      debugPrint('[QR] Token generated successfully. Data length: ${token.length}');
       state = state.copyWith(
         qrToken: token,
         isGeneratingQR: false,
+        clearQrError: true,
       );
       // Reload sessions list to show the new pending invitation immediately
       loadSessions();
-    } catch (_) {
-      state = state.copyWith(isGeneratingQR: false);
+    } catch (e) {
+      debugPrint('[QR] ❌ generateInviteToken FAILED: $e');
+      state = state.copyWith(
+        isGeneratingQR: false,
+        qrError: e.toString(),
+      );
     }
   }
 
-  void revokeSession(String sessionId) async {
+  /// Public method to retry QR generation after a failure
+  void retryGenerateQR() {
+    _generateNewQR(silent: false);
+  }
+
+  Future<void> revokeSession(String sessionId) async {
     final sessionToRevoke = state.activeSessions.firstWhere(
       (s) => s.id == sessionId,
       orElse: () => ActiveSession(
@@ -222,6 +255,9 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
       accessHistory: [historyEntry, ...state.accessHistory],
     );
 
+    // Automatically regenerate QR code for parent account
+    _generateNewQR(silent: false);
+
     // Force load fresh data
     loadSessions();
   }
@@ -251,10 +287,10 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
       role = 'SECONDARY_PARENT';
     }
 
-    // Trigger secure invitation token generation with selected email/role on the backend
+    // Trigger secure invitation token generation with wildcard email/role on the backend
     _generateNewQR(
       silent: false,
-      email: name.contains('@') ? name : null,
+      email: '*',
       role: role,
     );
   }

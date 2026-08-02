@@ -405,7 +405,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
               _buildDetailRow('Device ID', _pairedDeviceId ?? 'N/A'),
               _buildDetailRow('Firmware Version', _pairedFirmware ?? '1.0.0'),
               _buildDetailRow('Hardware Version', 'V1.0'),
-              _buildDetailRow('Battery Status', _pairedBattery != null ? '$_pairedBattery%' : 'Plugged in'),
+              _buildDetailRow('Power Source', 'AC Power (Plugged In)'),
               _buildDetailRow('Device Status', _pairedStatus ?? 'Online', isStatus: true),
               _buildDetailRow('Last Connected', 'Just now'),
             ],

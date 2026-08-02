@@ -10,6 +10,7 @@ router.post('/invite', CaregiversController.invite);
 router.get('/', CaregiversController.list);
 router.patch('/:id', CaregiversController.update);
 router.delete('/:id', CaregiversController.revoke);
+router.post('/accept', CaregiversController.accept);
 router.post('/invitation/accept', CaregiversController.accept);
 router.post('/invitation/reject', CaregiversController.reject);
 router.get('/invitations', CaregiversController.listInvitations);

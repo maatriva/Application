@@ -141,7 +141,7 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
   }
 
   Future<void> _handleOffer(dynamic data) async {
-    debugPrint('[WebRTC] offer event received');
+    debugPrint('[Socket.IO] Offer Received');
     if (data is! Map) return;
 
     final senderSocketId = data['senderSocketId'] as String?;
@@ -151,10 +151,10 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
     try {
       await _cleanupPeerConnection();
 
+      debugPrint('[WebRTC] Creating PeerConnection');
       final pc = await createPeerConnection({
         'iceServers': [
           {'urls': 'stun:stun.l.google.com:19302'},
-          {'urls': 'stun:stun1.l.google.com:19302'},
         ]
       });
       _peerConnection = pc;
@@ -179,9 +179,10 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
       };
 
       pc.onAddStream = (stream) {
-        debugPrint('[WebRTC] Remote stream added via onAddStream');
+        debugPrint('[WebRTC] Remote Track Received');
         _remoteStream = stream;
         videoRenderer.srcObject = stream;
+        debugPrint('[WebRTC] Remote Stream Attached');
         
         // Apply current mute preference to new stream tracks
         _applyMute(state.isMuted);
@@ -190,10 +191,11 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
       };
 
       pc.onTrack = (event) {
-        debugPrint('[WebRTC] Track event received via onTrack');
+        debugPrint('[WebRTC] Remote Track Received');
         if (event.streams.isNotEmpty) {
           _remoteStream = event.streams[0];
           videoRenderer.srcObject = event.streams[0];
+          debugPrint('[WebRTC] Remote Stream Attached');
           
           // Apply current mute preference to new stream tracks
           _applyMute(state.isMuted);
@@ -204,8 +206,13 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
 
       // Handle the SDP
       await pc.setRemoteDescription(RTCSessionDescription(sdpMap['sdp'], sdpMap['type']));
+      debugPrint('[WebRTC] Remote Description Set');
+
+      debugPrint('[WebRTC] Creating Answer');
       final answer = await pc.createAnswer();
+      
       await pc.setLocalDescription(answer);
+      debugPrint('[WebRTC] Local Description Set');
 
       _wsService.emit('answer', {
         'babyId': _currentBabyId,
@@ -215,6 +222,7 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
         },
         'targetSocketId': senderSocketId,
       });
+      debugPrint('[Socket.IO] Sending Answer');
     } catch (e) {
       debugPrint('[WebRTC] Error handling offer: $e');
       state = state.copyWith(status: WebrtcStatus.error, errorMessage: 'Failed to negotiate stream connection.');
@@ -222,6 +230,7 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
   }
 
   void _handleIceCandidate(dynamic data) async {
+    debugPrint('[WebRTC] ICE Candidate Received');
     if (data is! Map) return;
     final candidateMap = data['candidate'];
     if (candidateMap == null || _peerConnection == null) return;
@@ -232,7 +241,7 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
         candidateMap['sdpMid'],
         candidateMap['sdpMLineIndex'],
       ));
-      debugPrint('[WebRTC] Remote ICE candidate added successfully');
+      debugPrint('[WebRTC] ICE Candidate Added');
     } catch (e) {
       debugPrint('[WebRTC] Error adding ICE candidate: $e');
     }

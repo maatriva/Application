@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/errors/api_exception.dart';
 import '../../../../core/services/providers.dart';
@@ -60,67 +61,90 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> checkAuth() async {
     if (!mounted) return;
+    debugPrint('[AUTH] Running checkAuth startup session verification...');
     state = AuthState.loading();
-    bool authenticated = false;
-    UserSession? session;
     
     try {
       final loggedIn = await _authRepository.isUserLoggedIn();
       if (loggedIn) {
-        final profile = await _profileRepository.getProfile();
         final userId = await _secureStorage.getUserId() ?? '';
         final userRoleStr = await _secureStorage.getUserRole() ?? 'PARENT';
-        final userRole = parseRole(userRoleStr.toLowerCase());
+        final userRole = parseRole(userRoleStr);
 
-        session = UserSession(
+        final session = UserSession(
           id: userId,
-          email: profile.parentEmail,
+          email: '',
           role: userRole,
         );
-        authenticated = true;
+
+        debugPrint('[AUTH] User session validated from storage: userId=$userId, role=${userRole.name}. State -> authenticated.');
+        await _ref.read(onboardingProvider.notifier).completeOnboarding();
+        if (mounted) {
+          state = AuthState.authenticated(session);
+        }
+
+        _loadProfileInBackground();
+      } else {
+        debugPrint('[AUTH] No stored user session found. State -> unauthenticated.');
+        if (mounted) {
+          state = AuthState.unauthenticated();
+        }
       }
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('[AUTH] Error during checkAuth: $e\n$stack');
       try {
         await _secureStorage.clearSession();
       } catch (_) {}
-    } finally {
       if (mounted) {
-        if (authenticated && session != null) {
-          state = AuthState.authenticated(session);
-        } else {
-          state = AuthState.unauthenticated();
-        }
+        state = AuthState.unauthenticated();
       }
     }
   }
 
   Future<void> login({required String email, required String password}) async {
-    if (_isAuthInProgress || state.status == AuthStatus.loading) return;
+    if (_isAuthInProgress || state.status == AuthStatus.loading) {
+      debugPrint('[AUTH] Login call ignored: auth request already in progress.');
+      return;
+    }
     if (!mounted) return;
 
     _isAuthInProgress = true;
     state = AuthState.loading();
-    bool success = false;
-    UserSession? session;
-    String? errMessage;
+    debugPrint('[AUTH] Executing login request for: $email');
 
     try {
-      session = await _authRepository.login(email: email, password: password);
-      await _profileRepository.getProfile();
-      success = true;
+      final session = await _authRepository.login(email: email, password: password);
+      final userSession = session.email.isEmpty ? session.copyWith(email: email) : session;
+      debugPrint('[AUTH] Login successful! Session issued for userId=${userSession.id}, role=${userSession.role.name}.');
+      
+      if (mounted) {
+        state = AuthState.authenticated(userSession);
+        debugPrint('[AUTH] AuthState updated to authenticated. Navigating to Dashboard.');
+      }
+
+      // Existing user logging in: bypass onboarding directly to Dashboard
+      await _ref.read(onboardingProvider.notifier).completeOnboarding();
+
+      try {
+        _ref.invalidate(dashboardProvider);
+        _ref.invalidate(profileProvider);
+        _ref.invalidate(healthReportsProvider);
+        _ref.invalidate(deviceProvider);
+      } catch (_) {}
+
+      _loadProfileInBackground();
     } on ApiException catch (e) {
-      errMessage = e.message;
-    } catch (e) {
-      errMessage = 'Connection failed. Please check your internet.';
+      debugPrint('[AUTH] Login failed with ApiException: ${e.message} (status: ${e.statusCode})');
+      if (mounted) {
+        state = AuthState.error(e.message.isNotEmpty ? e.message : 'Invalid email or password.');
+      }
+    } catch (e, stack) {
+      debugPrint('[AUTH] Unexpected error during login: $e\n$stack');
+      if (mounted) {
+        state = AuthState.error('Unable to connect to server. Please check your network connection.');
+      }
     } finally {
       _isAuthInProgress = false;
-      if (mounted) {
-        if (success && session != null) {
-          state = AuthState.authenticated(session);
-        } else {
-          state = AuthState.error(errMessage ?? 'An unknown error occurred.');
-        }
-      }
     }
   }
 
@@ -128,70 +152,93 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String email,
     required String password,
     required String fullName,
+    String role = 'parent',
   }) async {
-    if (_isAuthInProgress || state.status == AuthStatus.loading) return;
+    if (_isAuthInProgress || state.status == AuthStatus.loading) {
+      debugPrint('[AUTH] Register call ignored: auth request already in progress.');
+      return;
+    }
     if (!mounted) return;
 
     _isAuthInProgress = true;
     state = AuthState.loading();
-    bool success = false;
-    UserSession? session;
-    String? errMessage;
+    debugPrint('[AUTH] Executing register request for: $email, role=$role');
 
     try {
       final names = fullName.trim().split(' ');
       final firstName = names.isNotEmpty ? names.first : '';
       final lastName = names.length > 1 ? names.sublist(1).join(' ') : '';
 
-      session = await _authRepository.register(
+      final session = await _authRepository.register(
         email: email,
         password: password,
         firstName: firstName,
         lastName: lastName,
-        role: 'parent',
+        role: role,
       );
 
-      await _profileRepository.getProfile();
-      success = true;
-    } on ApiException catch (e, stack) {
-      print('AuthProvider.register ApiException caught: $e');
-      print(stack);
-      errMessage = e.message;
-    } catch (e, stack) {
-      print('AuthProvider.register generic exception caught: $e');
-      print(stack);
-      errMessage = 'Connection failed. Please check your internet. Error: $e';
-    } finally {
-      _isAuthInProgress = false;
+      debugPrint('[AUTH] Registration successful! Session issued for userId=${session.id}.');
       if (mounted) {
-        if (success && session != null) {
-          state = AuthState.authenticated(session);
-        } else {
-          state = AuthState.error(errMessage ?? 'An unknown error occurred.');
-        }
+        state = AuthState.authenticated(session);
+        debugPrint('[AUTH] AuthState updated to authenticated. Navigation triggered.');
       }
-    }
-  }
 
-  Future<void> logout() async {
-    if (!mounted) return;
-    state = AuthState.loading();
-    try {
-      await _authRepository.logout();
-    } catch (_) {
-    } finally {
-      // Invalidate memory states of other logged-in user providers
       try {
         _ref.invalidate(dashboardProvider);
         _ref.invalidate(profileProvider);
         _ref.invalidate(healthReportsProvider);
         _ref.invalidate(deviceProvider);
-        _ref.invalidate(onboardingProvider);
       } catch (_) {}
 
+      _loadProfileInBackground();
+    } on ApiException catch (e) {
+      debugPrint('[AUTH] Registration failed with ApiException: ${e.message}');
       if (mounted) {
-        state = AuthState.unauthenticated();
+        state = AuthState.error(e.message.isNotEmpty ? e.message : 'Registration failed. Please try again.');
       }
+    } catch (e, stack) {
+      debugPrint('[AUTH] Unexpected error during registration: $e\n$stack');
+      if (mounted) {
+        state = AuthState.error('Unable to connect to server. Please check your network connection.');
+      }
+    } finally {
+      _isAuthInProgress = false;
+    }
+  }
+
+  void _loadProfileInBackground() {
+    debugPrint('[PROFILE] Triggering background profile fetch...');
+    _profileRepository.getProfile().then((profile) {
+      debugPrint('[PROFILE] Background profile fetch completed successfully: parentName=${profile.parentName}');
+    }).catchError((err) {
+      debugPrint('[PROFILE] Background profile fetch non-fatal notice: $err');
+    });
+  }
+
+  Future<void> logout() async {
+    debugPrint('[AUTH] Logout initiated by user. Updating state to unauthenticated immediately.');
+
+    // 1. Immediately update auth state to unauthenticated so GoRouter redirects instantly
+    state = AuthState.unauthenticated();
+
+    // 2. Invalidate memory providers
+    try {
+      _ref.invalidate(dashboardProvider);
+      _ref.invalidate(profileProvider);
+      _ref.invalidate(healthReportsProvider);
+      _ref.invalidate(deviceProvider);
+      _ref.invalidate(onboardingProvider);
+    } catch (_) {}
+
+    // 3. Dispatch network sign-out request and wipe local cache/tokens via repository
+    try {
+      await _authRepository.logout();
+      debugPrint('[AUTH] Network logout request completed successfully.');
+    } catch (e) {
+      debugPrint('[AUTH] Non-fatal error during background repository logout: $e');
+      try {
+        await _secureStorage.clearSession();
+      } catch (_) {}
     }
   }
 

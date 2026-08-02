@@ -281,6 +281,7 @@ class _CaregiverAccessScreenState extends ConsumerState<CaregiverAccessScreen> {
       'notifications': Icons.notifications_outlined,
       'emergency_alerts': Icons.warning_amber_rounded,
       'camera_snapshot': Icons.photo_camera_outlined,
+      'custom_music': Icons.library_music_outlined,
     };
 
     final Map<String, String> permTitles = {
@@ -290,6 +291,7 @@ class _CaregiverAccessScreenState extends ConsumerState<CaregiverAccessScreen> {
       'notifications': 'Notifications',
       'emergency_alerts': 'Emergency Alerts',
       'camera_snapshot': 'Camera Snapshot',
+      'custom_music': 'Custom Parent Music Library',
     };
 
     final Map<String, String> permDescs = {
@@ -299,6 +301,7 @@ class _CaregiverAccessScreenState extends ConsumerState<CaregiverAccessScreen> {
       'notifications': 'Receive important baby alerts',
       'emergency_alerts': 'Critical notifications only',
       'camera_snapshot': 'Allow viewing captured images',
+      'custom_music': 'Access to parent\'s imported music & lullabies',
     };
 
     final liveSessionsCount = state.activeSessions.where((s) {
@@ -377,10 +380,55 @@ class _CaregiverAccessScreenState extends ConsumerState<CaregiverAccessScreen> {
             // Centered elegant headers
             const CaregiverHeader(),
 
+            // Share Live Monitoring Button
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              child: SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: state.isGeneratingQR
+                      ? null
+                      : () {
+                          notifier.shareLiveMonitoring();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text('Generating Live Monitoring QR Access (24 Hrs)...'),
+                              backgroundColor: AppColors.primary,
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          );
+                        },
+                  icon: const Icon(Icons.live_tv_rounded, color: Colors.white),
+                  label: const Text(
+                    'Share Live Monitoring',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    elevation: 2,
+                  ),
+                ),
+              ),
+            ),
+
             // Share Access QR code section card
             ShareAccessCard(
               qrToken: state.qrToken,
               isLoading: state.isGeneratingQR,
+              qrError: state.qrError,
+              onRetry: () => notifier.retryGenerateQR(),
             ),
             const SizedBox(height: 12),
 
