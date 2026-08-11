@@ -20,28 +20,38 @@ class AIInsightCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFFF1EDFA), // Soft lavender background
-        borderRadius: BorderRadius.circular(24),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: AppColors.clayShadow,
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.2),
+          width: 1.2,
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Elegant rounded block icon
           Container(
-            width: 48,
-            height: 48,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: AppColors.primary,
+              gradient: AppColors.primaryGradient,
               borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: const Icon(
-              Icons.auto_awesome,
+              Icons.auto_awesome_rounded,
               color: Colors.white,
-              size: 24,
+              size: 22,
             ),
           ),
           const SizedBox(width: 16),
-          // Insight Title and Description
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -49,12 +59,33 @@ class AIInsightCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'AI Insight',
-                      style: AppTypography.labelMedium.copyWith(
-                        color: AppColors.primary,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryLight,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.primary.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.auto_awesome_rounded,
+                            color: AppColors.primary,
+                            size: 12,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'AI Powered Baby Care',
+                            style: AppTypography.labelSmall.copyWith(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     if (onRefresh != null)
@@ -65,19 +96,19 @@ class AIInsightCard extends StatelessWidget {
                           duration: const Duration(seconds: 1),
                           child: Icon(
                             Icons.refresh_rounded,
-                            color: AppColors.primary.withOpacity(0.6),
+                            color: AppColors.primary.withValues(alpha: 0.7),
                             size: 20,
                           ),
                         ),
                       ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 if (isLoading) ...[
                   const SizedBox(height: 12),
                   const LinearProgressIndicator(
                     color: AppColors.primary,
-                    backgroundColor: Color(0xFFEBE3FC),
+                    backgroundColor: AppColors.primaryLight,
                   ),
                   const SizedBox(height: 12),
                 ] else ...[
@@ -86,7 +117,7 @@ class AIInsightCard extends StatelessWidget {
                     style: AppTypography.bodyMedium.copyWith(
                       color: AppColors.textPrimary,
                       height: 1.5,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],

@@ -17,11 +17,13 @@ class UserSession extends Equatable {
   final String id;
   final String email;
   final UserRole role;
+  final bool hasActiveCaregiverPermission;
 
   const UserSession({
     required this.id,
     required this.email,
     required this.role,
+    this.hasActiveCaregiverPermission = false,
   });
 
   factory UserSession.fromJson(Map<String, dynamic> json) {
@@ -29,25 +31,33 @@ class UserSession extends Equatable {
       id: json['id'] as String? ?? '',
       email: json['email'] as String? ?? '',
       role: parseRole(json['role'] as String? ?? ''),
+      hasActiveCaregiverPermission: json['hasActiveCaregiverPermission'] as bool? ?? false,
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'id': id, 'email': email, 'role': role.name};
+    return {
+      'id': id,
+      'email': email,
+      'role': role.name,
+      'hasActiveCaregiverPermission': hasActiveCaregiverPermission,
+    };
   }
 
   UserSession copyWith({
     String? id,
     String? email,
     UserRole? role,
+    bool? hasActiveCaregiverPermission,
   }) {
     return UserSession(
       id: id ?? this.id,
       email: email ?? this.email,
       role: role ?? this.role,
+      hasActiveCaregiverPermission: hasActiveCaregiverPermission ?? this.hasActiveCaregiverPermission,
     );
   }
 
   @override
-  List<Object?> get props => [id, email, role];
+  List<Object?> get props => [id, email, role, hasActiveCaregiverPermission];
 }

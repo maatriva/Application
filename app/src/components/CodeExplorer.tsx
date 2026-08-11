@@ -1045,40 +1045,109 @@ class DashboardHeader extends StatelessWidget implements PreferredSizeWidget {
     path: "lib/features/dashboard/presentation/widgets/greeting_section.dart",
     language: "dart",
     description: "Renders the dynamic salutation and contextual parenting guidance text reflecting baby biometrics.",
-    content: `import 'package:flutter/material.dart';
+    content: `import 'dart:async';
+import 'package:flutter/material.dart';
 import '../../../../theme/colors.dart';
 import '../../../../theme/typography.dart';
 
-class GreetingSection extends StatelessWidget {
+class GreetingSection extends StatefulWidget {
   final String motherName;
   final String babyStatus;
+  final bool isCaregiver;
+  final DateTime? expiresAt;
 
   const GreetingSection({
     super.key,
     required this.motherName,
     required this.babyStatus,
+    this.isCaregiver = false,
+    this.expiresAt,
   });
 
   @override
+  State<GreetingSection> createState() => _GreetingSectionState();
+}
+
+class _GreetingSectionState extends State<GreetingSection> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isCaregiver) {
+      _startTimer();
+    }
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String _formatRemainingTime() {
+    if (widget.expiresAt == null) return "Active Session";
+    final now = DateTime.now();
+    final difference = widget.expiresAt!.difference(now);
+    if (difference.isNegative) return "00h 00m 00s (Expired)";
+    final hours = difference.inHours;
+    final minutes = difference.inMinutes % 60;
+    final seconds = difference.inSeconds % 60;
+    return "\${hours.toString().padLeft(2, '0')}h \${minutes.toString().padLeft(2, '0')}m \${seconds.toString().padLeft(2, '0')}s";
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (widget.isCaregiver) {
+      final remainingStr = _formatRemainingTime();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Caretaker Dashboard', style: AppTypography.displayHeader),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.primary.withOpacity(0.25), width: 1.2),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.timer_outlined, size: 18, color: AppColors.primary),
+                const SizedBox(width: 8),
+                Text(
+                  'Remaining Time: \$remainingStr',
+                  style: AppTypography.bodyLarge.copyWith(color: AppColors.primary, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
     String subtext = "Your little one is having a peaceful morning.";
-    if (babyStatus.toLowerCase() == 'crying' || babyStatus.toLowerCase() == 'awake') {
+    if (widget.babyStatus.toLowerCase() == 'crying' || widget.babyStatus.toLowerCase() == 'awake') {
       subtext = "Your little one is awake and needs your attention.";
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Good Morning, \$motherName',
-          style: AppTypography.displayHeader,
-        ),
+        Text('Good Morning, \$motherName', style: AppTypography.displayHeader),
         const SizedBox(height: 6),
         Text(
           subtext,
-          style: AppTypography.bodyLarge.copyWith(
-            color: AppColors.textSecondary,
-          ),
+          style: AppTypography.bodyLarge.copyWith(color: AppColors.textSecondary),
         ),
       ],
     );

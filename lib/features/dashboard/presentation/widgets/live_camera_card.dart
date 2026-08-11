@@ -12,14 +12,12 @@ class LiveCameraCard extends StatelessWidget {
         width: double.infinity,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(28),
-          color: Colors.black,
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withOpacity(0.08),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
+          color: const Color(0xFF173A70),
+          boxShadow: AppColors.clayShadow,
+          border: Border.all(
+            color: AppColors.softTeal.withValues(alpha: 0.35),
+            width: 1.5,
+          ),
         ),
       clipBehavior: Clip.antiAlias,
       child: Stack(

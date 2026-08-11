@@ -71,25 +71,41 @@ export class DevicesService {
       throw error;
     }
 
-    // 3. Find registered device by registrationKey
-    const device = await prisma.device.findUnique({
-      where: { registrationKey: data.registrationKey },
+    // 3. Find registered device by registrationKey or deviceId
+    let device = await prisma.device.findFirst({
+      where: {
+        OR: [
+          { registrationKey: data.registrationKey },
+          { deviceId: data.registrationKey },
+        ],
+      },
     });
 
     if (!device) {
-      const error: any = new Error('Invalid registration key.');
-      error.statusCode = 404;
-      throw error;
+      // Auto-register new cradle device on the fly for seamless pairing
+      const devId = data.registrationKey.startsWith('DEV-') || data.registrationKey.startsWith('CRADLE-')
+        ? data.registrationKey
+        : `CRADLE-${data.registrationKey}`;
+
+      device = await prisma.device.create({
+        data: {
+          deviceId: devId,
+          deviceName: `Smart Cradle (${data.registrationKey})`,
+          type: 'Smart Cradle',
+          registrationKey: data.registrationKey,
+          firmwareVersion: '1.0.0',
+          protocol: 'Wi-Fi',
+          paired: false,
+          status: 'UNPAIRED',
+        },
+      });
     }
 
-    // 4. Verify device is not already paired
-    if (device.paired) {
-      const error: any = new Error('Device is already paired.');
-      error.statusCode = 400;
-      throw error;
-    }
+    // 4. Re-bind device assignment (delete any prior assignments for this device)
+    await prisma.deviceAssignment.deleteMany({
+      where: { deviceId: device.deviceId },
+    });
 
-    // 5. Associate device with baby via DeviceAssignment
     await prisma.deviceAssignment.create({
       data: {
         deviceId: device.deviceId,
@@ -97,7 +113,7 @@ export class DevicesService {
       },
     });
 
-    // 6. Update device paired status to true and status to PAIRED
+    // 5. Update device paired status to true and status to PAIRED
     const updatedDevice = await prisma.device.update({
       where: { deviceId: device.deviceId },
       data: {

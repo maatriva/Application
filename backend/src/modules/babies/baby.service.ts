@@ -24,6 +24,13 @@ export class BabyService {
    * List all non-deleted babies belonging to the parent or assigned to the caregiver.
    */
   public async listBabies(userId: string) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+    if (!isUuid) {
+      console.warn(`[BabyService] listBabies called with non-UUID userId: ${userId}`);
+      return [];
+    }
+
+    const now = new Date();
     return await prisma.baby.findMany({
       where: {
         OR: [
@@ -36,15 +43,35 @@ export class BabyService {
               },
             },
           },
+          {
+            temporaryCaregiverPermissions: {
+              some: {
+                caregiverId: userId,
+                status: 'ACTIVE',
+                revoked: false,
+                expiresAt: { gt: now },
+              },
+            },
+          },
         ],
         deletedAt: null,
       },
       include: {
         caregivers: {
           where: { userId },
-          select: { accessLevel: true }
-        }
+          select: { accessLevel: true },
+        },
+        temporaryCaregiverPermissions: {
+          where: {
+            caregiverId: userId,
+            status: 'ACTIVE',
+            revoked: false,
+            expiresAt: { gt: now },
+          },
+          select: { permission: true, expiresAt: true },
+        },
       },
+
       orderBy: {
         createdAt: 'desc',
       },
@@ -55,6 +82,7 @@ export class BabyService {
    * Get baby details by ID. Verifies parent or caregiver ownership/access.
    */
   public async getBabyById(babyId: string, userId: string) {
+    const now = new Date();
     const baby = await prisma.baby.findFirst({
       where: {
         id: babyId,
@@ -69,13 +97,30 @@ export class BabyService {
               },
             },
           },
+          {
+            temporaryCaregiverPermissions: {
+              some: {
+                caregiverId: userId,
+                revoked: false,
+                expiresAt: { gt: now },
+              },
+            },
+          },
         ],
       },
       include: {
         caregivers: {
           where: { userId },
-          select: { accessLevel: true }
-        }
+          select: { accessLevel: true },
+        },
+        temporaryCaregiverPermissions: {
+          where: {
+            caregiverId: userId,
+            revoked: false,
+            expiresAt: { gt: now },
+          },
+          select: { permission: true, expiresAt: true },
+        },
       },
     });
 

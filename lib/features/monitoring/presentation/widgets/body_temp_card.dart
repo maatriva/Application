@@ -27,9 +27,12 @@ class BodyTempCard extends ConsumerWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.divider, width: 1),
-        boxShadow: AppColors.softShadow,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: AppColors.clayShadow,
+        border: Border.all(
+          color: AppColors.softTeal.withValues(alpha: 0.35),
+          width: 1.2,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,

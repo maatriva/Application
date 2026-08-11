@@ -30,6 +30,8 @@ export class WebsocketServerManager {
       },
     });
 
+    this.startPermissionExpirationWorker();
+
     // 1. Authenticate all socket connections using JWT middleware
     this.io.use(async (socket, next) => {
       try {
@@ -60,11 +62,12 @@ export class WebsocketServerManager {
 
         let decoded: any;
         try {
-          decoded = jwt.verify(token, env.JWT_SECRET) as any;
+          const cleanToken = token.trim().replace(/^Bearer\s+/i, '').replace(/^"|"$/g, '');
+          decoded = jwt.verify(cleanToken, env.JWT_SECRET) as any;
           console.log('[Socket.IO] JWT verification result: SUCCESS');
         } catch (jwtErr: any) {
           console.warn(`[Socket.IO] JWT verification result: FAILED (${jwtErr.message})`);
-          throw jwtErr;
+          return next(new Error(`Unauthorized: ${jwtErr.message}`));
         }
 
         const userId = decoded.userId;
@@ -82,9 +85,9 @@ export class WebsocketServerManager {
         };
 
         next();
-      } catch (err) {
-        console.warn('[Socket.IO] Connection rejected: Invalid token.');
-        next(new Error('Unauthorized: Invalid token.'));
+      } catch (err: any) {
+        console.warn(`[Socket.IO] Connection rejected: ${err.message || 'Invalid token.'}`);
+        next(new Error(err.message || 'Unauthorized: Invalid token.'));
       }
     });
 
@@ -233,10 +236,34 @@ export class WebsocketServerManager {
         }
       });
 
+      // Emit online presence for caregiver to parent user room
+      this.notifyCaregiverPresence(userId, 'online');
+
       socket.on('disconnect', (reason) => {
         console.log(`[Socket.IO] Socket ${socket.id} disconnected. Reason: ${reason}`);
+        this.notifyCaregiverPresence(userId, 'offline');
       });
     });
+  }
+
+  private async notifyCaregiverPresence(caregiverId: string, status: 'online' | 'offline'): Promise<void> {
+    if (!caregiverId || !this.io) return;
+    try {
+      const records = await (prisma as any).temporaryCaregiverPermission.findMany({
+        where: { caregiverId, revoked: false },
+        select: { parentId: true },
+      });
+      const parentIds = Array.from(new Set(records.map((r: any) => r.parentId)));
+      const payload = {
+        caregiverId,
+        status,
+        lastSeen: new Date().toISOString(),
+      };
+      for (const parentId of parentIds) {
+        this.io.to(`user:${parentId}`).emit('caregiver:status_update', payload);
+        this.io.to(`user:${parentId}`).emit('caregiver_status_update', payload);
+      }
+    } catch (_) {}
   }
 
   /**
@@ -293,12 +320,26 @@ export class WebsocketServerManager {
   /**
    * Helper: Resolves relational permissions for babies connected to a parent or caregiver.
    */
+  /**
+   * Helper: Resolves relational permissions for babies connected to a parent or caregiver.
+   */
   private async fetchAuthorizedBabies(userId: string, role: string): Promise<string[]> {
     try {
       if (role.toLowerCase() === 'admin') {
         const babies = await prisma.baby.findMany({ select: { id: true } });
         return babies.map((b) => b.id.toString());
       }
+
+      const now = new Date();
+      const tempPerms = await (prisma as any).temporaryCaregiverPermission.findMany({
+        where: {
+          caregiverId: userId,
+          revoked: false,
+          expiresAt: { gt: now },
+        },
+        select: { babyId: true },
+      });
+      const tempBabyIds = tempPerms.map((p: any) => p.babyId.toString());
 
       const babies = await prisma.baby.findMany({
         where: {
@@ -317,7 +358,8 @@ export class WebsocketServerManager {
         select: { id: true },
       });
 
-      return babies.map((b) => b.id.toString());
+      const allIds = new Set([...tempBabyIds, ...babies.map((b) => b.id.toString())]);
+      return Array.from(allIds);
     } catch (e) {
       console.error('[Socket.IO] Error fetching authorized babies for user:', e);
       return [];
@@ -329,6 +371,27 @@ export class WebsocketServerManager {
       const room = `user:${userId}`;
       console.log(`[Socket.IO] Emitting event '${event}' to room ${room}`);
       this.io.to(room).emit(event, payload);
+
+      // If event is access_revoked, force disconnect socket connections for that user
+      if (event === 'caregiver:access_revoked' || event === 'caregiver_access_revoked') {
+        this.disconnectUserSockets(userId, 'Caregiver access revoked by parent');
+      }
+    }
+  }
+
+  public disconnectUserSockets(userId: string, reason: string): void {
+    if (!this.io) return;
+    for (const [_, socket] of this.io.sockets.sockets) {
+      if (socket.data?.userId === userId) {
+        console.log(`[Socket.IO] Force disconnecting socket ${socket.id} for user ${userId} (${reason})`);
+        socket.emit('caregiver:access_revoked', { message: reason });
+        for (const room of socket.rooms) {
+          if (room.startsWith('baby:') || room.startsWith('webrtc:baby:')) {
+            socket.leave(room);
+          }
+        }
+        socket.disconnect(true);
+      }
     }
   }
 
@@ -338,6 +401,23 @@ export class WebsocketServerManager {
 
   public async isUserAuthorized(userId: string, babyId: string): Promise<boolean> {
     try {
+      const now = new Date();
+      // 1. Check temporary permissions table first
+      const tempCount = await (prisma as any).temporaryCaregiverPermission.count({
+        where: {
+          caregiverId: userId,
+          revoked: false,
+          expiresAt: { gt: now },
+          OR: [
+            { babyId: babyId },
+            { babyId: { not: '' } }
+          ]
+        },
+      });
+
+      if (tempCount > 0) return true;
+
+      // 2. Check base baby parent or accepted caregiver
       const count = await prisma.baby.count({
         where: {
           id: babyId,
@@ -359,5 +439,48 @@ export class WebsocketServerManager {
     } catch (_) {
       return false;
     }
+  }
+
+  /**
+   * Background periodic worker to check and kick out sockets with expired permissions (Requirement 7).
+   */
+  private startPermissionExpirationWorker(): void {
+    setInterval(async () => {
+      if (!this.io) return;
+      try {
+        const now = new Date();
+        for (const [_, socket] of this.io.sockets.sockets) {
+          const userId = socket.data?.userId;
+          const role = socket.data?.role;
+          if (userId && role === 'CAREGIVER') {
+            const isAuth = await (prisma as any).temporaryCaregiverPermission.findFirst({
+              where: {
+                caregiverId: userId,
+                revoked: false,
+                expiresAt: { gt: now },
+              },
+            });
+            const isBaseCaregiver = await prisma.caregiver.findFirst({
+              where: { userId, status: 'accepted' },
+            });
+
+            if (!isAuth && !isBaseCaregiver) {
+              console.log(`[Socket.IO] Caregiver ${userId} temporary permission expired naturally. Disconnecting socket.`);
+              socket.emit('caregiver:access_expired', {
+                message: 'Your caregiver access has expired.',
+              });
+              for (const room of socket.rooms) {
+                if (room.startsWith('baby:') || room.startsWith('webrtc:baby:')) {
+                  socket.leave(room);
+                }
+              }
+              socket.disconnect(true);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[Socket.IO] Permission expiration worker check error:', err);
+      }
+    }, 20000); // Check every 20 seconds
   }
 }

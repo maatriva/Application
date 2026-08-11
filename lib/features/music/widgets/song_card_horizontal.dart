@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
 import 'package:maatriva/core/theme/app_typography.dart';
+import 'package:maatriva/features/authentication/presentation/providers/auth_provider.dart';
+import 'package:maatriva/shared/models/user_session.dart';
 import '../models/song.dart';
 import '../providers/music_provider.dart';
 import '../services/music_access_helper.dart';
@@ -23,6 +25,8 @@ class SongCardHorizontal extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final musicState = ref.watch(musicProvider);
     final notifier = ref.read(musicProvider.notifier);
+    final authState = ref.watch(authNotifierProvider);
+    final isCaregiver = authState.session?.role == UserRole.caregiver;
     final isCurrent = musicState.currentSong?.id == song.id;
     final isPlaying = isCurrent && musicState.isPlaying;
 
@@ -98,7 +102,7 @@ class SongCardHorizontal extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                     style: AppTypography.labelSmall.copyWith(fontSize: 10),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -110,17 +114,55 @@ class SongCardHorizontal extends ConsumerWidget {
                             color: AppColors.textSecondary.withOpacity(0.7),
                           ),
                         ),
-                      GestureDetector(
-                        onTap: () => notifier.toggleFavorite(song.id),
-                        child: Icon(
-                          song.isFavorite
-                              ? Icons.favorite_rounded
-                              : Icons.favorite_border_rounded,
-                          color: song.isFavorite
-                              ? Colors.redAccent
-                              : AppColors.textSecondary.withOpacity(0.5),
-                          size: 16,
-                        ),
+                      Row(
+                        children: [
+                          if (song.isCustomParentSong && !isCaregiver)
+                            GestureDetector(
+                              onTap: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: const Text('Delete Custom Lullaby?'),
+                                    content: Text('Are you sure you want to delete "${song.title}" from your library?'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(ctx),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      ElevatedButton(
+                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                                        onPressed: () {
+                                          notifier.deleteCustomSong(song.id);
+                                          Navigator.pop(ctx);
+                                        },
+                                        child: const Text('Delete', style: TextStyle(color: Colors.white)),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: Icon(
+                                  Icons.delete_outline_rounded,
+                                  color: Colors.red.shade400,
+                                  size: 16,
+                                ),
+                              ),
+                            ),
+                          GestureDetector(
+                            onTap: () => notifier.toggleFavorite(song.id),
+                            child: Icon(
+                              song.isFavorite
+                                  ? Icons.favorite_rounded
+                                  : Icons.favorite_border_rounded,
+                              color: song.isFavorite
+                                  ? Colors.redAccent
+                                  : AppColors.textSecondary.withOpacity(0.5),
+                              size: 16,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

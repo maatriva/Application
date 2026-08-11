@@ -47,9 +47,52 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
   String? _currentBabyId;
   bool _isRendererInitialized = false;
 
-  WebrtcNotifier(this._wsService)
-      : super(WebrtcState.initial());
+  Timer? _reconnectTimer;
+  Timer? _offlinePollingTimer;
+  StreamSubscription? _caregiverRevokedSub;
 
+  StreamSubscription? _caregiverPermsSub;
+  StreamSubscription? _wsStateSubscription;
+  bool _isReconnecting = false;
+
+  WebrtcNotifier(this._wsService) : super(WebrtcState.initial()) {
+    _listenToSocketState();
+    _listenToCaregiverEvents();
+  }
+
+  DateTime? _lastJoinEmitTime;
+
+  void _listenToCaregiverEvents() {
+    _caregiverRevokedSub = _wsService.caregiverRevokedStream.listen((_) {
+      debugPrint('[WebRTC] Caregiver revoked/expired. Disconnecting WebRTC stream...');
+      disconnectStream();
+    });
+
+    _caregiverPermsSub = _wsService.caregiverPermissionsUpdatedStream.listen((data) {
+      if (data is Map && data['permissions'] is Map) {
+        final perms = data['permissions'] as Map;
+        final canViewCamera = perms['camera_snapshot'] == true || perms['canViewCamera'] == true;
+        if (!canViewCamera) {
+          debugPrint('[WebRTC] Camera permission disabled by parent. Disconnecting WebRTC stream...');
+          disconnectStream();
+        }
+      }
+    });
+  }
+
+  void _listenToSocketState() {
+
+    WsConnectionState? lastState;
+    _wsStateSubscription = _wsService.stateStream.listen((wsState) {
+      if (lastState != WsConnectionState.connected && 
+          wsState == WsConnectionState.connected && 
+          _currentBabyId != null) {
+        debugPrint('[WebRTC] WebSocket re-connected. Re-joining WebRTC room for baby: $_currentBabyId');
+        _joinRoom(_currentBabyId!);
+      }
+      lastState = wsState;
+    });
+  }
 
   Future<void> initializeRenderer() async {
     if (!_isRendererInitialized) {
@@ -59,10 +102,10 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
     }
   }
 
-  Future<void> connectStream(String babyId) async {
-    if (_currentBabyId == babyId && 
-        state.status != WebrtcStatus.disconnected && 
-        state.status != WebrtcStatus.error) {
+  Future<void> connectStream(String babyId, {bool forceReconnect = false}) async {
+    if (!forceReconnect &&
+        _currentBabyId == babyId && 
+        state.status == WebrtcStatus.streaming) {
       return;
     }
 
@@ -77,22 +120,49 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
       _wsService.registerHandler('offer', _handleOffer);
       _wsService.registerHandler('ice-candidate', _handleIceCandidate);
 
-      // Join WebRTC room
-      debugPrint('[WebRTC] Joining room for baby: $babyId');
-      _wsService.emit('join-room', {
-        'babyId': babyId,
-        'role': 'viewer',
-      });
+      _joinRoom(babyId);
     } catch (e) {
       debugPrint('[WebRTC] Error connecting stream: $e');
       state = state.copyWith(status: WebrtcStatus.error, errorMessage: e.toString());
+      _scheduleAutoReconnect();
     }
+  }
+
+  void _joinRoom(String babyId) {
+    final now = DateTime.now();
+    if (_lastJoinEmitTime != null && 
+        now.difference(_lastJoinEmitTime!) < const Duration(seconds: 3)) {
+      return;
+    }
+    _lastJoinEmitTime = now;
+
+    debugPrint('[WebRTC] Joining room for baby: $babyId');
+    _wsService.emit('join-room', {
+      'babyId': babyId,
+      'role': 'viewer',
+    });
+  }
+
+  Future<void> reconnectStream({String? babyId}) async {
+    final targetBabyId = babyId ?? _currentBabyId;
+    if (targetBabyId == null) return;
+    debugPrint('[WebRTC] Force reconnecting stream for baby: $targetBabyId');
+    _stopOfflinePolling();
+    _reconnectTimer?.cancel();
+    _isReconnecting = false;
+    await _cleanupPeerConnection();
+    _currentBabyId = null;
+    await connectStream(targetBabyId, forceReconnect: true);
   }
 
   Future<void> disconnectStream() async {
     if (_currentBabyId == null) return;
 
     debugPrint('[WebRTC] Disconnecting stream for baby: $_currentBabyId');
+
+    _stopOfflinePolling();
+    _reconnectTimer?.cancel();
+    _isReconnecting = false;
 
     // Unregister handlers
     _wsService.unregisterHandler('camera-status');
@@ -125,16 +195,54 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
     videoRenderer.srcObject = null;
   }
 
+  void _scheduleAutoReconnect() {
+    if (_isReconnecting || _currentBabyId == null) return;
+    _isReconnecting = true;
+
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(const Duration(seconds: 5), () async {
+      _isReconnecting = false;
+      if (_currentBabyId != null && state.status != WebrtcStatus.disconnected) {
+        debugPrint('[WebRTC] Executing scheduled auto-reconnect for baby: $_currentBabyId');
+        await reconnectStream();
+      }
+    });
+  }
+
+  void _startOfflinePolling() {
+    if (_offlinePollingTimer != null && _offlinePollingTimer!.isActive) {
+      return;
+    }
+    _offlinePollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (_currentBabyId != null && 
+          (state.status == WebrtcStatus.offline || 
+           state.status == WebrtcStatus.error)) {
+        debugPrint('[WebRTC] Offline polling: re-emitting join-room to check if camera came back online...');
+        _joinRoom(_currentBabyId!);
+      }
+    });
+  }
+
+  void _stopOfflinePolling() {
+    _offlinePollingTimer?.cancel();
+    _offlinePollingTimer = null;
+  }
+
   void _handleCameraStatus(dynamic data) {
     debugPrint('[WebRTC] camera-status event received: $data');
     if (data is Map) {
       final status = data['status'] as String?;
       if (status == 'offline') {
+        debugPrint('[WebRTC] Camera is offline. Cleaning up peer connection...');
         _cleanupPeerConnection();
-        state = state.copyWith(status: WebrtcStatus.offline);
+        state = state.copyWith(status: WebrtcStatus.offline, errorMessage: 'Cradle Camera is Offline');
+        _startOfflinePolling();
       } else if (status == 'online') {
-        if (state.status == WebrtcStatus.offline) {
-          state = state.copyWith(status: WebrtcStatus.connecting);
+        debugPrint('[WebRTC] Camera came ONLINE! Re-joining WebRTC room...');
+        _stopOfflinePolling();
+        state = state.copyWith(status: WebrtcStatus.connecting, errorMessage: null);
+        if (_currentBabyId != null) {
+          _joinRoom(_currentBabyId!);
         }
       }
     }
@@ -149,12 +257,14 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
     if (senderSocketId == null || sdpMap == null) return;
 
     try {
+      _stopOfflinePolling();
       await _cleanupPeerConnection();
 
       debugPrint('[WebRTC] Creating PeerConnection');
       final pc = await createPeerConnection({
         'iceServers': [
           {'urls': 'stun:stun.l.google.com:19302'},
+          {'urls': 'stun:stun1.l.google.com:19302'},
         ]
       });
       _peerConnection = pc;
@@ -173,21 +283,32 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
 
       pc.onConnectionState = (connectionState) {
         debugPrint('[WebRTC] Peer Connection state changed: $connectionState');
-        if (connectionState == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
-          state = state.copyWith(status: WebrtcStatus.error, errorMessage: 'WebRTC connection failed');
+        if (connectionState == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+            connectionState == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+          debugPrint('[WebRTC] Connection lost/failed. Scheduling auto-reconnect...');
+          state = state.copyWith(status: WebrtcStatus.error, errorMessage: 'Connection lost. Reconnecting...');
+          _scheduleAutoReconnect();
+        }
+      };
+
+      pc.onIceConnectionState = (iceState) {
+        debugPrint('[WebRTC] ICE Connection state changed: $iceState');
+        if (iceState == RTCIceConnectionState.RTCIceConnectionStateFailed ||
+            iceState == RTCIceConnectionState.RTCIceConnectionStateDisconnected) {
+          debugPrint('[WebRTC] ICE Connection lost/failed. Scheduling auto-reconnect...');
+          state = state.copyWith(status: WebrtcStatus.error, errorMessage: 'Stream connection dropped. Reconnecting...');
+          _scheduleAutoReconnect();
         }
       };
 
       pc.onAddStream = (stream) {
-        debugPrint('[WebRTC] Remote Track Received');
+        debugPrint('[WebRTC] Remote Stream Received');
         _remoteStream = stream;
         videoRenderer.srcObject = stream;
         debugPrint('[WebRTC] Remote Stream Attached');
         
-        // Apply current mute preference to new stream tracks
         _applyMute(state.isMuted);
-        
-        state = state.copyWith(status: WebrtcStatus.streaming);
+        state = state.copyWith(status: WebrtcStatus.streaming, errorMessage: null);
       };
 
       pc.onTrack = (event) {
@@ -197,10 +318,8 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
           videoRenderer.srcObject = event.streams[0];
           debugPrint('[WebRTC] Remote Stream Attached');
           
-          // Apply current mute preference to new stream tracks
           _applyMute(state.isMuted);
-          
-          state = state.copyWith(status: WebrtcStatus.streaming);
+          state = state.copyWith(status: WebrtcStatus.streaming, errorMessage: null);
         }
       };
 
@@ -226,6 +345,7 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
     } catch (e) {
       debugPrint('[WebRTC] Error handling offer: $e');
       state = state.copyWith(status: WebrtcStatus.error, errorMessage: 'Failed to negotiate stream connection.');
+      _scheduleAutoReconnect();
     }
   }
 
@@ -264,6 +384,12 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
 
   @override
   void dispose() {
+    _caregiverRevokedSub?.cancel();
+    _caregiverPermsSub?.cancel();
+    _wsStateSubscription?.cancel();
+
+    _reconnectTimer?.cancel();
+    _stopOfflinePolling();
     disconnectStream().then((_) {
       if (_isRendererInitialized) {
         videoRenderer.dispose();

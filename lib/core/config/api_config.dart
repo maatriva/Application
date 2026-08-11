@@ -29,10 +29,10 @@ class ApiConfig {
 
   /// Optional compile-time override: flutter run --dart-define=API_URL=http://192.168.1.50:3000
   static const String _envApiUrl = String.fromEnvironment('API_URL');
-  static const String _defaultLanIp = 'http://10.63.127.227:3000';
+  static const String _defaultLanIp = 'http://192.168.1.33:3000';
 
   static const String devWebBaseUrl = 'http://localhost:3000';
-  static const String devAndroidEmulatorBaseUrl = 'http://10.0.2.2:3000';
+  static const String devAndroidEmulatorBaseUrl = 'http://192.168.1.33:3000';
   static const String stagingBaseUrl = 'https://staging-api.maatriva.cloud';
   static const String prodBaseUrl = 'https://api.maatriva.co.in';
 
@@ -89,21 +89,61 @@ class ApiConfig {
       return baseUrl;
     }
 
-    String server = inputUrl.trim();
+    String raw = inputUrl.trim();
+
+    // Data URLs, Blob URLs, or explicit assets/ paths shouldn't be prepended with http://...
+    if (raw.startsWith('data:') ||
+        raw.startsWith('blob:') ||
+        raw.startsWith('assets/')) {
+      return raw;
+    }
+
+    if (raw.startsWith('audio/')) {
+      final filename = raw.substring(6);
+      final cleanBase = baseUrl.replaceAll(RegExp(r'/+$'), '');
+      return '$cleanBase/uploads/music/$filename';
+    }
+
+    if (raw.startsWith('http:///') || raw.startsWith('https:///')) {
+      raw = raw.replaceFirst(RegExp(r'^https?:///'), '/');
+    }
+
+    // 2. Relative paths (e.g. /uploads/music/file.mp3 or uploads/music/file.mp3)
+    if (raw.startsWith('/') || raw.startsWith('uploads/') || raw.startsWith('api/')) {
+      final cleanPath = raw.startsWith('/') ? raw : '/$raw';
+      final cleanBase = baseUrl.replaceAll(RegExp(r'/+$'), '');
+      return '$cleanBase$cleanPath';
+    }
+
+    // 3. Absolute URLs or domain paths
+    String server = raw;
     if (!server.startsWith('http://') && !server.startsWith('https://')) {
+      if (!server.contains('.')) {
+        final cleanPath = server.startsWith('/') ? server : '/$server';
+        final cleanBase = baseUrl.replaceAll(RegExp(r'/+$'), '');
+        return '$cleanBase$cleanPath';
+      }
       server = 'http://$server';
     }
 
+    // 4. Sanitize localhost / 127.0.0.1 / 10.0.2.2 for mobile & web
     final uri = Uri.tryParse(server);
     if (uri != null && uri.hasAuthority) {
       final host = uri.host.toLowerCase();
       if (host == 'localhost' || host == '127.0.0.1' || host == '10.0.2.2') {
+        final currentBaseUri = Uri.tryParse(baseUrl);
+        if (currentBaseUri != null && currentBaseUri.hasAuthority) {
+          return uri.replace(
+            scheme: currentBaseUri.scheme,
+            host: currentBaseUri.host,
+            port: currentBaseUri.port,
+          ).toString();
+        }
         return baseUrl;
       }
       return server;
     }
 
-    // Fallback for malformed URLs
     if (server.contains('localhost') || server.contains('127.0.0.1') || server.contains('10.0.2.2')) {
       return baseUrl;
     }

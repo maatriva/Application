@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/network/api_client.dart';
@@ -126,12 +127,13 @@ class AuthRepositoryImpl implements AuthRepository {
     final userRole = rawUserMap['role'] as String? ?? 'PARENT';
     final email = rawUserMap['email'] as String? ?? '';
 
-    debugPrint('[TOKEN] Saving session tokens: userId=$userId, role=$userRole');
+    debugPrint('[TOKEN] Saving session tokens: userId=$userId, role=$userRole, email=$email');
     await _secureStorage.saveSession(
       accessToken: accessToken,
       refreshToken: refreshToken,
       userId: userId,
       userRole: userRole,
+      userEmail: email,
     );
     debugPrint('[TOKEN] Session tokens saved successfully to secure storage.');
 
@@ -184,6 +186,29 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<bool> isUserLoggedIn() async {
     final token = await _secureStorage.getAccessToken();
-    return token != null;
+    final refreshToken = await _secureStorage.getRefreshToken();
+    if (token == null || token.isEmpty) return false;
+
+    final parts = token.split('.');
+    if (parts.length == 3) {
+      try {
+        var normalized = parts[1].replaceAll('-', '+').replaceAll('_', '/');
+        while (normalized.length % 4 != 0) {
+          normalized += '=';
+        }
+        final payloadString = utf8.decode(base64.decode(normalized));
+        final decoded = jsonDecode(payloadString);
+        if (decoded is Map && decoded['exp'] != null) {
+          final expSecs = decoded['exp'] as int;
+          final expDateTime = DateTime.fromMillisecondsSinceEpoch(expSecs * 1000, isUtc: true);
+          final nowUtc = DateTime.now().toUtc();
+          if (nowUtc.isAfter(expDateTime.subtract(const Duration(seconds: 10)))) {
+            // Access token expired, user is logged in ONLY if a refresh token is present
+            return refreshToken != null && refreshToken.isNotEmpty;
+          }
+        }
+      } catch (_) {}
+    }
+    return true;
   }
 }

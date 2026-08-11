@@ -13,6 +13,9 @@ import 'iot_device_repository.dart';
 import 'websocket_service.dart';
 import 'webrtc_service.dart';
 
+// Feature Providers
+import '../../features/music/providers/music_provider.dart';
+
 
 // Domain Repositories
 import '../../domain/repositories/auth_repository.dart';
@@ -68,7 +71,7 @@ final apiClientProvider = Provider<ApiClient>((ref) {
 });
 
 // WebSocketService provider
-final webSocketServiceProvider = Provider<WebSocketService>((ref) {
+final Provider<WebSocketService> webSocketServiceProvider = Provider<WebSocketService>((ref) {
   final secureStorage = ref.watch(secureStorageServiceProvider);
   final service = WebSocketService(
     wsBaseUrl: AppConfig.wsBaseUrl,
@@ -77,30 +80,55 @@ final webSocketServiceProvider = Provider<WebSocketService>((ref) {
 
   final authState = ref.read(authNotifierProvider);
   if (authState.status == AuthStatus.authenticated) {
-    service.connect();
+    service.connect(force: true);
   }
 
+  service.onAppResumed = () {
+    debugPrint('[AppResume] App resumed. Re-verifying caregiver permissions...');
+    ref.read(authNotifierProvider.notifier).verifyCaregiverActivePermissions();
+  };
+
   ref.listen<AuthState>(authNotifierProvider, (previous, next) {
-    if (next.status == AuthStatus.authenticated) {
-      service.connect();
+    if (previous?.status != AuthStatus.authenticated && next.status == AuthStatus.authenticated) {
+      service.connect(force: true);
     } else if (next.status == AuthStatus.unauthenticated) {
       service.setSelectedBaby(null);
       service.disconnect();
     }
   });
 
-  service.caregiverRevokedStream.listen((msg) {
-    debugPrint('[CaregiverRevoked] Revocation event received. Logging out caregiver account...');
-    ref.read(authNotifierProvider.notifier).logout();
+  service.caregiverRevokedStream.listen((msg) async {
+    debugPrint('[CaregiverRevoked] Revocation or expiration event received. Clearing session & logging out...');
+    final cache = ref.read(cacheServiceProvider);
+    await cache.clearCaregiverGrantedSession();
+    await cache.sharedPreferences.remove('maatriva_cache_selected_baby');
+    await cache.sharedPreferences.remove('maatriva_cache_selected_baby_id');
+    await cache.sharedPreferences.remove('maatriva_cache_selected_baby_name');
+    await ref.read(authNotifierProvider.notifier).logout();
+
     scaffoldMessengerKey.currentState?.showSnackBar(
       SnackBar(
-        content: Text(msg),
+        content: Text(msg.isNotEmpty ? msg : 'Your caregiver access has been revoked by the parent.'),
         backgroundColor: Colors.redAccent,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 5),
       ),
     );
   });
+
+  service.caregiverPermissionsUpdatedStream.listen((data) {
+    debugPrint('[CaregiverPermissionsUpdated] Real-time permissions updated event received.');
+    ref.read(authNotifierProvider.notifier).verifyCaregiverActivePermissions();
+    ref.read(musicProvider.notifier).refreshLibrary();
+  });
+
+  service.caregiverGrantedStream.listen((data) {
+    debugPrint('[CaregiverGranted] Real-time caregiver access granted event received.');
+    ref.read(authNotifierProvider.notifier).verifyCaregiverActivePermissions();
+    ref.read(musicProvider.notifier).refreshLibrary();
+  });
+
+
 
   ref.onDispose(() {
     service.dispose();

@@ -33,7 +33,7 @@ class _CameraCardState extends ConsumerState<CameraCard> {
     if (webrtcState.status == WebrtcStatus.disconnected ||
         webrtcState.status == WebrtcStatus.error ||
         webrtcState.status == WebrtcStatus.offline) {
-      notifier.connectStream(babyId);
+      notifier.reconnectStream(babyId: babyId);
     } else {
       notifier.disconnectStream();
     }
@@ -48,6 +48,18 @@ class _CameraCardState extends ConsumerState<CameraCard> {
     final baby = dashboardState.baby;
     final babyId = baby?.id;
     final babyName = baby?.name ?? 'Baby';
+
+    // Auto-connect stream if disconnected and baby ID is available
+    if (babyId != null && babyId.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          final currentWebrtcState = ref.read(webrtcServiceProvider);
+          if (currentWebrtcState.status == WebrtcStatus.disconnected) {
+            ref.read(webrtcServiceProvider.notifier).connectStream(babyId);
+          }
+        }
+      });
+    }
 
     // Extract real telemetry if available
     final telemetryMap = dashboardState.latestTelemetry;
@@ -73,7 +85,7 @@ class _CameraCardState extends ConsumerState<CameraCard> {
         children: [
           // 1. Video Render Area based on WebRTC Status
           Positioned.fill(
-            child: _buildVideoFeed(webrtcState, webrtcNotifier),
+            child: _buildVideoFeed(webrtcState, webrtcNotifier, babyId),
           ),
 
           // 2. Scan line / Infrared visual overlay
@@ -326,7 +338,7 @@ class _CameraCardState extends ConsumerState<CameraCard> {
     );
   }
 
-  Widget _buildVideoFeed(WebrtcState webrtcState, WebrtcNotifier webrtcNotifier) {
+  Widget _buildVideoFeed(WebrtcState webrtcState, WebrtcNotifier webrtcNotifier, String? babyId) {
     switch (webrtcState.status) {
       case WebrtcStatus.streaming:
         return RTCVideoView(
@@ -360,17 +372,17 @@ class _CameraCardState extends ConsumerState<CameraCard> {
       case WebrtcStatus.offline:
         return Container(
           color: const Color(0xFF1A1125),
-          child: const Center(
+          child: Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
+                const Icon(
                   Icons.videocam_off_rounded,
                   color: Colors.white24,
-                  size: 48,
+                  size: 42,
                 ),
-                SizedBox(height: 10),
-                Text(
+                const SizedBox(height: 8),
+                const Text(
                   'Cradle Camera is Offline',
                   style: TextStyle(
                     color: Colors.white54,
@@ -378,12 +390,26 @@ class _CameraCardState extends ConsumerState<CameraCard> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                SizedBox(height: 4),
-                Text(
-                  'Make sure your camera device is streaming',
+                const SizedBox(height: 4),
+                const Text(
+                  'Auto-checking camera connection...',
                   style: TextStyle(
                     color: Colors.white30,
                     fontSize: 10,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: () => webrtcNotifier.reconnectStream(babyId: babyId),
+                  icon: const Icon(Icons.refresh_rounded, size: 14),
+                  label: const Text('Reconnect Camera', style: TextStyle(fontSize: 11)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
                 ),
               ],
@@ -401,11 +427,11 @@ class _CameraCardState extends ConsumerState<CameraCard> {
                 const Icon(
                   Icons.error_outline_rounded,
                   color: Colors.redAccent,
-                  size: 40,
+                  size: 36,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 const Text(
-                  'Stream Connection Error',
+                  'Stream Connection Lost',
                   style: TextStyle(
                     color: Colors.redAccent,
                     fontSize: 12,
@@ -414,7 +440,7 @@ class _CameraCardState extends ConsumerState<CameraCard> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  webrtcState.errorMessage ?? 'An unknown error occurred.',
+                  webrtcState.errorMessage ?? 'Reconnecting automatically...',
                   style: const TextStyle(
                     color: Colors.white38,
                     fontSize: 10,
@@ -422,6 +448,20 @@ class _CameraCardState extends ConsumerState<CameraCard> {
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: () => webrtcNotifier.reconnectStream(babyId: babyId),
+                  icon: const Icon(Icons.refresh_rounded, size: 14),
+                  label: const Text('Retry Connection', style: TextStyle(fontSize: 11)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
                 ),
               ],
             ),

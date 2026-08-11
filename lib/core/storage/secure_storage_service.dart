@@ -8,6 +8,7 @@ class SecureStorageService {
   static String? _cachedRefreshToken;
   static String? _cachedUserId;
   static String? _cachedUserRole;
+  static String? _cachedUserEmail;
 
   const SecureStorageService({
     FlutterSecureStorage storage = const FlutterSecureStorage(),
@@ -17,6 +18,7 @@ class SecureStorageService {
   static const String _refreshTokenKey = 'maatriva_refresh_token';
   static const String _userIdKey = 'maatriva_user_id';
   static const String _userRoleKey = 'maatriva_user_role';
+  static const String _userEmailKey = 'maatriva_user_email';
 
   /// Save JWT tokens and session data.
   Future<void> saveSession({
@@ -24,17 +26,20 @@ class SecureStorageService {
     required String refreshToken,
     required String userId,
     required String userRole,
+    String? userEmail,
   }) async {
     _cachedAccessToken = accessToken;
     _cachedRefreshToken = refreshToken;
     _cachedUserId = userId;
     _cachedUserRole = userRole;
+    if (userEmail != null) _cachedUserEmail = userEmail;
 
     await Future.wait([
       _storage.write(key: _accessTokenKey, value: accessToken),
       _storage.write(key: _refreshTokenKey, value: refreshToken),
       _storage.write(key: _userIdKey, value: userId),
       _storage.write(key: _userRoleKey, value: userRole),
+      if (userEmail != null) _storage.write(key: _userEmailKey, value: userEmail),
     ]);
   }
 
@@ -78,18 +83,34 @@ class SecureStorageService {
     return role;
   }
 
+  /// Get the logged-in user's email.
+  Future<String?> getUserEmail() async {
+    if (_cachedUserEmail != null && _cachedUserEmail!.isNotEmpty) {
+      return _cachedUserEmail;
+    }
+    final email = await _storage.read(key: _userEmailKey);
+    _cachedUserEmail = email;
+    return email;
+  }
+
   /// Clears the token store on logout or session expiration.
   Future<void> clearSession() async {
     _cachedAccessToken = null;
     _cachedRefreshToken = null;
     _cachedUserId = null;
     _cachedUserRole = null;
+    _cachedUserEmail = null;
 
-    await Future.wait([
-      _storage.delete(key: _accessTokenKey),
-      _storage.delete(key: _refreshTokenKey),
-      _storage.delete(key: _userIdKey),
-      _storage.delete(key: _userRoleKey),
-    ]);
+    try {
+      await _storage.deleteAll();
+    } catch (_) {
+      await Future.wait([
+        _storage.delete(key: _accessTokenKey),
+        _storage.delete(key: _refreshTokenKey),
+        _storage.delete(key: _userIdKey),
+        _storage.delete(key: _userRoleKey),
+        _storage.delete(key: _userEmailKey),
+      ]);
+    }
   }
 }

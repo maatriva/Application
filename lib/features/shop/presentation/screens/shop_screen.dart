@@ -222,18 +222,7 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: BottomNavigation(
-        currentIndex: 3,
-        onTap: (index) {
-          if (index == 0) {
-            context.go('/?tab=0');
-          } else if (index == 1) {
-            context.go('/?tab=1');
-          } else if (index == 2) {
-            context.go('/predictive-health');
-          }
-        },
-      ),
+      bottomNavigationBar: const BottomNavigation(currentIndex: 4),
     );
   }
 

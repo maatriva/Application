@@ -3,9 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
 import 'package:maatriva/features/authentication/presentation/providers/auth_provider.dart';
 import 'package:maatriva/features/dashboard/presentation/providers/dashboard_provider.dart';
-import 'package:maatriva/features/caregivers/provider/caregiver_access_provider.dart';
 import 'package:maatriva/shared/models/user_session.dart';
 import '../models/song.dart';
+
+import 'package:maatriva/core/services/providers.dart';
 
 class MusicAccessHelper {
   static bool canAccessSong(Song song, WidgetRef ref) {
@@ -17,13 +18,21 @@ class MusicAccessHelper {
     // Primary parents have full access to all music
     if (!isCaregiver) return true;
 
-    // Online app music (in-app lullabies, white noise, etc.) is allowed for Caregivers
-    if (!song.isCustomParentSong) return true;
+    // Check central permissions set on Caregiver Access page
+    final cacheService = ref.read(cacheServiceProvider);
+    final sessionData = cacheService.getCaregiverGrantedSession();
+    final permissions = sessionData?['permissions'] as Map<String, dynamic>?;
 
-    // Caregiver attempting to access parent's custom imported music library
-    final caregiverPermissions = ref.read(caregiverAccessProvider).permissions;
-    final hasCustomMusicPermission = caregiverPermissions['custom_music'] ?? false;
-    return hasCustomMusicPermission;
+    if (permissions != null) {
+      final customMusicAllowed = permissions['custom_music'] == true || permissions['music'] == true;
+      if (!song.isCustomParentSong || song.visibility == 'PUBLIC_LIBRARY') {
+        return permissions['music'] ?? true;
+      }
+      return customMusicAllowed;
+    }
+
+    // Default fallback if permissions not found in session cache: standard public library allowed
+    return !song.isCustomParentSong || song.visibility == 'PUBLIC_LIBRARY';
   }
 
   static void showCustomMusicRestrictedDialog(BuildContext context) {

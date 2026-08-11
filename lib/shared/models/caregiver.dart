@@ -49,6 +49,9 @@ class ActiveSession extends Equatable {
   final String imageUrl;
   final DateTime expiresAt;
   final SessionStatus status;
+  final Map<String, bool>? permissions;
+  final bool isOnline;
+  final String? lastSeen;
 
   const ActiveSession({
     required this.id,
@@ -57,6 +60,9 @@ class ActiveSession extends Equatable {
     required this.imageUrl,
     required this.expiresAt,
     required this.status,
+    this.permissions,
+    this.isOnline = false,
+    this.lastSeen,
   });
 
   factory ActiveSession.fromJson(Map<String, dynamic> json) {
@@ -72,6 +78,11 @@ class ActiveSession extends Equatable {
         (e) => e.name == json['status'],
         orElse: () => SessionStatus.active,
       ),
+      permissions: json['permissions'] != null
+          ? Map<String, bool>.from(json['permissions'] as Map)
+          : null,
+      isOnline: json['isOnline'] as bool? ?? false,
+      lastSeen: json['lastSeen'] as String?,
     );
   }
 
@@ -83,6 +94,9 @@ class ActiveSession extends Equatable {
       'imageUrl': imageUrl,
       'expiresAt': expiresAt.toIso8601String(),
       'status': status.name,
+      'permissions': permissions,
+      'isOnline': isOnline,
+      'lastSeen': lastSeen,
     };
   }
 
@@ -93,6 +107,9 @@ class ActiveSession extends Equatable {
     String? imageUrl,
     DateTime? expiresAt,
     SessionStatus? status,
+    Map<String, bool>? permissions,
+    bool? isOnline,
+    String? lastSeen,
   }) {
     return ActiveSession(
       id: id ?? this.id,
@@ -101,11 +118,14 @@ class ActiveSession extends Equatable {
       imageUrl: imageUrl ?? this.imageUrl,
       expiresAt: expiresAt ?? this.expiresAt,
       status: status ?? this.status,
+      permissions: permissions ?? this.permissions,
+      isOnline: isOnline ?? this.isOnline,
+      lastSeen: lastSeen ?? this.lastSeen,
     );
   }
 
   @override
-  List<Object?> get props => [id, name, relationship, imageUrl, expiresAt, status];
+  List<Object?> get props => [id, name, relationship, imageUrl, expiresAt, status, permissions, isOnline, lastSeen];
 }
 
 /// Represents caregiver access history.

@@ -1,5 +1,5 @@
 import 'dart:convert';
-import '../../core/config/app_config.dart';
+import '../../core/config/api_config.dart';
 import '../../core/network/api_client.dart';
 import '../../core/storage/cache_service.dart';
 import '../../domain/repositories/caregiver_repository.dart';
@@ -107,7 +107,7 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
 
     var server = _apiClient.baseUrl;
     if (server.contains('localhost') || server.contains('127.0.0.1')) {
-      server = AppConfig.apiBaseUrl;
+      server = ApiConfig.baseUrl;
     }
     final qrData = {
       'server': server,
@@ -152,6 +152,82 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
       return list.cast<Map<String, dynamic>>();
     } catch (_) {
       return [];
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> grantTemporaryAccess({
+    required String babyId,
+    required String caregiverEmail,
+    required int durationMinutes,
+    String? permission,
+    Map<String, bool>? permissions,
+  }) async {
+    final response = await _apiClient.post(
+      '/caregivers/grant-temporary',
+      body: {
+        'babyId': babyId,
+        'caregiverEmail': caregiverEmail,
+        'durationMinutes': durationMinutes,
+        if (permission != null) 'permission': permission,
+        if (permissions != null) 'permissions': permissions,
+      },
+      requireAuth: true,
+    );
+    final resMap = response as Map<String, dynamic>;
+    return resMap['data'] as Map<String, dynamic>;
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getActivePermissions() async {
+    try {
+      final res = await _apiClient.get('/caregivers/active-permissions', requireAuth: true);
+      final resMap = res as Map<String, dynamic>;
+      final list = resMap['data'] as List;
+      return list.cast<Map<String, dynamic>>();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  @override
+  Future<void> revokeTemporaryPermission(String permissionId) async {
+    await _apiClient.delete('/caregivers/temporary-permission/$permissionId', requireAuth: true);
+  }
+
+  @override
+  Future<Map<String, dynamic>> updatePermissions(String permissionId, Map<String, bool> permissions) async {
+    final response = await _apiClient.patch(
+      '/caregivers/temporary-permission/$permissionId/permissions',
+      body: {'permissions': permissions},
+      requireAuth: true,
+    );
+    final resMap = response as Map<String, dynamic>;
+    return resMap['data'] as Map<String, dynamic>;
+  }
+
+  @override
+  Future<Map<String, dynamic>> extendAccess(String permissionId, int extensionMinutes) async {
+    final response = await _apiClient.patch(
+      '/caregivers/temporary-permission/$permissionId/extend',
+      body: {'extensionMinutes': extensionMinutes},
+      requireAuth: true,
+    );
+    final resMap = response as Map<String, dynamic>;
+    return resMap['data'] as Map<String, dynamic>;
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getCaregiverAccess() async {
+    try {
+      final res = await _apiClient.get('/caregiver/access', requireAuth: true);
+      final resMap = res as Map<String, dynamic>;
+      if (resMap['hasAccess'] == true) {
+        return resMap;
+      }
+      return null;
+    } catch (_) {
+      return null;
     }
   }
 

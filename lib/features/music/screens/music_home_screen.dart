@@ -4,17 +4,15 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
 import 'package:maatriva/core/theme/app_typography.dart';
-import '../data/mock_genres.dart';
-import '../models/lullaby_genre.dart';
+import 'package:maatriva/features/authentication/presentation/providers/auth_provider.dart';
+import 'package:maatriva/shared/models/user_session.dart';
+import 'package:maatriva/shared/widgets/bottom_navigation.dart';
 import '../models/song.dart';
 import '../providers/music_provider.dart';
-import '../services/music_access_helper.dart';
-import '../widgets/album_art_widget.dart';
-import '../widgets/featured_banner.dart';
-import '../widgets/genre_card.dart';
+import '../widgets/baby_care_song_card.dart';
 import '../widgets/mini_player.dart';
-import '../widgets/song_card_horizontal.dart';
-import 'playlist_screen.dart';
+import '../widgets/parent_recording_editor_dialog.dart';
+import '../widgets/parent_upload_dialog.dart';
 
 class MusicHomeScreen extends ConsumerStatefulWidget {
   const MusicHomeScreen({super.key});
@@ -26,18 +24,6 @@ class MusicHomeScreen extends ConsumerStatefulWidget {
 class _MusicHomeScreenState extends ConsumerState<MusicHomeScreen> {
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
-  bool _showSortMenu = false;
-
-  final List<Map<String, String>> _playlists = [
-    {'name': 'Favorites', 'desc': 'Your beloved sounds'},
-    {'name': 'Newborn Sleep', 'desc': 'Heartbeats & womb mimicry'},
-    {'name': 'Night Sleep', 'desc': 'Soothing nocturnal tunes'},
-    {'name': 'Nap Time', 'desc': 'Gentle daytime ambience'},
-    {'name': 'White Noise Collection', 'desc': 'Continuous static & noise'},
-    {'name': 'Calming Sounds', 'desc': 'Deep meditational harmonics'},
-    {'name': 'Classical Collection', 'desc': 'Mozart, Beethoven & Satie'},
-    {'name': 'Nature Collection', 'desc': 'Rain, forest & sea breezes'},
-  ];
 
   @override
   void dispose() {
@@ -45,16 +31,156 @@ class _MusicHomeScreenState extends ConsumerState<MusicHomeScreen> {
     super.dispose();
   }
 
+  void _showAutoSleepModeInfo(BuildContext context, MusicState state, MusicNotifier notifier) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: const BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEDE7F6),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: const Icon(
+                    Icons.auto_awesome_rounded,
+                    color: Color(0xFF6B4EE6),
+                    size: 26,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'AI Sleep Assistant',
+                        style: GoogleFonts.outfit(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        state.isAutoSleepModeEnabled
+                            ? 'Status: Active • Monitoring Baby Care'
+                            : 'Status: Standby • Tap to Enable',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: state.isAutoSleepModeEnabled
+                              ? const Color(0xFF2E7D32)
+                              : AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'How Auto Sleep Mode Works:',
+              style: GoogleFonts.outfit(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _criteriaItem(Icons.mic_rounded, 'Cry Detection', 'Detects baby crying frequency and triggers soothing lullaby.'),
+            _criteriaItem(Icons.sentiment_satisfied_alt_rounded, 'Baby Mood', 'Adapts acoustic tempo to calm baby\'s restless energy.'),
+            _criteriaItem(Icons.bedtime_rounded, 'Sleep Stage', 'Transitions from gentle melody to deep womb noise during sleep.'),
+            _criteriaItem(Icons.smart_toy_rounded, 'AI Recommendation', 'Learns which parent voice or lullaby works best for your baby.'),
+            _criteriaItem(Icons.schedule_rounded, 'Time of Day', 'Adjusts volume and spectral frequencies according to nap or night time.'),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  notifier.toggleAutoSleepMode();
+                  Navigator.pop(ctx);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: state.isAutoSleepModeEnabled
+                      ? Colors.grey.shade300
+                      : const Color(0xFF6B4EE6),
+                  foregroundColor: state.isAutoSleepModeEnabled
+                      ? AppColors.textPrimary
+                      : Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                child: Text(
+                  state.isAutoSleepModeEnabled ? 'Disable Auto Sleep Mode' : 'Enable Auto Sleep Mode',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _criteriaItem(IconData icon, String title, String desc) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: const Color(0xFF6B4EE6)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+                children: [
+                  TextSpan(text: '$title: ', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  TextSpan(text: desc, style: TextStyle(color: AppColors.textSecondary)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final musicState = ref.watch(musicProvider);
     final notifier = ref.read(musicProvider.notifier);
-    final isFiltered = musicState.activeGenre != null ||
-        musicState.activeCategory != null ||
-        musicState.searchQuery.isNotEmpty;
+    final parentRecordingsCount = musicState.songs.where((s) => s.isCustomParentSong).length;
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      bottomNavigationBar: const BottomNavigation(currentIndex: 3),
       body: SafeArea(
         child: Stack(
           children: [
@@ -62,177 +188,38 @@ class _MusicHomeScreenState extends ConsumerState<MusicHomeScreen> {
               children: [
                 _buildTopBar(musicState, notifier),
                 Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.only(bottom: 100),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // ── Featured Banner ──────────────────────────────────
-                        if (!isFiltered) ...[
-                          const SizedBox(height: 8),
-                          const FeaturedBanner(),
-                          const SizedBox(height: 20),
+                  child: RefreshIndicator(
+                    onRefresh: () => notifier.refreshLibrary(),
+                    color: const Color(0xFF6B4EE6),
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.only(bottom: 110),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 12),
+
+                          // ── TOP THREE BABY-CARE ACTION CARDS ────────────────
+                          _buildTopActionCards(musicState, notifier, parentRecordingsCount),
+
+                          const SizedBox(height: 24),
+
+                          // ── ALL LULLABIES SECTION HEADER & FILTERS ──────────
+                          _buildAllLullabiesHeader(musicState, notifier),
+
+                          const SizedBox(height: 12),
+
+                          // ── MUSIC LIST (CLEAN BABY-CARE CARDS) ──────────────
+                          _buildMusicList(musicState, notifier),
                         ],
-
-                        // ── Genre Cards ──────────────────────────────────────
-                        if (!_isSearching) ...[
-                          _sectionHeader(
-                            'Browse by Genre',
-                            null,
-                            subtitle: 'Tap to explore a collection',
-                          ),
-                          const SizedBox(height: 8),
-                          _buildGenreCards(musicState, notifier),
-                          const SizedBox(height: 20),
-                        ],
-
-                        // ── Active filter label ──────────────────────────────
-                        if (isFiltered) ...[
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    musicState.activeGenre != null
-                                        ? '${musicState.activeGenre} Collection'
-                                        : musicState.activeCategory != null
-                                            ? '${musicState.activeCategory} Collection'
-                                            : 'Search Results',
-                                    style: AppTypography.sectionTitle
-                                        .copyWith(fontSize: 18),
-                                  ),
-                                ),
-                                TextButton.icon(
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    notifier.clearAllFilters();
-                                    setState(() => _isSearching = false);
-                                  },
-                                  icon: const Icon(Icons.close_rounded,
-                                      size: 14, color: AppColors.primary),
-                                  label: const Text(
-                                    'Clear',
-                                    style: TextStyle(
-                                      color: AppColors.primary,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                        ],
-
-                        // ── Sort bar (only when browsing all) ────────────────
-                        if (!isFiltered && !_isSearching)
-                          _buildSortBar(musicState, notifier),
-
-                        // ── When filtering: show flat song list ──────────────
-                        if (isFiltered)
-                          _buildFilteredList(musicState, notifier)
-                        else ...[
-                          // ── Favorites shelf ──────────────────────────────
-                          if (musicState.favoriteSongs.isNotEmpty) ...[
-                            _sectionHeader('❤️  Favorites', 'Favorites'),
-                            const SizedBox(height: 8),
-                            _buildHorizontalShelf(musicState.favoriteSongs),
-                            const SizedBox(height: 20),
-                          ],
-
-                          // ── Recently Played shelf ────────────────────────
-                          if (musicState.recentlyPlayed.isNotEmpty) ...[
-                            _sectionHeader(
-                                '🕐  Recently Played', null),
-                            const SizedBox(height: 8),
-                            _buildRecentlyPlayedShelf(
-                                musicState, notifier),
-                            const SizedBox(height: 20),
-                          ],
-
-                          // ── Recommended for Tonight ──────────────────────
-                          if (_recommendedSongs(musicState.songs).isNotEmpty) ...[
-                            _sectionHeader(
-                              '✨  Recommended for Tonight',
-                              null,
-                              subtitle: 'Based on your listening habits',
-                            ),
-                            const SizedBox(height: 8),
-                            _buildHorizontalShelf(
-                              _recommendedSongs(musicState.songs),
-                            ),
-                            const SizedBox(height: 20),
-                          ],
-
-                          // ── Parent Custom Music Library ──────────────────────────────
-                          if (musicState.songs.any((s) => s.isCustomParentSong)) ...[
-                            _sectionHeader(
-                              '🔒  Parent\'s Custom Music Library',
-                              null,
-                              subtitle: 'Imported by parent (Requires Parent Permission for Caregivers)',
-                            ),
-                            const SizedBox(height: 8),
-                            _buildHorizontalShelf(
-                              musicState.songs.where((s) => s.isCustomParentSong).toList(),
-                            ),
-                            const SizedBox(height: 24),
-                          ],
-
-                          // ── Empty Library State ──────────────────────────
-                          if (musicState.songs.isEmpty)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 32),
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(24),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(24),
-                                  border: Border.all(
-                                    color: AppColors.divider.withOpacity(0.5),
-                                  ),
-                                  boxShadow: AppColors.softShadow,
-                                ),
-                                child: Column(
-                                  children: [
-                                    Icon(
-                                      Icons.music_off_outlined,
-                                      size: 56,
-                                      color: AppColors.textSecondary.withOpacity(0.4),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      'No Music Available',
-                                      style: AppTypography.sectionTitle.copyWith(fontSize: 18),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      'All existing songs and music tracks have been removed.',
-                                      textAlign: TextAlign.center,
-                                      style: AppTypography.bodyMedium.copyWith(
-                                        color: AppColors.textSecondary,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                          // ── Genre sections ───────────────────────────────
-                          for (final genre in mockGenres)
-                            _buildGenreSection(genre, musicState, notifier),
-                        ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
               ],
             ),
 
-            // Floating mini player
+            // Simplified Mini Player
             const Positioned(
               bottom: 0,
               left: 0,
@@ -245,44 +232,97 @@ class _MusicHomeScreenState extends ConsumerState<MusicHomeScreen> {
     );
   }
 
-  // ── Top bar ───────────────────────────────────────────────────────────────
+  // ── TOP BAR ───────────────────────────────────────────────────────────────
   Widget _buildTopBar(MusicState musicState, MusicNotifier notifier) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                color: AppColors.textPrimary, size: 20),
-            onPressed: () => context.go('/'),
+          GestureDetector(
+            onTap: () => context.go('/'),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: AppColors.textPrimary,
+                size: 18,
+              ),
+            ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 12),
           Expanded(
             child: _isSearching
                 ? _buildSearchField(notifier)
-                : Text(
-                    'Lullaby Library',
-                    style: GoogleFonts.playfairDisplay(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Smart Baby Sleep Assistant',
+                        style: GoogleFonts.outfit(
+                          fontSize: 19,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        'Soft, calming sounds & parent voice recordings',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
                   ),
           ),
           if (!_isSearching) ...[
-            IconButton(
-              icon: const Icon(Icons.search_rounded,
-                  color: AppColors.textPrimary, size: 22),
-              onPressed: () => setState(() => _isSearching = true),
+            GestureDetector(
+              onTap: () => showParentCustomLullabyDialog(context, ref),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE0F7FA),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFB2EBF2)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.add_photo_alternate_rounded,
+                      color: Color(0xFF00838F),
+                      size: 16,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '+ Song',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF00838F),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            IconButton(
-              icon: const Icon(Icons.favorite_rounded,
-                  color: Colors.redAccent, size: 22),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      const PlaylistScreen(playlistName: 'Favorites'),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => setState(() => _isSearching = true),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: const Icon(
+                  Icons.search_rounded,
+                  color: AppColors.textPrimary,
+                  size: 20,
                 ),
               ),
             ),
@@ -294,32 +334,23 @@ class _MusicHomeScreenState extends ConsumerState<MusicHomeScreen> {
 
   Widget _buildSearchField(MusicNotifier notifier) {
     return Container(
-      height: 40,
+      height: 42,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.primaryLight),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(0.06),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF6B4EE6).withOpacity(0.4)),
       ),
       child: TextField(
         controller: _searchController,
         autofocus: true,
-        style: AppTypography.labelMedium,
-        onChanged: (val) => ref.read(musicProvider.notifier).setSearchQuery(val),
+        style: const TextStyle(fontSize: 13),
+        onChanged: (val) => notifier.setSearchQuery(val),
         decoration: InputDecoration(
-          hintText: 'Songs, genres, artists…',
-          hintStyle: AppTypography.labelSmall.copyWith(color: Colors.grey),
-          prefixIcon: const Icon(Icons.search_rounded,
-              size: 18, color: AppColors.primary),
+          hintText: 'Search lullabies or parent recordings...',
+          hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+          prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Color(0xFF6B4EE6)),
           suffixIcon: IconButton(
-            icon: const Icon(Icons.close_rounded, size: 16,
-                color: AppColors.textSecondary),
+            icon: const Icon(Icons.close_rounded, size: 16, color: AppColors.textSecondary),
             onPressed: () {
               _searchController.clear();
               notifier.clearAllFilters();
@@ -327,322 +358,523 @@ class _MusicHomeScreenState extends ConsumerState<MusicHomeScreen> {
             },
           ),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.only(top: 10),
+          contentPadding: const EdgeInsets.only(top: 8),
         ),
       ),
     );
   }
 
-  // ── Sort bar ──────────────────────────────────────────────────────────────
-  Widget _buildSortBar(MusicState musicState, MusicNotifier notifier) {
-    final labels = {
-      SortMode.alphabetical: 'A–Z',
-      SortMode.recentlyPlayed: 'Recent',
-      SortMode.favorites: 'Favorites',
-      SortMode.duration: 'Duration',
-    };
+  // ── TOP THREE ACTION CARDS ────────────────────────────────────────────────
+  Widget _buildTopActionCards(MusicState musicState, MusicNotifier notifier, int parentRecordingsCount) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Row(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
         children: [
-          Text('Sort by:', style: AppTypography.labelSmall),
-          const SizedBox(width: 8),
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: labels.entries.map((e) {
-                  final selected = musicState.sortMode == e.key;
-                  return GestureDetector(
-                    onTap: () => notifier.setSortMode(e.key),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      margin: const EdgeInsets.only(right: 8),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? AppColors.primary
-                            : Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: selected
-                              ? AppColors.primary
-                              : AppColors.divider.withOpacity(0.6),
-                        ),
-                        boxShadow: selected ? AppColors.softShadow : null,
-                      ),
-                      child: Text(
-                        e.value,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: selected
-                              ? Colors.white
-                              : AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
+          // 1. AUTO SLEEP MODE CARD
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFEDE7F6), Color(0xFFF3E5F5)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(
+                color: musicState.isAutoSleepModeEnabled
+                    ? const Color(0xFF6B4EE6)
+                    : Colors.white.withOpacity(0.8),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF6B4EE6).withOpacity(0.08),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Genre cards ────────────────────────────────────────────────────────────
-  Widget _buildGenreCards(MusicState musicState, MusicNotifier notifier) {
-    return SizedBox(
-      height: 150,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.only(left: 16),
-        itemCount: mockGenres.length,
-        itemBuilder: (context, i) {
-          final genre = mockGenres[i];
-          final count = musicState.songs
-              .where((s) => s.genre == genre.name)
-              .length;
-          final isSelected = musicState.activeGenre == genre.name;
-          return GenreCard(
-            genre: genre,
-            trackCount: count,
-            isSelected: isSelected,
-            onTap: () {
-              if (isSelected) {
-                notifier.clearAllFilters();
-              } else {
-                notifier.setGenreFilter(genre.name);
-              }
-            },
-          );
-        },
-      ),
-    );
-  }
-
-  // ── Section header ─────────────────────────────────────────────────────────
-  Widget _sectionHeader(String title, String? playlistName,
-      {String? subtitle}) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: AppTypography.sectionTitle.copyWith(fontSize: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: const Icon(
+                              Icons.auto_awesome_rounded,
+                              color: Color(0xFF6B4EE6),
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Auto Sleep Mode',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: musicState.isAutoSleepModeEnabled
+                                        ? const Color(0xFFE8F5E9)
+                                        : Colors.white.withOpacity(0.8),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 6,
+                                        height: 6,
+                                        decoration: BoxDecoration(
+                                          color: musicState.isAutoSleepModeEnabled
+                                              ? Colors.green.shade600
+                                              : Colors.grey.shade400,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Flexible(
+                                        child: Text(
+                                          'AI Sleep Assistant ${musicState.isAutoSleepModeEnabled ? "Active" : "Standby"}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: musicState.isAutoSleepModeEnabled
+                                                ? Colors.green.shade800
+                                                : AppColors.textSecondary,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.info_outline_rounded, color: Color(0xFF6B4EE6), size: 20),
+                      onPressed: () => _showAutoSleepModeInfo(context, musicState, notifier),
+                    ),
+                  ],
                 ),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: AppTypography.labelSmall),
-                ],
+                const SizedBox(height: 12),
+                Text(
+                  'Automatically plays the most suitable lullaby based on your baby\'s mood, crying, sleep stage and AI recommendations.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.4,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          notifier.toggleAutoSleepMode();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                !musicState.isAutoSleepModeEnabled
+                                    ? 'Enabled Auto Sleep Mode • AI Monitoring Cry & Sleep Stage'
+                                    : 'Auto Sleep Mode Paused',
+                              ),
+                              duration: const Duration(seconds: 2),
+                              backgroundColor: const Color(0xFF6B4EE6),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        },
+                        icon: Icon(
+                          musicState.isAutoSleepModeEnabled
+                              ? Icons.check_circle_rounded
+                              : Icons.play_circle_filled_rounded,
+                          size: 18,
+                        ),
+                        label: Text(
+                          musicState.isAutoSleepModeEnabled ? 'Auto Mode Active' : 'Enable Auto',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: musicState.isAutoSleepModeEnabled
+                              ? const Color(0xFF2E7D32)
+                              : const Color(0xFF6B4EE6),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          elevation: 1,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
-          if (playlistName != null)
-            TextButton(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      PlaylistScreen(playlistName: playlistName),
+
+          const SizedBox(height: 12),
+
+          // ROW WITH CARDS 2 & 3
+          Row(
+            children: [
+              // 2. RECORD LULLABY CARD
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF0F5),
+                    borderRadius: BorderRadius.circular(26),
+                    border: Border.all(color: const Color(0xFFFFD1DC), width: 1.0),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.pink.withOpacity(0.04),
+                        blurRadius: 14,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: const Icon(
+                              Icons.mic_rounded,
+                              color: Color(0xFFD81B60),
+                              size: 20,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Record Parent Voice',
+                        style: GoogleFonts.outfit(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Record your own voice, stories or lullabies for your baby.',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          height: 1.3,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => ParentRecordingEditorDialog.show(context),
+                          icon: const Icon(Icons.mic_rounded, size: 14),
+                          label: const Text(
+                            'Start Recording',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFD81B60),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            elevation: 0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              child: const Text(
-                'See All',
-                style: TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
+
+              const SizedBox(width: 12),
+
+              // 3. PARENT'S MELODY VAULT CARD
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE0F7FA),
+                    borderRadius: BorderRadius.circular(26),
+                    border: Border.all(color: const Color(0xFFB2EBF2), width: 1.0),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.teal.withOpacity(0.04),
+                        blurRadius: 14,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: const Icon(
+                              Icons.folder_special_rounded,
+                              color: Color(0xFF00838F),
+                              size: 20,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.9),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '$parentRecordingsCount Tracks',
+                              style: const TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF00838F),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        "Parent's Melody Vault",
+                        style: GoogleFonts.outfit(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Your private lullabies, gallery songs & recordings.',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          height: 1.3,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => showParentCustomLullabyDialog(context, ref),
+                              icon: const Icon(Icons.add_photo_alternate_rounded, size: 13),
+                              label: const Text(
+                                '+ Add Song',
+                                style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF00838F),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 9),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                elevation: 0,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          InkWell(
+                            onTap: () {
+                              notifier.setActiveFilterTab('Parent Recordings');
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text("Opened Parent's Melody Vault"),
+                                  duration: Duration(seconds: 2),
+                                  backgroundColor: Color(0xFF00838F),
+                                ),
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(14),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: const Color(0xFFB2EBF2)),
+                              ),
+                              child: const Icon(
+                                Icons.folder_open_rounded,
+                                color: Color(0xFF00838F),
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  // ── Horizontal shelf (song cards) ─────────────────────────────────────────
-  Widget _buildHorizontalShelf(List<Song> songs) {
-    return SizedBox(
-      height: 230,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.only(left: 16),
-        itemCount: songs.length,
-        itemBuilder: (_, i) => SongCardHorizontal(song: songs[i]),
-      ),
-    );
-  }
+  // ── ALL LULLABIES HEADER & FILTER TABS ─────────────────────────────────────
+  Widget _buildAllLullabiesHeader(MusicState musicState, MusicNotifier notifier) {
+    final filterTabs = [
+      'AI Recommendation',
+      'Recently Played',
+      'Favorites',
+      'Parent Recordings',
+    ];
 
-  // ── Recently Played shelf (compact row cards) ─────────────────────────────
-  Widget _buildRecentlyPlayedShelf(MusicState state, MusicNotifier notifier) {
-    return SizedBox(
-      height: 72,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.only(left: 16),
-        itemCount: state.recentlyPlayed.length,
-        itemBuilder: (_, i) {
-          final song = state.recentlyPlayed[i];
-          final isCurrent = state.currentSong?.id == song.id;
-          return GestureDetector(
-            onTap: () {
-              if (!MusicAccessHelper.canAccessSong(song, ref)) {
-                MusicAccessHelper.showCustomMusicRestrictedDialog(context);
-                return;
-              }
-              notifier.selectSong(song);
-              context.push('/music/player');
-            },
-            child: Container(
-              width: 200,
-              margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: AppColors.softShadow,
-                border: Border.all(
-                  color: isCurrent
-                      ? AppColors.primary.withOpacity(0.35)
-                      : AppColors.divider.withOpacity(0.5),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'All Lullabies',
+                style: GoogleFonts.outfit(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
                 ),
               ),
-              child: Row(
-                children: [
-                  AlbumArtWidget(
-                    colorKey: song.albumArtColor,
-                    size: 40,
-                    borderRadius: 10,
-                    isPlaying: isCurrent && state.isPlaying,
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEDE7F6),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${musicState.filteredSongs.length} tracks',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF6B4EE6),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          song.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.labelMedium.copyWith(
-                            fontSize: 11,
-                            color: isCurrent
-                                ? AppColors.primary
-                                : AppColors.textPrimary,
-                          ),
-                        ),
-                        Text(
-                          song.artist,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style:
-                              AppTypography.labelSmall.copyWith(fontSize: 9),
-                        ),
-                      ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Recommended calming sounds for your baby.',
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 12),
+
+          // Filter Chips
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: filterTabs.map((tab) {
+                final isSelected = musicState.activeFilterTab == tab;
+
+                return GestureDetector(
+                  onTap: () => notifier.setActiveFilterTab(tab),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected ? const Color(0xFF6B4EE6) : Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isSelected ? const Color(0xFF6B4EE6) : Colors.grey.shade300,
+                      ),
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                color: const Color(0xFF6B4EE6).withOpacity(0.25),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              )
+                            ]
+                          : null,
+                    ),
+                    child: Text(
+                      tab,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        color: isSelected ? Colors.white : AppColors.textSecondary,
+                      ),
                     ),
                   ),
-                ],
-              ),
+                );
+              }).toList(),
             ),
-          );
-        },
+          ),
+        ],
       ),
     );
   }
 
-  // ── Recommended songs ─────────────────────────────────────────────────────
-  List<Song> _recommendedSongs(List<Song> all) {
-    final hour = DateTime.now().hour;
-    final String genre;
-    if (hour >= 19 || hour < 5) {
-      genre = 'Classic Lullabies';
-    } else if (hour >= 12 && hour < 17) {
-      genre = 'Nature Sounds';
-    } else {
-      genre = 'Instrumental';
-    }
-    final primary = all.where((s) => s.genre == genre).take(4).toList();
-    final rest = all.where((s) => s.isFavorite && s.genre != genre).take(2).toList();
-    return [...primary, ...rest];
-  }
-
-  // ── Genre sections (one per genre) ────────────────────────────────────────
-  Widget _buildGenreSection(
-    LullabyGenre genre,
-    MusicState musicState,
-    MusicNotifier notifier,
-  ) {
-    final songs = musicState.songs
-        .where((s) => s.genre == genre.name)
-        .take(8)
-        .toList();
-    if (songs.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionHeader(
-          '${genre.emoji}  ${genre.name}',
-          null,
-          subtitle: genre.description,
-        ),
-        const SizedBox(height: 8),
-        _buildHorizontalShelf(songs),
-        const SizedBox(height: 24),
-      ],
-    );
-  }
-
-  // ── Filtered/search list ───────────────────────────────────────────────────
-  Widget _buildFilteredList(MusicState musicState, MusicNotifier notifier) {
+  // ── MUSIC LIST ─────────────────────────────────────────────────────────────
+  Widget _buildMusicList(MusicState musicState, MusicNotifier notifier) {
     final songs = musicState.filteredSongs;
+
     if (songs.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+      return Padding(
+        padding: const EdgeInsets.all(32),
+        child: Center(
           child: Column(
             children: [
-              Icon(Icons.music_off_outlined,
-                  size: 64,
-                  color: AppColors.textSecondary.withOpacity(0.25)),
-              const SizedBox(height: 16),
+              Icon(Icons.nightlight_round, size: 48, color: Colors.grey.shade300),
+              const SizedBox(height: 12),
               Text(
-                'No music found',
-                style: AppTypography.sectionTitle.copyWith(fontSize: 18),
+                'No lullabies found in this filter',
+                style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Try a different search or genre filter.',
-                style: AppTypography.bodyMedium,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 24, vertical: 12),
-                ),
-                onPressed: () {
-                  _searchController.clear();
-                  notifier.clearAllFilters();
-                  setState(() => _isSearching = false);
-                },
-                child: const Text('Browse Library',
-                    style: TextStyle(color: Colors.white, fontSize: 13)),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () => notifier.setActiveFilterTab('AI Recommendation'),
+                child: const Text('Show AI Recommendations', style: TextStyle(color: Color(0xFF6B4EE6))),
               ),
             ],
           ),
@@ -651,126 +883,7 @@ class _MusicHomeScreenState extends ConsumerState<MusicHomeScreen> {
     }
 
     return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-          child: Text('${songs.length} tracks',
-              style: AppTypography.labelSmall),
-        ),
-        _buildSortBar(musicState, notifier),
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: songs.length,
-          itemBuilder: (_, i) => _buildSongListTile(songs[i], musicState, notifier),
-        ),
-      ],
+      children: songs.map((song) => BabyCareSongCard(song: song)).toList(),
     );
-  }
-
-  Widget _buildSongListTile(
-      Song song, MusicState musicState, MusicNotifier notifier) {
-    final isCurrent = musicState.currentSong?.id == song.id;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isCurrent
-              ? AppColors.primary.withOpacity(0.35)
-              : AppColors.divider.withOpacity(0.4),
-          width: isCurrent ? 1.5 : 1.0,
-        ),
-        boxShadow: AppColors.softShadow,
-      ),
-      child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        leading: AlbumArtWidget(
-          colorKey: song.albumArtColor,
-          size: 48,
-          isPlaying: isCurrent && musicState.isPlaying,
-          categoryIcon: _iconForCategory(song.category),
-        ),
-        title: Text(
-          song.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: AppTypography.labelMedium.copyWith(
-            color: isCurrent ? AppColors.primary : AppColors.textPrimary,
-            fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600,
-          ),
-        ),
-        subtitle: Text(
-          '${song.artist} · ${_fmt(song.duration)}',
-          style: AppTypography.labelSmall,
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: Icon(
-                song.isFavorite
-                    ? Icons.favorite_rounded
-                    : Icons.favorite_border_rounded,
-                color: song.isFavorite
-                    ? Colors.redAccent
-                    : AppColors.textSecondary,
-                size: 18,
-              ),
-              onPressed: () => notifier.toggleFavorite(song.id),
-            ),
-            IconButton(
-              icon: Icon(
-                isCurrent && musicState.isPlaying
-                    ? Icons.pause_circle_filled_rounded
-                    : Icons.play_circle_filled_rounded,
-                color: AppColors.primary,
-                size: 28,
-              ),
-              onPressed: () {
-                if (!MusicAccessHelper.canAccessSong(song, ref)) {
-                  MusicAccessHelper.showCustomMusicRestrictedDialog(context);
-                  return;
-                }
-                if (isCurrent) {
-                  notifier.togglePlayPause();
-                } else {
-                  notifier.selectSong(song);
-                }
-              },
-            ),
-          ],
-        ),
-        onTap: () {
-          if (!MusicAccessHelper.canAccessSong(song, ref)) {
-            MusicAccessHelper.showCustomMusicRestrictedDialog(context);
-            return;
-          }
-          notifier.selectSong(song);
-          context.push('/music/player');
-        },
-      ),
-    );
-  }
-
-  String _fmt(Duration d) =>
-      '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
-
-  IconData _iconForCategory(String category) {
-    switch (category) {
-      case 'Rain Sounds': return Icons.water_drop_rounded;
-      case 'Ocean Waves': return Icons.waves_rounded;
-      case 'Nature Sounds': return Icons.forest_rounded;
-      case 'White Noise': return Icons.blur_on_rounded;
-      case 'Heartbeat Sounds': return Icons.favorite_rounded;
-      case 'Meditation': return Icons.self_improvement_rounded;
-      case 'Classical': return Icons.piano_rounded;
-      case 'Piano': return Icons.piano_rounded;
-      case 'Instrumental': return Icons.music_note_rounded;
-      default: return Icons.queue_music_rounded;
-    }
   }
 }

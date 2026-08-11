@@ -135,20 +135,7 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: BottomNavigation(
-        currentIndex: -1,
-        onTap: (index) {
-          if (index == 0) {
-            context.go('/?tab=0');
-          } else if (index == 1) {
-            context.go('/?tab=1');
-          } else if (index == 2) {
-            context.go('/predictive-health');
-          } else if (index == 3) {
-            context.go('/shop');
-          }
-        },
-      ),
+      bottomNavigationBar: const BottomNavigation(currentIndex: -1),
     );
   }
 }

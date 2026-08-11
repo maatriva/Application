@@ -1,5 +1,7 @@
 export interface MusicTrackItem {
   id: string;
+  ownerId?: string;
+  babyId?: string;
   title: string;
   category: string;
   language: string;
@@ -12,6 +14,9 @@ export interface MusicTrackItem {
   storageUrl: string;
   fileHash?: string;
   thumbnail?: string;
+  visibility?: 'PRIVATE' | 'SHARED_WITH_CAREGIVERS' | 'PUBLIC_LIBRARY' | string;
+  isCustomParentSong?: boolean;
+  isSharedWithCaregiver?: boolean;
   uploadedAt: string;
   uploadedBy?: string;
   isPremium: boolean;
@@ -60,6 +65,7 @@ export interface MusicFilterQuery {
   sortOrder?: 'asc' | 'desc';
   page?: number;
   limit?: number;
+  uploadedBy?: string;
 }
 
 export interface MusicStatsResponse {

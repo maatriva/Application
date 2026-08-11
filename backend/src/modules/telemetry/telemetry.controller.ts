@@ -28,28 +28,54 @@ export class TelemetryController {
     const deviceId = data.deviceId;
 
     try {
-      // 1. Verify device exists
-      const device = await prisma.device.findUnique({
+      // 1. Verify device exists (auto-create if missing)
+      let device = await prisma.device.findUnique({
         where: { deviceId },
       });
 
       if (!device) {
-        return res.status(404).json({
-          success: false,
-          message: `Unknown device: Device ${deviceId} not found.`,
+        device = await prisma.device.create({
+          data: {
+            deviceId,
+            deviceName: `Smart Cradle (${deviceId})`,
+            type: 'Smart Cradle',
+            registrationKey: `REG-${deviceId}`,
+            firmwareVersion: '1.0.0',
+            protocol: 'Wi-Fi',
+            paired: false,
+            status: 'ONLINE',
+          },
         });
       }
 
-      // 2. Verify device is paired (has active assignment)
-      const assignment = await prisma.deviceAssignment.findFirst({
+      // 2. Verify device is paired (auto-pair to target or latest active baby profile if unassigned)
+      let assignment = await prisma.deviceAssignment.findFirst({
         where: { deviceId },
       });
 
-      if (!device.paired || !assignment) {
-        return res.status(400).json({
-          success: false,
-          message: `Unpaired device: Device ${deviceId} is not paired with any baby.`,
+      if (!assignment) {
+        const baby = await prisma.baby.findFirst({
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'desc' },
         });
+
+        if (baby) {
+          assignment = await prisma.deviceAssignment.create({
+            data: {
+              deviceId,
+              babyId: baby.id,
+            },
+          });
+          await prisma.device.update({
+            where: { deviceId },
+            data: { paired: true, status: 'PAIRED' },
+          });
+        } else {
+          return res.status(400).json({
+            success: false,
+            message: `Unpaired device: Device ${deviceId} is not paired with any baby profile.`,
+          });
+        }
       }
 
       const babyId = assignment.babyId;

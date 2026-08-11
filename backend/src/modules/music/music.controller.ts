@@ -8,6 +8,8 @@ export class MusicController {
   // GET /api/music
   static async getCatalog(req: Request, res: Response): Promise<void> {
     try {
+      const authUser = (req as any).user;
+      const userId = authUser?.userId || (req.query.uploadedBy as string);
       const query: MusicFilterQuery = {
         search: req.query.search as string,
         category: req.query.category as string,
@@ -18,9 +20,10 @@ export class MusicController {
         sortOrder: req.query.sortOrder as any,
         page: req.query.page ? Number(req.query.page) : 1,
         limit: req.query.limit ? Number(req.query.limit) : 50,
+        uploadedBy: userId,
       };
 
-      const result = await musicService.getMusicCatalog(query);
+      const result = await musicService.getMusicCatalog(query, userId);
       res.json({
         success: true,
         data: result.tracks,
@@ -30,6 +33,16 @@ export class MusicController {
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message || 'Failed to fetch music catalog' });
+    }
+  }
+
+  // GET /api/music/bgm
+  static async getBgm(req: Request, res: Response): Promise<void> {
+    try {
+      const tracks = await musicService.getBgmTracks();
+      res.json({ success: true, data: tracks, tracks });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Failed to fetch BGM tracks' });
     }
   }
 
@@ -62,6 +75,8 @@ export class MusicController {
   // POST /api/music/upload-bulk
   static async uploadBulk(req: Request, res: Response): Promise<void> {
     try {
+      const authUser = (req as any).user;
+      const userId = authUser?.userId;
       const category = req.body.category || 'Auto-Detect';
       const language = req.body.language || 'English';
 
@@ -102,7 +117,7 @@ export class MusicController {
         return;
       }
 
-      const jobStatus = await musicService.processBulkUpload(filesToProcess, category, language);
+      const jobStatus = await musicService.processBulkUpload(filesToProcess, category, language, userId);
       res.status(202).json({
         success: true,
         message: `Started bulk processing for ${filesToProcess.length} files.`,
@@ -179,6 +194,139 @@ export class MusicController {
       res.json({ success: true, message: 'Track deleted successfully' });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message || 'Failed to delete music track' });
+    }
+  }
+
+  // GET /api/music/custom (Parent API: Fetch all owned custom lullabies)
+  static async getCustom(req: Request, res: Response): Promise<void> {
+    try {
+      const authUser = (req as any).user;
+      if (!authUser || !authUser.userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized: Authentication required.' });
+        return;
+      }
+
+      console.log('[Music] GET /music/custom');
+      const tracks = await musicService.getCustomLullabies(authUser.userId);
+      console.log(`[Music] Database returned ${tracks.length} songs`);
+      console.log(`[Music] Songs received: ${tracks.length}`);
+      res.json({ success: true, data: tracks, total: tracks.length });
+    } catch (err: any) {
+      const status = err.statusCode || 500;
+      res.status(status).json({ success: false, error: err.message || 'Failed to fetch custom parent lullabies' });
+    }
+  }
+
+  // POST /api/music/custom (Parent API: Create custom lullaby with DEFAULT visibility = PRIVATE)
+  static async createCustom(req: Request, res: Response): Promise<void> {
+    try {
+      console.log('[Music] POST /music/custom');
+      const authUser = (req as any).user;
+      if (!authUser || !authUser.userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized: Authentication required.' });
+        return;
+      }
+
+      console.log(`[Music] Authenticated User: ${authUser.userId}`);
+
+      let storageUrl = req.body.fileUrl || req.body.storageUrl || req.body.audioPath;
+      const isRecording = req.body?.category === 'Parent Voice' || req.body?.category === 'Parent Recordings' || req.body?.sourceType === 'RECORDED';
+      const prefix = isRecording ? '/uploads/recordings/' : '/uploads/music/';
+
+      if (req.file) {
+        const savedFilename = req.file.filename;
+        console.log(`[Music] Saving File: ${savedFilename} (destination: ${prefix})`);
+        storageUrl = `${prefix}${savedFilename}`;
+      } else if (storageUrl) {
+        console.log(`[Music] Saving File: ${storageUrl}`);
+      } else {
+        console.log('[Music] Saving File: default_audio.mp3');
+      }
+
+      console.log('[Music] Creating Database Record');
+      const payload = {
+        ...req.body,
+        storageUrl,
+      };
+
+      const newTrack = await musicService.createCustomTrack(authUser.userId, payload);
+      console.log(`[Music] Database Saved: ${newTrack.id}`);
+      console.log('[Music] Returning Success');
+
+      res.status(201).json({ success: true, data: newTrack });
+    } catch (err: any) {
+      const status = err.statusCode || 400;
+      res.status(status).json({ success: false, error: err.message || 'Failed to create custom lullaby' });
+    }
+  }
+
+  // PATCH /api/music/custom/:id/share (Parent API: Toggle share with caregivers per song)
+  static async shareCustom(req: Request, res: Response): Promise<void> {
+    try {
+      const authUser = (req as any).user;
+      const { id } = req.params;
+      const { shareWithCaregivers } = req.body;
+
+      if (!authUser || !authUser.userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized: Authentication required.' });
+        return;
+      }
+
+      if (shareWithCaregivers === undefined) {
+        res.status(400).json({ success: false, error: 'shareWithCaregivers boolean flag is required.' });
+        return;
+      }
+
+      const updated = await musicService.updateTrackShareStatus(id, authUser.userId, Boolean(shareWithCaregivers));
+      res.json({ success: true, data: updated });
+    } catch (err: any) {
+      const status = err.statusCode || 400;
+      res.status(status).json({ success: false, error: err.message || 'Failed to update song sharing status' });
+    }
+  }
+
+  // PATCH /api/music/custom/share-all (Parent API: Toggle share for ENTIRE custom folder)
+  static async shareAllCustom(req: Request, res: Response): Promise<void> {
+    try {
+      const authUser = (req as any).user;
+      const { shareWithCaregivers } = req.body;
+
+      if (!authUser || !authUser.userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized: Authentication required.' });
+        return;
+      }
+
+      if (shareWithCaregivers === undefined) {
+        res.status(400).json({ success: false, error: 'shareWithCaregivers boolean flag is required.' });
+        return;
+      }
+
+      const result = await musicService.updateAllCustomTracksShareStatus(authUser.userId, Boolean(shareWithCaregivers));
+      res.json({ success: true, data: result });
+    } catch (err: any) {
+      const status = err.statusCode || 400;
+      res.status(status).json({ success: false, error: err.message || 'Failed to batch update folder sharing status' });
+    }
+  }
+
+  // GET /api/music/shared (Caregiver API: Fetch shared custom lullabies)
+  static async getSharedForCaregiver(req: Request, res: Response): Promise<void> {
+    try {
+      const authUser = (req as any).user;
+      if (!authUser || !authUser.userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized: Authentication required.' });
+        return;
+      }
+
+      const tracks = await musicService.getSharedLullabiesForCaregiver(authUser.userId);
+      res.json({ success: true, data: tracks, total: tracks.length });
+    } catch (err: any) {
+      const status = err.statusCode || 403;
+      res.status(status).json({
+        success: false,
+        error: err.message || 'Forbidden: Custom parent lullabies are private unless granted by parent.',
+        code: err.code || 'ACCESS_DENIED',
+      });
     }
   }
 }

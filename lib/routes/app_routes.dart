@@ -150,7 +150,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           }
         }
 
-        if (!onboarding.isCompleted) {
+        if (!onboarding.isCompleted && !isCaregiver) {
           if (!isGoingToOnboarding && !isGoingToJoinSharedBaby) {
             return AppRoutes.onboarding;
           }
@@ -161,7 +161,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
               state.matchedLocation == AppRoutes.splash ||
               isGoingToOnboarding) {
             if (isCaregiver) {
-              // Caregiver account: redirect right after login to scan QR code screen for time-limited access
+              final hasActivePerm = auth.session?.hasActiveCaregiverPermission ?? false;
+              if (hasActivePerm) {
+                return AppRoutes.home;
+              }
               return AppRoutes.joinSharedBaby;
             }
             // Parent account: open baby dashboard directly

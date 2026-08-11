@@ -42,32 +42,41 @@ class PlaylistScreen extends ConsumerWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(bottom: 80),
-            child: songs.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.music_off_outlined,
-                          size: 64,
-                          color: AppColors.textSecondary.withOpacity(0.3),
+            child: RefreshIndicator(
+              onRefresh: () => notifier.refreshLibrary(),
+              color: AppColors.primary,
+              child: songs.isEmpty
+                  ? SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      child: Container(
+                        height: MediaQuery.of(context).size.height * 0.7,
+                        alignment: Alignment.center,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.music_off_outlined,
+                              size: 64,
+                              color: AppColors.textSecondary.withOpacity(0.3),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No Music in this Playlist',
+                              style: AppTypography.labelMedium.copyWith(
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No Music in this Playlist',
-                          style: AppTypography.labelMedium.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
-                    itemCount: songs.length,
+                      ),
+                    )
+                  : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      itemCount: songs.length,
                     itemBuilder: (context, index) {
                       final song = songs[index];
                       final isCurrent = musicState.currentSong?.id == song.id;
@@ -163,6 +172,7 @@ class PlaylistScreen extends ConsumerWidget {
                       );
                     },
                   ),
+            ),
           ),
           const Positioned(
             bottom: 0,

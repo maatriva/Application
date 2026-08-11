@@ -37,41 +37,57 @@ export class TelemetrySubscriber {
         console.warn(`[TelemetrySubscriber] Device ID mismatch between topic and payload. Topic: "${cleanTopicDeviceId}", Payload: "${cleanPayloadDeviceId}". Rejecting packet.`);
         return;
       }
-
-      // Detailed logs: Step 1 (Topic/Payload IDs and DB Lookup Value)
-      console.log(`Topic Device ID: ${cleanTopicDeviceId}`);
-      console.log(`Payload Device ID: ${cleanPayloadDeviceId}`);
-      console.log(`Database lookup value: ${cleanTopicDeviceId}`);
-
-      // 3. Database Lookup: Verify the Device model using correct unique field (deviceId)
-      const device = await prisma.device.findUnique({
+      // 3. Database Lookup: Verify or auto-create the Device model using deviceId
+      let device = await prisma.device.findUnique({
         where: { deviceId: cleanTopicDeviceId },
       });
 
-      console.log(`Device found: ${device ? 'Yes' : 'No'}`);
-
-      // 4. Reject unknown devices with meaningful logs
       if (!device) {
-        const availableDevices = await prisma.device.findMany({ select: { deviceId: true } });
-        const availableIds = availableDevices.map((d) => d.deviceId).join(', ');
-        console.warn(`Device not found.\nLookup field: deviceId\nLookup value: ${cleanTopicDeviceId}\nAvailable Device IDs: ${availableIds}`);
-        return;
+        device = await prisma.device.create({
+          data: {
+            deviceId: cleanTopicDeviceId,
+            deviceName: `Smart Cradle (${cleanTopicDeviceId})`,
+            type: 'Smart Cradle',
+            registrationKey: `REG-${cleanTopicDeviceId}`,
+            firmwareVersion: '1.0.0',
+            protocol: 'MQTT',
+            paired: false,
+            status: 'ONLINE',
+          },
+        });
       }
 
-      // 5. Find linked baby assignment using the same identifier
-      const assignment = await prisma.deviceAssignment.findFirst({
+      // 4. Find or auto-create linked baby assignment
+      let assignment = await prisma.deviceAssignment.findFirst({
         where: { deviceId: cleanTopicDeviceId },
       });
+
+      if (!assignment) {
+        const baby = await prisma.baby.findFirst({
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (baby) {
+          assignment = await prisma.deviceAssignment.create({
+            data: {
+              deviceId: cleanTopicDeviceId,
+              babyId: baby.id,
+            },
+          });
+          await prisma.device.update({
+            where: { deviceId: cleanTopicDeviceId },
+            data: { paired: true, status: 'PAIRED' },
+          });
+        }
+      }
+
       const babyId = assignment?.babyId || null;
 
-      console.log(`Assignment found: ${assignment ? 'Yes' : 'No'}`);
-
-      // 6. Store telemetry in dedicated table using clean ID
+      // 5. Store telemetry in dedicated table using clean ID
       await telemetryService.storeTelemetry({
         ...telemetryData,
         deviceId: cleanTopicDeviceId,
       }, babyId);
-      console.log(`Telemetry stored successfully.`);
 
       if (babyId) {
         WebsocketServerManager.getInstance().broadcastTelemetry(babyId, telemetryData);

@@ -30,6 +30,8 @@ model User {
   notifications      NotificationHistory[]
   auditLogs          AuditLog[]
   invitations        Invitation[]          @relation("UserInvitations")
+  parentPermissions    TemporaryCaregiverPermission[] @relation("ParentTemporaryPermissions")
+  caregiverPermissions TemporaryCaregiverPermission[] @relation("CaregiverTemporaryPermissions")
 
   @@map("users")
 }
@@ -56,6 +58,7 @@ model Baby {
   aiReports         AiReport[]
   sleepSessions     SleepSession[]
   invitations       Invitation[]
+  temporaryCaregiverPermissions TemporaryCaregiverPermission[]
 
   @@map("babies")
 }
@@ -256,6 +259,8 @@ model Invitation {
 
 model MusicTrack {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId        String?  @map("owner_id") @db.Uuid
+  babyId         String?  @map("baby_id") @db.Uuid
   title          String
   category       String   @default("Lullabies") // Lullabies, White Noise, Nature Sounds, Womb Sounds, Instrumental, Nursery Rhymes, Regional, Parent Recordings
   language       String   @default("English")
@@ -268,6 +273,7 @@ model MusicTrack {
   storageUrl     String   @map("storage_url")
   fileHash       String?  @map("file_hash")
   thumbnail      String?
+  visibility     String   @default("PRIVATE") @db.VarChar(50) // PRIVATE, SHARED_WITH_CAREGIVERS, PUBLIC_LIBRARY
   uploadedAt     DateTime @default(now()) @map("uploaded_at") @db.Timestamptz
   uploadedBy     String?  @map("uploaded_by") @db.Uuid
   isPremium      Boolean  @default(false) @map("is_premium")
@@ -280,6 +286,7 @@ model MusicTrack {
   @@index([category])
   @@index([language])
   @@index([fileHash])
+  @@index([ownerId, visibility])
   @@map("music_tracks")
 }
 
@@ -295,4 +302,47 @@ model MusicBatchJob {
 
   @@map("music_batch_jobs")
 }
+
+model TemporaryCaregiverPermission {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  parentId              String    @map("parent_id") @db.Uuid
+  caregiverId           String?   @map("caregiver_id") @db.Uuid
+  babyId                String    @map("baby_id") @db.Uuid
+  invitationToken       String?   @unique @map("invitation_token") @db.VarChar(255)
+  invitationTokenHash   String?   @map("invitation_token_hash") @db.VarChar(255)
+  invitationExpiresAt   DateTime? @map("invitation_expires_at") @db.Timestamptz
+  permission            String    @default("LIVE_MONITOR_ONLY") @db.VarChar(50)
+  permissions           Json?     @default("{}")
+  grantedAt             DateTime  @default(now()) @map("granted_at") @db.Timestamptz
+  expiresAt             DateTime  @map("expires_at") @db.Timestamptz
+  acceptedAt            DateTime? @map("accepted_at") @db.Timestamptz
+  revokedAt             DateTime? @map("revoked_at") @db.Timestamptz
+  revokedBy             String?   @map("revoked_by") @db.Uuid
+  status                String    @default("PENDING") @db.VarChar(50) // PENDING, ACTIVE, REVOKED, EXPIRED
+  revoked               Boolean   @default(false)
+
+  // Granular Permission Booleans
+  canViewLiveMonitoring Boolean   @default(true) @map("can_view_live_monitoring")
+  canViewCamera         Boolean   @default(false) @map("can_view_camera")
+  canReceiveAlerts      Boolean   @default(false) @map("can_receive_alerts")
+  canViewTelemetry      Boolean   @default(false) @map("can_view_telemetry")
+  canViewCustomLullabies Boolean  @default(false) @map("can_view_custom_lullabies")
+  canPlayMusic          Boolean   @default(false) @map("can_play_music")
+  canControlCradle      Boolean   @default(false) @map("can_control_cradle")
+  canViewHealthHistory  Boolean   @default(false) @map("can_view_health_history")
+  canUseAI              Boolean   @default(false) @map("can_use_ai")
+
+  lastActiveAt          DateTime? @map("last_active_at") @db.Timestamptz
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  parent    User   @relation("ParentTemporaryPermissions", fields: [parentId], references: [id], onDelete: Cascade)
+  caregiver User?  @relation("CaregiverTemporaryPermissions", fields: [caregiverId], references: [id], onDelete: Cascade)
+  baby      Baby   @relation(fields: [babyId], references: [id], onDelete: Cascade)
+
+  @@index([caregiverId, babyId, status, revoked, expiresAt])
+  @@index([invitationToken])
+  @@map("temporary_caregiver_permissions")
+}
+
 

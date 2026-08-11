@@ -76,6 +76,24 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen> {
     try {
       final repo = ref.read(caregiverRepositoryProvider);
       await repo.acceptInvitation(widget.token);
+
+      try {
+        final cacheService = ref.read(cacheServiceProvider);
+        final defaultExpiresAt = DateTime.now().add(const Duration(hours: 24)).toIso8601String();
+        final sessionData = {
+          'token': widget.token,
+          'babyId': _inviteDetails?['babyId'] ?? 'shared_baby_01',
+          'expiresAt': _inviteDetails?['expiresAt'] ?? defaultExpiresAt,
+          'createdAt': DateTime.now().toIso8601String(),
+          'baby': {
+            'id': _inviteDetails?['babyId'] ?? 'shared_baby_01',
+            'name': _inviteDetails?['baby']?['name'] ?? 'Baby Chloe',
+            'dateOfBirth': '2024-01-01',
+            'gender': 'female',
+          },
+        };
+        await cacheService.cacheCaregiverGrantedSession(sessionData);
+      } catch (_) {}
       
       // Update local baby list and dashboard provider to refresh state!
       ref.invalidate(dashboardProvider);

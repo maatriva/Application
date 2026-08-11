@@ -18,28 +18,73 @@ class QRCodeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 300),
-      child: (isLoading || (qrToken.isEmpty && qrError == null))
-          // Loading state
-          ? const SizedBox(
-              height: 200,
-              width: 200,
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(color: AppColors.primary),
-                    SizedBox(height: 12),
-                    Text(
-                      'Generating QR...',
-                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                    ),
-                  ],
+    if (isLoading) {
+      return const SizedBox(
+        height: 200,
+        width: 200,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: AppColors.primary),
+              SizedBox(height: 12),
+              Text(
+                'Generating QR...',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (qrToken.isEmpty && qrError == null) {
+      return SizedBox(
+        height: 200,
+        width: 200,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.hourglass_top_rounded,
+                  color: AppColors.primary,
+                  size: 38,
                 ),
               ),
-            )
-          : qrError != null && qrToken.isEmpty
+              const SizedBox(height: 12),
+              const Text(
+                'Set Access Duration',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Select duration above (e.g. 30 Mins, 1 Hr) to generate QR code',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      child: qrError != null && qrToken.isEmpty
               // Error state with retry button
               ? SizedBox(
                   height: 200,

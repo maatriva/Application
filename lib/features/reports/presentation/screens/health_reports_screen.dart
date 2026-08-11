@@ -96,20 +96,7 @@ class _HealthReportsScreenState extends ConsumerState<HealthReportsScreen> {
               ),
             ),
       // Integrated Bottom Navigation Bar matching user requirements
-      bottomNavigationBar: BottomNavigation(
-        currentIndex: 2, // Index 2 is Health/Insights tab
-        onTap: (index) {
-          if (index == 0) {
-            context.go('/?tab=0');
-          } else if (index == 1) {
-            context.go('/?tab=1');
-          } else if (index == 2) {
-            // Already on Health Insights screen
-          } else if (index == 3) {
-            context.go('/shop');
-          }
-        },
-      ),
+      bottomNavigationBar: const BottomNavigation(currentIndex: 2),
     );
   }
 

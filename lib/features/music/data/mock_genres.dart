@@ -2,6 +2,14 @@ import '../models/lullaby_genre.dart';
 
 const List<LullabyGenre> mockGenres = [
   LullabyGenre(
+    id: 'custom_parent',
+    name: "Parent's Melody Vault",
+    description: 'Personal lullabies, device gallery music & recordings',
+    emoji: '🎶',
+    colorKey: 'amber',
+    categories: ['Parent Voice', 'Custom', 'Parent Recordings', 'Gallery Songs'],
+  ),
+  LullabyGenre(
     id: 'classic',
     name: 'Classic Lullabies',
     description: 'Timeless melodies that have soothed babies for generations',

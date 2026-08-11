@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maatriva/core/config/app_config.dart';
 import 'package:maatriva/features/caregivers/provider/caregiver_access_provider.dart';
 import 'package:maatriva/domain/repositories/caregiver_repository.dart';
@@ -49,6 +48,52 @@ class MockCaregiverRepository implements CaregiverRepository {
   Future<List<Map<String, dynamic>>> getReceivedInvitations() async {
     return [];
   }
+
+  @override
+  Future<Map<String, dynamic>> grantTemporaryAccess({
+    required String babyId,
+    required String caregiverEmail,
+    required int durationMinutes,
+    String? permission,
+    Map<String, bool>? permissions,
+  }) async {
+    return {
+      'id': 'temp_123',
+      'parentId': 'parent_1',
+      'caregiverId': 'cg_1',
+      'babyId': babyId,
+      'permission': permission ?? 'LIVE_MONITOR_ONLY',
+      'permissions': permissions,
+      'expiresAt': DateTime.now().add(Duration(minutes: durationMinutes)).toIso8601String(),
+      'revoked': false,
+    };
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getActivePermissions() async {
+    return [];
+  }
+
+  @override
+  Future<void> revokeTemporaryPermission(String permissionId) async {}
+
+  @override
+  Future<Map<String, dynamic>> updatePermissions(String permissionId, Map<String, bool> permissions) async {
+    return {'id': permissionId, 'permissions': permissions};
+  }
+
+  @override
+  Future<Map<String, dynamic>> extendAccess(String permissionId, int extensionMinutes) async {
+    return {
+      'id': permissionId,
+      'expiresAt': DateTime.now().add(Duration(minutes: extensionMinutes)).toIso8601String(),
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getCaregiverAccess() async {
+    return null;
+  }
 }
 
 void main() {
@@ -85,6 +130,7 @@ void main() {
       ];
 
       final notifier = CaregiverAccessNotifier(caregiverRepo: mockRepo);
+      await Future.delayed(const Duration(milliseconds: 50));
 
       // Verify default state
       expect(notifier.state.permissions['live_monitoring'], isTrue);

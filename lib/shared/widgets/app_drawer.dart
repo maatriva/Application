@@ -8,6 +8,7 @@ import '../../shared/models/user_session.dart';
 import '../../features/profile/provider/profile_provider.dart';
 import '../../features/authentication/presentation/providers/auth_provider.dart';
 import '../../features/dashboard/presentation/providers/dashboard_provider.dart';
+import '../../features/music/widgets/admin_upload_dialog.dart';
 
 class AppDrawer extends ConsumerWidget {
   const AppDrawer({super.key});
@@ -206,6 +207,9 @@ class AppDrawer extends ConsumerWidget {
     final baby = ref.watch(dashboardProvider.select((s) => s.baby));
     final isCaregiver = authState.session?.role == UserRole.caregiver ||
         baby?.accessLevel == 'LIVE_MONITOR_ONLY';
+    final isAdmin = authState.session?.role == UserRole.admin ||
+        authState.session?.email.toLowerCase() == 'admin@maatriva.com' ||
+        caregiverEmail.toLowerCase() == 'admin@maatriva.com';
 
     return Drawer(
       backgroundColor: AppColors.background,
@@ -308,9 +312,20 @@ class AppDrawer extends ConsumerWidget {
                   label: 'Online Music Soother',
                   onTap: () {
                     Navigator.pop(context);
-                    context.push('/music');
+                    context.go('/music');
                   },
                 ),
+                if (isAdmin)
+                  _buildDrawerTile(
+                    context,
+                    icon: Icons.cloud_upload_rounded,
+                    label: 'Admin: Upload Music & ZIP',
+                    iconColor: const Color(0xFF6C5CE7),
+                    onTap: () {
+                      Navigator.pop(context);
+                      showAdminUploadDialog(context, ref);
+                    },
+                  ),
 
                 const Divider(height: 24, color: AppColors.divider),
 
@@ -369,7 +384,7 @@ class AppDrawer extends ConsumerWidget {
                       return;
                     }
                     Navigator.pop(context);
-                    context.push('/predictive-health');
+                    context.go('/predictive-health');
                   },
                 ),
                 _buildDrawerTile(
@@ -397,7 +412,7 @@ class AppDrawer extends ConsumerWidget {
                       return;
                     }
                     Navigator.pop(context);
-                    context.push('/shop');
+                    context.go('/shop');
                   },
                 ),
                 _buildDrawerTile(
@@ -411,7 +426,15 @@ class AppDrawer extends ConsumerWidget {
                       return;
                     }
                     Navigator.pop(context);
-                    context.push('/join-shared-baby');
+                    final authState = ref.read(authNotifierProvider);
+                    if (authState.status != AuthStatus.authenticated) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Authentication required. Please log in / authorize first to scan QR code.')),
+                      );
+                      context.push('/login');
+                    } else {
+                      context.push('/join-shared-baby');
+                    }
                   },
                 ),
 

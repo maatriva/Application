@@ -16,6 +16,8 @@ class MusicPlayerScreen extends ConsumerStatefulWidget {
 class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _rotationController;
+  double? _dragValue;
+  bool _isDragging = false;
 
   @override
   void initState() {
@@ -81,11 +83,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       backgroundColor: AppColors.background,
       body: Container(
         decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFFAF8FE), Color(0xFFF3EDFA)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
+          gradient: AppColors.backgroundGradient,
         ),
         child: SafeArea(
           child: Column(
@@ -318,53 +316,77 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                         ),
 
                       // Slider & Time display
-                      Column(
-                        children: [
-                          SliderTheme(
-                            data: SliderTheme.of(context).copyWith(
-                              activeTrackColor: AppColors.primary,
-                              inactiveTrackColor: AppColors.divider,
-                              trackHeight: 4,
-                              thumbColor: AppColors.primary,
-                              thumbShape: const RoundSliderThumbShape(
-                                enabledThumbRadius: 6,
-                              ),
-                              overlayColor: AppColors.primary.withOpacity(0.1),
-                              overlayShape: const RoundSliderOverlayShape(
-                                overlayRadius: 14,
-                              ),
-                            ),
-                            child: Slider(
-                              value: currentSeconds.toDouble().clamp(
-                                0.0,
-                                totalSeconds.toDouble(),
-                              ),
-                              min: 0,
-                              max: totalSeconds.toDouble(),
-                              onChanged: (value) {
-                                ref
-                                    .read(musicProvider.notifier)
-                                    .seek(Duration(seconds: value.toInt()));
-                              },
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  _formatDuration(musicState.currentPosition),
-                                  style: AppTypography.labelSmall,
+                      Builder(
+                        builder: (context) {
+                          final maxDurationVal = totalSeconds > 0 ? totalSeconds.toDouble() : 1.0;
+                          final currentVal = _isDragging && _dragValue != null
+                              ? _dragValue!
+                              : currentSeconds.toDouble();
+                          final clampedVal = currentVal.clamp(0.0, maxDurationVal);
+
+                          return Column(
+                            children: [
+                              SliderTheme(
+                                data: SliderTheme.of(context).copyWith(
+                                  activeTrackColor: AppColors.primary,
+                                  inactiveTrackColor: AppColors.divider,
+                                  trackHeight: 4,
+                                  thumbColor: AppColors.primary,
+                                  thumbShape: const RoundSliderThumbShape(
+                                    enabledThumbRadius: 6,
+                                  ),
+                                  overlayColor: AppColors.primary.withOpacity(0.1),
+                                  overlayShape: const RoundSliderOverlayShape(
+                                    overlayRadius: 14,
+                                  ),
                                 ),
-                                Text(
-                                  _formatDuration(currentSong.duration),
-                                  style: AppTypography.labelSmall,
+                                child: Slider(
+                                  value: clampedVal,
+                                  min: 0,
+                                  max: maxDurationVal,
+                                  onChangeStart: (val) {
+                                    setState(() {
+                                      _isDragging = true;
+                                      _dragValue = val;
+                                    });
+                                  },
+                                  onChanged: (val) {
+                                    setState(() {
+                                      _dragValue = val;
+                                    });
+                                    ref
+                                        .read(musicProvider.notifier)
+                                        .seek(Duration(seconds: val.round()));
+                                  },
+                                  onChangeEnd: (val) {
+                                    final targetDuration = Duration(seconds: val.round());
+                                    ref.read(musicProvider.notifier).seek(targetDuration);
+                                    setState(() {
+                                      _isDragging = false;
+                                      _dragValue = null;
+                                    });
+                                  },
                                 ),
-                              ],
-                            ),
-                          ),
-                        ],
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      _formatDuration(Duration(seconds: clampedVal.toInt())),
+                                      style: AppTypography.labelSmall,
+                                    ),
+                                    Text(
+                                      _formatDuration(currentSong.duration),
+                                      style: AppTypography.labelSmall,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                       const SizedBox(height: 24),
 

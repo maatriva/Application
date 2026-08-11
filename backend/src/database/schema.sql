@@ -125,6 +125,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 -- 10. Music Tracks Table
 CREATE TABLE IF NOT EXISTS music_tracks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    baby_id UUID REFERENCES babies(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     category VARCHAR(100) NOT NULL DEFAULT 'Lullabies',
     language VARCHAR(100) NOT NULL DEFAULT 'English',
@@ -137,6 +139,7 @@ CREATE TABLE IF NOT EXISTS music_tracks (
     storage_url TEXT NOT NULL,
     file_hash VARCHAR(64),
     thumbnail TEXT,
+    visibility VARCHAR(50) NOT NULL DEFAULT 'PRIVATE', -- 'PRIVATE', 'SHARED_WITH_CAREGIVERS', 'PUBLIC_LIBRARY'
     uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     uploaded_by UUID REFERENCES users(id) ON DELETE SET NULL,
     is_premium BOOLEAN NOT NULL DEFAULT FALSE,
@@ -150,6 +153,7 @@ CREATE TABLE IF NOT EXISTS music_tracks (
 CREATE INDEX IF NOT EXISTS idx_music_category ON music_tracks(category);
 CREATE INDEX IF NOT EXISTS idx_music_language ON music_tracks(language);
 CREATE INDEX IF NOT EXISTS idx_music_file_hash ON music_tracks(file_hash);
+CREATE INDEX IF NOT EXISTS idx_music_owner_vis ON music_tracks(owner_id, visibility);
 
 -- 11. Music Batch Jobs Table
 CREATE TABLE IF NOT EXISTS music_batch_jobs (
@@ -162,4 +166,20 @@ CREATE TABLE IF NOT EXISTS music_batch_jobs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- 12. Temporary Caregiver Permissions Table
+CREATE TABLE IF NOT EXISTS temporary_caregiver_permissions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    parent_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    caregiver_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    baby_id UUID NOT NULL REFERENCES babies(id) ON DELETE CASCADE,
+    permission VARCHAR(50) NOT NULL DEFAULT 'LIVE_MONITOR_ONLY',
+    permissions JSONB DEFAULT '{}'::jsonb,
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_temp_caregiver_perm ON temporary_caregiver_permissions (caregiver_id, baby_id, revoked, expires_at);
 

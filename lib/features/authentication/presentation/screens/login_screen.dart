@@ -274,10 +274,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(28.r),
                   border: Border.all(
-                    color: AppColors.primary.withOpacity(0.08),
-                    width: 1.5,
+                    color: AppColors.softTeal.withValues(alpha: 0.35),
+                    width: 1.2,
                   ),
-                  boxShadow: AppColors.softShadow,
+                  boxShadow: AppColors.clayShadow,
                 ),
                 child: Form(
                   key: _formKey,

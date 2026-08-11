@@ -33,8 +33,13 @@ class QuickActionButton extends StatelessWidget {
                 width: iconContainerSize,
                 height: iconContainerSize,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.08),
+                  color: Colors.white,
                   shape: BoxShape.circle,
+                  boxShadow: AppColors.clayShadow,
+                  border: Border.all(
+                    color: AppColors.softTeal.withValues(alpha: 0.35),
+                    width: 1,
+                  ),
                 ),
                 child: Icon(icon, color: AppColors.primary, size: iconSize),
               ),

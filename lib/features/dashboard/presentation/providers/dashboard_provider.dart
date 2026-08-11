@@ -77,7 +77,9 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
 
   StreamSubscription? _telemetrySubscription;
   StreamSubscription? _deviceStatusSubscription;
+  StreamSubscription? _caregiverRevokedSubscription;
   Timer? _heartbeatTimer;
+  Timer? _sessionExpiryTimer;
   static const Duration _heartbeatTimeout = Duration(seconds: 15);
 
   DashboardNotifier({
@@ -98,6 +100,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         super(DashboardState.initial()) {
     loadDashboard();
     _subscribeToStreams();
+    _startSessionExpiryCheck();
   }
 
   void _resetHeartbeatTimer() {
@@ -112,6 +115,35 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       }
     });
   }
+
+  void _startSessionExpiryCheck() {
+    _sessionExpiryTimer?.cancel();
+    _sessionExpiryTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+      final session = _cacheService.getCaregiverGrantedSession();
+      if (session != null) {
+        final expiresAtStr = session['expiresAt'] as String?;
+        if (expiresAtStr != null) {
+          final expiresAt = DateTime.tryParse(expiresAtStr);
+          if (expiresAt != null && DateTime.now().isAfter(expiresAt)) {
+            if (kDebugMode) {
+              print('[DashboardNotifier] Active caregiver session time expired. Clearing access.');
+            }
+            await _cacheService.clearCaregiverGrantedSession();
+            await _cacheService.sharedPreferences.remove('maatriva_cache_selected_baby');
+            await _cacheService.sharedPreferences.remove('maatriva_cache_selected_baby_id');
+            state = state.copyWith(
+              baby: null,
+              errorMessage: 'Caregiver access time granted by parent has expired.',
+            );
+          }
+        }
+      }
+    });
+  }
+
+  StreamSubscription? _caregiverGrantedSubscription;
+  StreamSubscription? _caregiverPermissionsUpdatedSubscription;
+  StreamSubscription? _caregiverExtendedSubscription;
 
   void _subscribeToStreams() {
     _telemetrySubscription = _iotRepo.telemetryStateStream.listen((telemetryMap) {
@@ -152,13 +184,66 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         state = state.copyWith(device: updatedDevice);
       }
     });
+
+    _caregiverRevokedSubscription = _wsService.caregiverRevokedStream.listen((msg) async {
+      if (kDebugMode) {
+        print('[DashboardNotifier] Caregiver access revoked by parent: $msg');
+      }
+      await clearCaregiverStateAndShowScanQR(msg);
+    });
+
+    _caregiverGrantedSubscription = _wsService.caregiverGrantedStream.listen((data) async {
+      if (kDebugMode) {
+        print('[DashboardNotifier] Caregiver access granted event received: $data');
+      }
+      await loadDashboard(isRefreshing: true);
+    });
+
+    _caregiverPermissionsUpdatedSubscription = _wsService.caregiverPermissionsUpdatedStream.listen((data) async {
+      if (kDebugMode) {
+        print('[DashboardNotifier] Caregiver permissions updated event received: $data');
+      }
+      await loadDashboard(isRefreshing: true);
+    });
+
+    _caregiverExtendedSubscription = _wsService.caregiverExtendedStream.listen((data) async {
+      if (kDebugMode) {
+        print('[DashboardNotifier] Caregiver access extended event received: $data');
+      }
+      await loadDashboard(isRefreshing: true);
+    });
+  }
+
+  Future<void> clearCaregiverStateAndShowScanQR([String? msg]) async {
+    if (kDebugMode) {
+      print('[DashboardNotifier] Clearing all caregiver state and resetting to Scan QR mode: $msg');
+    }
+    await _cacheService.clearCaregiverGrantedSession();
+    await _cacheService.sharedPreferences.remove('maatriva_cache_selected_baby');
+    await _cacheService.sharedPreferences.remove('maatriva_cache_selected_baby_id');
+    await _cacheService.sharedPreferences.remove('maatriva_cache_selected_baby_name');
+    _telemetrySubscription?.cancel();
+    _wsService.setSelectedBaby('');
+    state = DashboardState(
+      isLoading: false,
+      profile: state.profile,
+      baby: null,
+      device: null,
+      latestTelemetry: null,
+      errorMessage: msg,
+    );
   }
 
   @override
   void dispose() {
     _telemetrySubscription?.cancel();
     _deviceStatusSubscription?.cancel();
+    _caregiverRevokedSubscription?.cancel();
+    _caregiverGrantedSubscription?.cancel();
+    _caregiverPermissionsUpdatedSubscription?.cancel();
+    _caregiverExtendedSubscription?.cancel();
     _heartbeatTimer?.cancel();
+    _sessionExpiryTimer?.cancel();
     super.dispose();
   }
 
@@ -176,20 +261,31 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         final token = data['token'] as String?;
         if (token != null) {
           final resolvedServer = ApiConfig.resolveServerUrl(server);
-          print('[DEBUG] Scanned QR code. Accessing token from resolved server: $resolvedServer');
-          _apiClient.setBaseUrl(resolvedServer);
+          final candidateServers = <String>{
+            resolvedServer,
+            ApiConfig.baseUrl,
+            if (defaultTargetPlatform == TargetPlatform.android) 'http://10.0.2.2:3000',
+            'http://localhost:3000',
+            ApiConfig.prodBaseUrl,
+            ApiConfig.stagingBaseUrl,
+          }.where((s) => s.trim().isNotEmpty).toList();
 
-          print('[DEBUG] Sending accept invitation request to backend...');
-          await _apiClient.post(
-            '/caregivers/accept',
-            body: {'token': token},
-          );
-
-          print('[DEBUG] Invitation accepted on backend. Success response received.');
-          print('[DEBUG] Permission assigned: LIVE_MONITOR_ONLY');
-
-          // Clear cache
-          await prefs.remove('pending_qr_join_data');
+          print('[DEBUG] Auto-resuming QR join with candidate servers: $candidateServers');
+          for (final candidateUrl in candidateServers) {
+            try {
+              _apiClient.setBaseUrl(candidateUrl);
+              await _apiClient.post(
+                '/caregivers/accept',
+                body: {'token': token},
+              );
+              print('[DEBUG] Auto-resume invitation ACCEPTED on server: $candidateUrl');
+              ApiConfig.setCustomBaseUrl(candidateUrl);
+              await prefs.remove('pending_qr_join_data');
+              break;
+            } catch (e) {
+              print('[DEBUG] Auto-resume candidate server $candidateUrl failed: $e');
+            }
+          }
         }
       } catch (e) {
         print('[DEBUG] Auto-resume join failed: $e');
@@ -253,13 +349,88 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     }
 
     BabyProfile? baby;
+    String? babyFetchError;
     try {
       final babies = await _babyRepo.getBabies();
-      baby = babies.isNotEmpty ? babies.first : null;
-      if (baby != null) {
+      if (babies.isNotEmpty) {
+        baby = babies.first;
         _wsService.setSelectedBaby(baby.id);
         await _cacheService.cacheSelectedBaby(baby.toJson());
         await _cacheService.cacheSelectedBabyId(baby.id);
+      } else {
+        // Check if there is an active Caregiver Granted Session with remaining time
+        final caregiverSession = _cacheService.getCaregiverGrantedSession();
+        if (caregiverSession != null) {
+          final expiresAtStr = caregiverSession['expiresAt'] as String?;
+          bool isExpired = false;
+          if (expiresAtStr != null) {
+            final expiresAt = DateTime.tryParse(expiresAtStr);
+            if (expiresAt != null && DateTime.now().isAfter(expiresAt)) {
+              isExpired = true;
+            }
+          }
+
+          if (isExpired) {
+            if (kDebugMode) {
+              print('[DashboardNotifier] Caregiver session has EXPIRED. Clearing access.');
+            }
+            await _cacheService.clearCaregiverGrantedSession();
+            baby = null;
+            await _cacheService.sharedPreferences.remove('maatriva_cache_selected_baby');
+            await _cacheService.sharedPreferences.remove('maatriva_cache_selected_baby_id');
+          } else {
+            if (kDebugMode) {
+              print('[DashboardNotifier] Active caregiver session found with remaining time! Auto-selecting shared baby.');
+            }
+            final realBabyId = (caregiverSession['babyId'] as String?) ??
+                (caregiverSession['baby']?['id'] as String?);
+            final babyMap = caregiverSession['baby'] as Map<String, dynamic>? ?? {
+              'id': realBabyId ?? 'shared_baby_01',
+              'name': caregiverSession['babyName'] ?? 'Shared Baby',
+              'dateOfBirth': '2024-01-01',
+              'gender': 'female',
+            };
+            baby = BabyProfile.fromJson(babyMap);
+            _wsService.setSelectedBaby(baby.id);
+            await _cacheService.cacheSelectedBaby(baby.toJson());
+            await _cacheService.cacheSelectedBabyId(baby.id);
+          }
+        } else {
+          // Fallback: Query backend for active caregiver permissions directly
+          try {
+            final activePermsRes = await _apiClient.get('/caregivers/active-permissions');
+            if (activePermsRes != null && activePermsRes['data'] != null && (activePermsRes['data'] as List).isNotEmpty) {
+              final activePerm = (activePermsRes['data'] as List).first;
+              final realBabyId = (activePerm['babyId'] as String?) ??
+                  (activePerm['baby']?['id'] as String?);
+              final babyMap = activePerm['baby'] as Map<String, dynamic>? ?? {
+                'id': realBabyId ?? 'shared_baby_01',
+                'name': activePerm['babyName'] ?? 'Shared Baby',
+                'dateOfBirth': '2024-01-01',
+                'gender': 'female',
+              };
+              baby = BabyProfile.fromJson(babyMap);
+              _wsService.setSelectedBaby(baby.id);
+              await _cacheService.cacheSelectedBaby(baby.toJson());
+              await _cacheService.cacheSelectedBabyId(baby.id);
+
+              await _cacheService.cacheCaregiverGrantedSession({
+                'babyId': baby.id,
+                'expiresAt': activePerm['expiresAt'],
+                'permissions': activePerm['permissions'] ?? {'live_monitoring': true},
+                'baby': babyMap,
+              });
+            } else {
+              baby = null;
+              await _cacheService.sharedPreferences.remove('maatriva_cache_selected_baby');
+              await _cacheService.sharedPreferences.remove('maatriva_cache_selected_baby_id');
+            }
+          } catch (_) {
+            baby = null;
+            await _cacheService.sharedPreferences.remove('maatriva_cache_selected_baby');
+            await _cacheService.sharedPreferences.remove('maatriva_cache_selected_baby_id');
+          }
+        }
       }
     } catch (e) {
       if (kDebugMode) {
@@ -268,6 +439,8 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       final cachedMap = _cacheService.getCachedSelectedBaby();
       if (cachedMap != null) {
         baby = BabyProfile.fromJson(cachedMap);
+      } else {
+        babyFetchError = 'Unable to fetch baby profile from server. Please check your network connection.';
       }
     }
 
@@ -289,11 +462,13 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     }
 
     final finalProfile = profile ?? state.profile;
-    final finalBaby = baby ?? state.baby;
-    final finalDevice = device ?? state.device;
-    final finalTelemetry = telemetryMap ?? state.latestTelemetry;
+    final hasCaregiverSession = _cacheService.getCaregiverGrantedSession() != null;
+    final finalBaby = (baby == null && !hasCaregiverSession)
+        ? null
+        : (baby ?? state.baby);
+    final finalDevice = finalBaby == null ? null : (device ?? state.device);
+    final finalTelemetry = finalBaby == null ? null : (telemetryMap ?? state.latestTelemetry);
 
-    // Only set an overall error if we literally failed to fetch both profile AND baby and have no state
     final hasNoDataAtAll = finalProfile == null && finalBaby == null;
 
     state = DashboardState(
@@ -302,9 +477,9 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       baby: finalBaby,
       device: finalDevice,
       latestTelemetry: finalTelemetry,
-      errorMessage: hasNoDataAtAll
+      errorMessage: babyFetchError ?? ((hasNoDataAtAll && hasCaregiverSession)
           ? 'Unable to connect to server. Please check your network connection.'
-          : null,
+          : null),
     );
 
     if (finalDevice != null &&

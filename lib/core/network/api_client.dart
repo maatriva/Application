@@ -34,9 +34,10 @@ class RefreshTokenInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
+    final responseBody = err.response?.data.toString().toLowerCase() ?? '';
     final isAuthError = err.response?.statusCode == 401 ||
         (err.response?.statusCode == 403 &&
-            err.response?.data.toString().contains('expired') == true);
+            (responseBody.contains('token expired') || responseBody.contains('jwt')));
 
     if (isAuthError) {
       final requestOptions = err.requestOptions;
@@ -191,26 +192,55 @@ class ApiClient {
       _backendInitialized = true;
       return;
     }
-    int attempts = 0;
-    while (attempts < 3) {
+
+    try {
+      final response = await _dio.get(
+        '/health',
+        options: Options(extra: {'requireAuth': false}),
+      );
+      if (response.statusCode == 200) {
+        _backendInitialized = true;
+        return;
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Network] Primary backend health check failed at ${_dio.options.baseUrl}: $e');
+      }
+    }
+
+    // Auto-discover working endpoint among local development candidates (USB debugging / Emulator / LAN)
+    final currentBase = _dio.options.baseUrl;
+    final candidates = <String>{
+      ApiConfig.baseUrl,
+      'http://192.168.1.33:3000',
+      'http://127.0.0.1:3000',
+      'http://10.0.2.2:3000',
+      'http://localhost:3000',
+    }.where((s) => s.trim().isNotEmpty).toList();
+
+    for (final candidate in candidates) {
+      if (candidate == currentBase) continue;
       try {
-        final response = await _dio.get(
-          '/health',
-          options: Options(extra: {'requireAuth': false}),
-        );
-        if (response.statusCode == 200) {
+        if (kDebugMode) {
+          debugPrint('[Network] Attempting fallback health check at $candidate...');
+        }
+        final testDio = Dio(BaseOptions(
+          baseUrl: candidate,
+          connectTimeout: const Duration(milliseconds: 1500),
+          receiveTimeout: const Duration(milliseconds: 1500),
+        ));
+        final res = await testDio.get('/health');
+        if (res.statusCode == 200) {
+          debugPrint('[Network] ✓ Discovered reachable backend server at $candidate!');
+          setBaseUrl(candidate);
+          ApiConfig.setCustomBaseUrl(candidate);
           _backendInitialized = true;
           return;
         }
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('Backend health check attempt ${attempts + 1} failed: $e');
-        }
-      }
-      attempts++;
-      await Future.delayed(const Duration(milliseconds: 500));
+      } catch (_) {}
     }
-    _backendInitialized = true; // Mark initialized to avoid blocking auth calls
+
+    _backendInitialized = true; // Mark initialized to avoid blocking auth calls permanently
   }
 
   Future<dynamic> get(
@@ -219,7 +249,7 @@ class ApiClient {
     Map<String, dynamic>? queryParameters,
   }) async {
     try {
-      if (path != '/health' && !path.startsWith('/auth/')) {
+      if (path != '/health') {
         await ensureBackendReady();
       }
       final response = await _dio.get(
@@ -239,7 +269,7 @@ class ApiClient {
     bool requireAuth = true,
   }) async {
     try {
-      if (path != '/health' && !path.startsWith('/auth/')) {
+      if (path != '/health') {
         await ensureBackendReady();
       }
       final response = await _dio.post(
@@ -312,6 +342,12 @@ class ApiClient {
   }
 
   Exception _handleDioError(DioException err) {
+    if (err.type == DioExceptionType.connectionError ||
+        err.type == DioExceptionType.connectionTimeout ||
+        err.error.toString().contains('SocketException') ||
+        err.error.toString().contains('Connection refused')) {
+      _backendInitialized = false; // Reset so next request re-discovers active backend server
+    }
     if (kDebugMode) {
       debugPrint('ApiClient._handleDioError: type=${err.type}, message=${err.message}');
     }

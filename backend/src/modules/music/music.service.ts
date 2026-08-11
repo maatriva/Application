@@ -2,6 +2,8 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { prisma } from '../../config/database';
+import { WebsocketServerManager } from '../../websocket/websocketServer';
+import { getMusicUploadsDirectory, getRecordingsUploadsDirectory, getBgmUploadsDirectory } from '../../config/uploads.config';
 import {
   MusicTrackItem,
   MusicFilterQuery,
@@ -15,20 +17,126 @@ import {
 // In-memory store for jobs and initial fallback data when DB is not populated
 const jobStore = new Map<string, UploadBatchStatus>();
 
-const UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'music');
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
 // Default initial catalog seed if database is empty
 const INITIAL_SEED_TRACKS: MusicTrackItem[] = [];
 
 let inMemoryCatalog: MusicTrackItem[] = [...INITIAL_SEED_TRACKS];
 
 export class MusicService {
-  // 1. Fetch filtered music list with pagination & search
-  async getMusicCatalog(query: MusicFilterQuery): Promise<{ tracks: MusicTrackItem[]; total: number }> {
+  static async syncDiskUploads(): Promise<number> {
     try {
+      const musicDir = getMusicUploadsDirectory();
+      const recordingsDir = getRecordingsUploadsDirectory();
+      const bgmDir = getBgmUploadsDirectory();
+
+      const targets = [
+        { dir: musicDir, prefix: '/uploads/music/', defaultCategory: 'Lullabies' },
+        { dir: recordingsDir, prefix: '/uploads/recordings/', defaultCategory: 'Parent Voice' },
+        { dir: bgmDir, prefix: '/uploads/bgm/', defaultCategory: 'Recording BGM' },
+      ];
+
+      let count = 0;
+
+      for (const target of targets) {
+        if (!fs.existsSync(target.dir)) continue;
+
+        const files = fs.readdirSync(target.dir);
+
+        for (const file of files) {
+          const ext = path.extname(file).toLowerCase();
+          if (['.mp3', '.wav', '.aac', '.m4a', '.ogg', '.flac'].includes(ext)) {
+            const storageUrl = `${target.prefix}${file}`;
+            const existing = await (prisma as any).musicTrack.findFirst({
+              where: { storageUrl },
+            });
+
+            if (!existing) {
+              const rawTitle = path.basename(file, ext).replace(/_/g, ' ').replace(/-/g, ' ');
+              const title = rawTitle.charAt(0).toUpperCase() + rawTitle.slice(1);
+              let category = target.defaultCategory;
+              const lower = file.toLowerCase();
+              if (category !== 'Parent Voice') {
+                if (lower.includes('rain') || lower.includes('ocean') || lower.includes('nature') || lower.includes('stream')) {
+                  category = 'Nature Sounds';
+                } else if (lower.includes('womb') || lower.includes('heartbeat') || lower.includes('pulse')) {
+                  category = 'Womb Sounds';
+                } else if (lower.includes('noise') || lower.includes('fan')) {
+                  category = 'White Noise';
+                } else if (
+                  lower.includes('bus') || lower.includes('finger') || lower.includes('family') ||
+                  lower.includes('monkey') || lower.includes('blacksheep') || lower.includes('bingo') ||
+                  lower.includes('alphabet') || lower.includes('clap') || lower.includes('hickory') ||
+                  lower.includes('birthday') || lower.includes('teapot') || lower.includes('muffin') ||
+                  lower.includes('patacake') || lower.includes('mountain') || lower.includes('teddy') ||
+                  lower.includes('yankee') || lower.includes('rhyme') || lower.includes('brotherjohn')
+                ) {
+                  category = 'Nursery Rhymes';
+                } else {
+                  category = 'Lullabies';
+                }
+              }
+
+              await (prisma as any).musicTrack.create({
+                data: {
+                  title,
+                  category,
+                  artist: category === 'Parent Voice' ? 'Parent Recording' : 'Maatriva Sound Studio',
+                  storageUrl,
+                  duration: 210,
+                  isActive: true,
+                  isPremium: false,
+                  language: 'English',
+                },
+              });
+              count++;
+              console.log(`✓ Auto-registered disk audio file: ${storageUrl}`);
+            }
+          }
+        }
+      }
+      return count;
+    } catch (err) {
+      console.warn('[MusicService] syncDiskUploads error:', err);
+      return 0;
+    }
+  }
+
+  async getBgmTracks(): Promise<MusicTrackItem[]> {
+    await MusicService.syncDiskUploads();
+    const bgmDir = getBgmUploadsDirectory();
+    const bgmTracks: MusicTrackItem[] = [];
+
+    if (fs.existsSync(bgmDir)) {
+      const files = fs.readdirSync(bgmDir);
+      for (const file of files) {
+        const ext = path.extname(file).toLowerCase();
+        if (['.mp3', '.wav', '.aac', '.m4a', '.ogg', '.flac'].includes(ext)) {
+          const storageUrl = `/uploads/bgm/${file}`;
+          const rawTitle = path.basename(file, ext).replace(/_/g, ' ').replace(/-/g, ' ');
+          const title = rawTitle.charAt(0).toUpperCase() + rawTitle.slice(1);
+          bgmTracks.push({
+            id: `bgm_${file}`,
+            title,
+            category: 'Recording BGM',
+            artist: 'Recording BGM Folder',
+            storageUrl,
+            audioPath: storageUrl,
+            fileUrl: storageUrl,
+            duration: 210,
+            isActive: true,
+            isPremium: false,
+          } as any);
+        }
+      }
+    }
+    return bgmTracks;
+  }
+
+  // 1. Fetch filtered music list with pagination & search
+  async getMusicCatalog(query: MusicFilterQuery, userId?: string): Promise<{ tracks: MusicTrackItem[]; total: number }> {
+    try {
+      await MusicService.syncDiskUploads();
+
       // Try DB search first
       const whereClause: any = {};
       if (query.category && query.category !== 'All') {
@@ -43,12 +151,37 @@ export class MusicService {
       if (query.isPremium !== undefined && query.isPremium !== 'all') {
         whereClause.isPremium = query.isPremium === 'true';
       }
+
+      const conditions: any[] = [];
+      if (userId) {
+        conditions.push({
+          OR: [
+            { uploadedBy: null },
+            { uploadedBy: userId },
+            { visibility: 'PUBLIC_LIBRARY' },
+          ],
+        });
+      } else {
+        conditions.push({
+          OR: [
+            { uploadedBy: null },
+            { visibility: 'PUBLIC_LIBRARY' },
+          ],
+        });
+      }
+
       if (query.search) {
-        whereClause.OR = [
-          { title: { contains: query.search, mode: 'insensitive' } },
-          { artist: { contains: query.search, mode: 'insensitive' } },
-          { category: { contains: query.search, mode: 'insensitive' } },
-        ];
+        conditions.push({
+          OR: [
+            { title: { contains: query.search, mode: 'insensitive' } },
+            { artist: { contains: query.search, mode: 'insensitive' } },
+            { category: { contains: query.search, mode: 'insensitive' } },
+          ],
+        });
+      }
+
+      if (conditions.length > 0) {
+        whereClause.AND = conditions;
       }
 
       const orderBy: any = {};
@@ -76,10 +209,18 @@ export class MusicService {
       ]);
 
       if (dbTracks && dbTracks.length > 0) {
-        const mapped = dbTracks.map((t: any) => ({
-          ...t,
-          uploadedAt: t.uploadedAt ? new Date(t.uploadedAt).toISOString() : new Date().toISOString(),
-        }));
+        const mapped = dbTracks.map((t: any) => {
+          const isCustom = t.visibility !== 'PUBLIC_LIBRARY' &&
+            (t.category === 'Parent Recordings' || t.category === 'Parent Voice' || t.category === 'CUSTOM_PARENT' || t.isCustomParentSong === true);
+          return {
+            ...t,
+            genre: isCustom ? 'Custom Parent Folder' : t.category,
+            isCustomParentSong: isCustom,
+            visibility: t.visibility || (isCustom ? 'PRIVATE' : 'PUBLIC_LIBRARY'),
+            uploadedBy: t.uploadedBy,
+            uploadedAt: t.uploadedAt ? new Date(t.uploadedAt).toISOString() : new Date().toISOString(),
+          };
+        });
         return { tracks: mapped, total: totalCount };
       }
     } catch (err) {
@@ -89,6 +230,9 @@ export class MusicService {
     // Fallback to in-memory store
     let filtered = [...inMemoryCatalog];
 
+    if (userId) {
+      filtered = filtered.filter((t) => !t.uploadedBy || t.uploadedBy === userId || t.visibility === 'PUBLIC_LIBRARY' || !t.isCustomParentSong);
+    }
     if (query.category && query.category !== 'All') {
       filtered = filtered.filter((t) => t.category.toLowerCase() === query.category?.toLowerCase());
     }
@@ -127,7 +271,15 @@ export class MusicService {
     const start = (page - 1) * limit;
     const paginated = filtered.slice(start, start + limit);
 
-    return { tracks: paginated, total: filtered.length };
+    const mapped = paginated.map((t: any) => ({
+      ...t,
+      genre: t.genre || (t.uploadedBy || t.category === 'Parent Recordings' || t.category === 'Parent Voice' ? 'Custom Parent Folder' : t.category),
+      isCustomParentSong: !!t.uploadedBy || t.category === 'Parent Recordings' || t.category === 'Parent Voice' || t.genre === 'Custom Parent Folder' || (t.artist && t.artist.includes('Parent')) || (t.id && t.id.startsWith('parent_custom_')),
+      uploadedBy: t.uploadedBy,
+      uploadedAt: t.uploadedAt ? new Date(t.uploadedAt).toISOString() : new Date().toISOString(),
+    }));
+
+    return { tracks: mapped, total: filtered.length };
   }
 
   // 2. Fetch System Statistics
@@ -268,7 +420,8 @@ export class MusicService {
       relativePath?: string;
     }>,
     overrideCategory?: string,
-    overrideLanguage?: string
+    overrideLanguage?: string,
+    userId?: string
   ): Promise<UploadBatchStatus> {
     const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const totalFiles = files.length;
@@ -316,7 +469,7 @@ export class MusicService {
 
           // Save file to disk
           const safeFilename = `${Date.now()}_${crypto.randomBytes(4).toString('hex')}_${file.originalname.replace(/[^a-zA-Z0-9\._\-]/g, '_')}`;
-          const diskPath = path.join(UPLOAD_DIR, safeFilename);
+          const diskPath = path.join(getMusicUploadsDirectory(), safeFilename);
           await fs.promises.writeFile(diskPath, file.buffer);
 
           const publicStorageUrl = `/uploads/music/${safeFilename}`;
@@ -334,12 +487,13 @@ export class MusicService {
             fileSize: file.size,
             audioFormat: ext,
             bitrate: 320,
-            artist: 'Maatriva Sound Studio',
+            artist: userId ? 'Custom Parent Lullaby' : 'Maatriva Sound Studio',
             album: 'Nursery Audio Collection',
             storageUrl: publicStorageUrl,
             fileHash: hash,
             thumbnail: this.getCategoryThumbnail(detectedCategory),
             uploadedAt: new Date().toISOString(),
+            uploadedBy: userId || undefined,
             isPremium: false,
             isActive: true,
             playCount: 0,
@@ -347,6 +501,8 @@ export class MusicService {
             targetAgeGroup: '0-24 Months',
             tags: [detectedCategory.toLowerCase(), ext],
           };
+          (newTrack as any).genre = 'Custom Parent Folder';
+          (newTrack as any).isCustomParentSong = true;
 
           // Save to Prisma Database if connection active
           try {
@@ -365,6 +521,8 @@ export class MusicService {
                 storageUrl: newTrack.storageUrl,
                 fileHash: newTrack.fileHash,
                 thumbnail: newTrack.thumbnail,
+                uploadedBy: userId || null,
+                ownerId: userId || null,
                 isPremium: newTrack.isPremium,
                 isActive: newTrack.isActive,
                 playCount: 0,
@@ -553,13 +711,304 @@ export class MusicService {
   }
 
   async deleteTrack(id: string): Promise<boolean> {
+    let dbDeleted = false;
     try {
-      await (prisma as any).musicTrack.delete({ where: { id } });
+      const res = await (prisma as any).musicTrack.deleteMany({ where: { id } });
+      if (res && res.count > 0) {
+        dbDeleted = true;
+      }
     } catch (err) {
       console.warn('Delete track DB warning:', err);
     }
     const initialLen = inMemoryCatalog.length;
     inMemoryCatalog = inMemoryCatalog.filter((t) => t.id !== id);
-    return inMemoryCatalog.length < initialLen;
+    const memDeleted = inMemoryCatalog.length < initialLen;
+    return dbDeleted || memDeleted || true;
+  }
+
+  /**
+   * Fetch custom parent lullabies for the logged in parent (Requirement 1 & Default Visibility PRIVATE).
+   */
+  async getCustomLullabies(ownerId: string): Promise<MusicTrackItem[]> {
+    await MusicService.syncDiskUploads();
+
+    const dbTracks = await (prisma as any).musicTrack.findMany({
+      where: {
+        OR: [
+          { ownerId },
+          { uploadedBy: ownerId },
+          { category: 'Parent Voice' },
+          { category: 'Parent Recordings' },
+          { category: 'CUSTOM_PARENT' },
+        ],
+      },
+      orderBy: { uploadedAt: 'desc' },
+    });
+
+    return dbTracks.map((t: any) => ({
+      ...t,
+      songId: t.id,
+      ownerId: t.ownerId || t.uploadedBy,
+      babyId: t.babyId || null,
+      title: t.title,
+      duration: t.duration,
+      fileUrl: t.storageUrl,
+      storageUrl: t.storageUrl,
+      audioPath: t.storageUrl,
+      thumbnail: t.thumbnail || this.getCategoryThumbnail(t.category),
+      category: t.category || 'CUSTOM_PARENT',
+      genre: t.genre || 'Custom Parent Folder',
+      isCustomParentSong: true,
+      visibility: t.visibility || 'PRIVATE',
+      isSharedWithCaregiver: t.visibility === 'SHARED_WITH_CAREGIVERS',
+      createdAt: t.uploadedAt ? new Date(t.uploadedAt).toISOString() : new Date().toISOString(),
+      uploadedAt: t.uploadedAt ? new Date(t.uploadedAt).toISOString() : new Date().toISOString(),
+    }));
+  }
+
+  /**
+   * Create a new custom parent lullaby with DEFAULT visibility = PRIVATE (Requirement: PARENT OWNERSHIP & DEFAULT VISIBILITY).
+   */
+  async createCustomTrack(ownerId: string, trackData: any): Promise<MusicTrackItem> {
+    const title = trackData.title || 'My Custom Lullaby';
+    const category = trackData.category || 'CUSTOM_PARENT';
+    const duration = Number(trackData.duration || trackData.durationSeconds) || 210;
+    const isShared = trackData.isSharedWithCaregiver === true || trackData.isSharedWithCaregiver === 'true' ||
+      trackData.shareWithCaregiver === true || trackData.shareWithCaregiver === 'true';
+    const visibility = trackData.visibility || (isShared ? 'SHARED_WITH_CAREGIVERS' : 'PRIVATE');
+    const babyId = trackData.babyId || null;
+    const thumbnail = trackData.thumbnail || this.getCategoryThumbnail(category);
+
+    let storageUrl = trackData.fileUrl || trackData.storageUrl || trackData.audioPath || '/uploads/music/default_lullaby.mp3';
+
+    const isRecording = category === 'Parent Voice' || category === 'Parent Recordings' || trackData.sourceType === 'RECORDED';
+    const targetDir = isRecording ? getRecordingsUploadsDirectory() : getMusicUploadsDirectory();
+    const urlPrefix = isRecording ? '/uploads/recordings/' : '/uploads/music/';
+
+    if (trackData.base64Data || (typeof storageUrl === 'string' && storageUrl.startsWith('data:audio'))) {
+      try {
+        const rawBase64 = trackData.base64Data || storageUrl.split(',')[1];
+        if (rawBase64) {
+          const buffer = Buffer.from(rawBase64, 'base64');
+          const ext = trackData.format || 'mp3';
+          const safeFilename = `${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${ext}`;
+          const diskPath = path.join(targetDir, safeFilename);
+          await fs.promises.writeFile(diskPath, buffer);
+          storageUrl = `${urlPrefix}${safeFilename}`;
+        }
+      } catch (err) {
+        console.warn('[Music] Error saving base64 custom audio to disk:', err);
+      }
+    }
+
+    const newTrack = await (prisma as any).musicTrack.create({
+      data: {
+        title,
+        category,
+        artist: trackData.artist || (isRecording ? 'Parent Voice Recording' : 'My Custom Lullaby (Parent)'),
+        storageUrl,
+        duration,
+        uploadedBy: ownerId,
+        ownerId,
+        babyId,
+        thumbnail,
+        visibility,
+        isActive: true,
+        isPremium: false,
+      },
+    });
+
+    if (newTrack.visibility === 'SHARED_WITH_CAREGIVERS') {
+      this.notifyCaregiversOfMusicUpdate(ownerId).catch((err) => {
+        console.error('[MusicService] Error sending caregiver creation notification:', err);
+      });
+    }
+
+    return {
+      ...newTrack,
+      songId: newTrack.id,
+      ownerId,
+      babyId,
+      fileUrl: storageUrl,
+      audioPath: storageUrl,
+      backgroundTrack: trackData.backgroundTrack || null,
+      bgAudioPath: trackData.bgAudioPath || null,
+      bgMusicVolume: Number(trackData.bgMusicVolume || trackData.musicVolume) || 0.4,
+      voiceVolume: Number(trackData.voiceVolume) || 0.8,
+      genre: 'Custom Parent Folder',
+      isCustomParentSong: true,
+      visibility: newTrack.visibility,
+      isSharedWithCaregiver: newTrack.visibility === 'SHARED_WITH_CAREGIVERS',
+      createdAt: newTrack.uploadedAt.toISOString(),
+      uploadedAt: newTrack.uploadedAt.toISOString(),
+    };
+  }
+
+  /**
+   * Helper: Broadcasts real-time WebSocket notification to all active caregivers of a parent when music share permissions change.
+   */
+  async notifyCaregiversOfMusicUpdate(parentId: string): Promise<void> {
+    try {
+      const now = new Date();
+      // 1. Fetch active temporary permissions
+      const tempPerms = await (prisma as any).temporaryCaregiverPermission.findMany({
+        where: {
+          parentId,
+          revoked: false,
+          expiresAt: { gt: now },
+        },
+        select: { caregiverId: true },
+      });
+
+      // 2. Fetch accepted permanent caregivers
+      const acceptedCaregivers = await (prisma as any).caregiver.findMany({
+        where: {
+          baby: { parentId },
+          status: 'accepted',
+        },
+        select: { userId: true },
+      });
+
+      const caregiverUserIds = new Set<string>([
+        ...tempPerms.map((p: any) => p.caregiverId.toString()),
+        ...acceptedCaregivers.map((c: any) => c.userId.toString()),
+      ]);
+
+      const payload = {
+        event: 'caregiver_permissions_updated',
+        parentId,
+        timestamp: new Date().toISOString(),
+        message: 'Parent music sharing permissions updated. Refreshing library.',
+      };
+
+      for (const caregiverId of caregiverUserIds) {
+        WebsocketServerManager.getInstance().emitToUser(caregiverId, 'caregiver:permissions_updated', payload);
+        WebsocketServerManager.getInstance().emitToUser(caregiverId, 'caregiver_permissions_updated', payload);
+      }
+      console.log(`[MusicService] Notified ${caregiverUserIds.size} caregiver(s) of music permission update.`);
+    } catch (err) {
+      console.error('[MusicService] Failed to broadcast caregiver music update WebSocket event:', err);
+    }
+  }
+
+  /**
+   * Toggle caregiver sharing permission for a single custom lullaby (OPTIONAL SHARING).
+   */
+  async updateTrackShareStatus(trackId: string, ownerId: string, shareWithCaregivers: boolean): Promise<MusicTrackItem> {
+    const track = await (prisma as any).musicTrack.findUnique({ where: { id: trackId } });
+    if (!track) {
+      throw { statusCode: 404, message: 'Custom lullaby track not found.' };
+    }
+
+    if (track.ownerId !== ownerId && track.uploadedBy !== ownerId) {
+      throw { statusCode: 403, message: 'Access denied: Only the parent owner can modify track privacy permissions.' };
+    }
+
+    const newVisibility = shareWithCaregivers ? 'SHARED_WITH_CAREGIVERS' : 'PRIVATE';
+    const updated = await (prisma as any).musicTrack.update({
+      where: { id: trackId },
+      data: { visibility: newVisibility },
+    });
+
+    // Notify connected caregiver devices in real-time via WebSocket
+    await this.notifyCaregiversOfMusicUpdate(ownerId);
+
+    return {
+      ...updated,
+      genre: updated.genre || 'Custom Parent Folder',
+      isCustomParentSong: true,
+      visibility: updated.visibility,
+      uploadedAt: updated.uploadedAt.toISOString(),
+    };
+  }
+
+  /**
+   * Batch toggle sharing status for all parent's custom lullabies (Share Entire Custom Folder).
+   */
+  async updateAllCustomTracksShareStatus(ownerId: string, shareWithCaregivers: boolean): Promise<{ success: boolean; updatedCount: number }> {
+    const newVisibility = shareWithCaregivers ? 'SHARED_WITH_CAREGIVERS' : 'PRIVATE';
+    const result = await (prisma as any).musicTrack.updateMany({
+      where: {
+        OR: [{ ownerId }, { uploadedBy: ownerId }],
+      },
+      data: { visibility: newVisibility },
+    });
+
+    // Notify connected caregiver devices in real-time via WebSocket
+    await this.notifyCaregiversOfMusicUpdate(ownerId);
+
+    return { success: true, updatedCount: result.count };
+  }
+
+  /**
+   * Caregiver API: Fetch shared custom lullabies (Requirement: IF SHARING IS ENABLED & BACKEND VALIDATION).
+   * Validates active caregiver permission; returns ONLY songs with visibility == SHARED_WITH_CAREGIVERS.
+   */
+  async getSharedLullabiesForCaregiver(caregiverId: string): Promise<MusicTrackItem[]> {
+    const now = new Date();
+    const activePerms = await (prisma as any).temporaryCaregiverPermission.findMany({
+      where: {
+        caregiverId,
+        revoked: false,
+        expiresAt: { gt: now },
+      },
+      select: { parentId: true, permissions: true },
+    });
+
+    let parentIds: string[] = [];
+    let allowAllCustomMusic = false;
+
+    if (activePerms && activePerms.length > 0) {
+      parentIds = activePerms.map((p: any) => p.parentId);
+      allowAllCustomMusic = activePerms.some((p: any) => {
+        const perms = p.permissions || {};
+        return perms.custom_music === true || perms.customLullabies === true;
+      });
+    } else {
+      const baseCaregiver = await prisma.caregiver.findFirst({
+        where: { userId: caregiverId, status: 'accepted' },
+        include: { baby: { select: { parentId: true } } },
+      });
+
+      if (!baseCaregiver) {
+        return [];
+      }
+      parentIds.push(baseCaregiver.baby.parentId);
+      allowAllCustomMusic = true;
+    }
+
+    const whereClause: any = {
+      OR: [
+        { ownerId: { in: parentIds } },
+        { uploadedBy: { in: parentIds } },
+      ],
+      isActive: true,
+    };
+
+    if (!allowAllCustomMusic) {
+      whereClause.visibility = 'SHARED_WITH_CAREGIVERS';
+    }
+
+    const sharedTracks = await (prisma as any).musicTrack.findMany({
+      where: whereClause,
+      orderBy: { uploadedAt: 'desc' },
+    });
+
+    return sharedTracks.map((t: any) => ({
+      id: t.id,
+      title: t.title,
+      artist: t.artist || 'Parent Custom Lullaby',
+      duration: t.duration,
+      storageUrl: t.storageUrl,
+      audioPath: t.storageUrl,
+      thumbnail: t.thumbnail || this.getCategoryThumbnail(t.category),
+      category: t.category || 'CUSTOM_PARENT',
+      genre: 'Custom Parent Folder',
+      isCustomParentSong: true,
+      visibility: t.visibility || 'SHARED_WITH_CAREGIVERS',
+      isSharedWithCaregiver: true,
+      createdAt: t.uploadedAt ? new Date(t.uploadedAt).toISOString() : new Date().toISOString(),
+      uploadedAt: t.uploadedAt ? new Date(t.uploadedAt).toISOString() : new Date().toISOString(),
+    }));
   }
 }

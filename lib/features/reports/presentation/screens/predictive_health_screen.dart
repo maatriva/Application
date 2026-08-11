@@ -222,20 +222,7 @@ class _PredictiveHealthScreenState
                   ),
                 ),
                 // Expanded Bottom Navigation
-                BottomNavigation(
-                  currentIndex: 2, // Health tab index is 2
-                  onTap: (index) {
-                    if (index == 0) {
-                      context.go('/?tab=0');
-                    } else if (index == 1) {
-                      context.go('/?tab=1'); // Navigates to live feed tab
-                    } else if (index == 2) {
-                      // Already on Health
-                    } else if (index == 3) {
-                      context.go('/shop');
-                    }
-                  },
-                ),
+                const BottomNavigation(currentIndex: 2),
               ],
             ),
           ),

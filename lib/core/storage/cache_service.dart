@@ -148,24 +148,33 @@ class CacheService {
     }
   }
 
-  /// Clears cache.
+  static const String _caregiverGrantedSessionKey = 'maatriva_caregiver_granted_session';
+
+  /// Save caregiver granted active session metadata (retained across logouts until expired/revoked)
+  Future<void> cacheCaregiverGrantedSession(Map<String, dynamic> sessionData) async {
+    await _prefs.setString(_caregiverGrantedSessionKey, jsonEncode(sessionData));
+  }
+
+  /// Retrieve cached caregiver granted active session metadata
+  Map<String, dynamic>? getCaregiverGrantedSession() {
+    final jsonStr = _prefs.getString(_caregiverGrantedSessionKey);
+    if (jsonStr == null) return null;
+    try {
+      return jsonDecode(jsonStr) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Clear caregiver granted active session metadata when expired or revoked
+  Future<void> clearCaregiverGrantedSession() async {
+    await _prefs.remove(_caregiverGrantedSessionKey);
+  }
+
+  /// Clears cache completely on logout or account switch.
   Future<void> clearCache() async {
     try {
-      final keys = _prefs.getKeys();
-      for (final key in keys) {
-        if (key.startsWith(_vitalsCacheKeyPrefix) ||
-            key.startsWith(_telemetryHistoryCacheKeyPrefix) ||
-            key == _devicesCacheKey ||
-            key == _userProfileKey ||
-            key == _selectedBabyIdKey ||
-            key == _selectedBabyKey ||
-            key == _themeModeKey ||
-            key == _alertsCacheKey ||
-            key.contains('maatriva_welcome') ||
-            key.contains('maatriva_onboarding')) {
-          await _prefs.remove(key);
-        }
-      }
+      await _prefs.clear();
     } catch (_) {}
   }
 }

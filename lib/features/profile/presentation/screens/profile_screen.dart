@@ -32,12 +32,15 @@ class ProfileScreen extends ConsumerWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
+        ),
         title: Text(
           'Caregiver Profile',
-          style: TextStyle(
+          style: GoogleFonts.outfit(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.bold,
-            fontSize: 18.sp,
+            fontSize: 20.sp,
           ),
         ),
         leading: IconButton(
@@ -79,20 +82,7 @@ class ProfileScreen extends ConsumerWidget {
           ),
         ),
       ),
-      bottomNavigationBar: BottomNavigation(
-        currentIndex: -1,
-        onTap: (index) {
-          if (index == 0) {
-            context.go('/?tab=0');
-          } else if (index == 1) {
-            context.go('/?tab=1');
-          } else if (index == 2) {
-            context.go('/predictive-health');
-          } else if (index == 3) {
-            context.go('/shop');
-          }
-        },
-      ),
+      bottomNavigationBar: const BottomNavigation(currentIndex: -1),
     );
   }
 
@@ -108,10 +98,10 @@ class ProfileScreen extends ConsumerWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(28.r),
-        boxShadow: AppColors.softShadow,
+        boxShadow: AppColors.clayShadow,
         border: Border.all(
-          color: AppColors.primary.withOpacity(0.03),
-          width: 1,
+          color: AppColors.softTeal.withValues(alpha: 0.35),
+          width: 1.2,
         ),
       ),
       child: Column(

@@ -5,53 +5,53 @@ import 'app_colors.dart';
 class AppTypography {
   AppTypography._();
 
-  static TextStyle get displayHeader => GoogleFonts.playfairDisplay(
-    fontSize: 32,
+  static TextStyle get displayHeader => GoogleFonts.outfit(
+    fontSize: 28,
     fontWeight: FontWeight.bold,
     color: AppColors.textPrimary,
-    letterSpacing: -0.5,
+    letterSpacing: -0.4,
   );
 
-  static TextStyle get sectionTitle => GoogleFonts.playfairDisplay(
-    fontSize: 24,
+  static TextStyle get sectionTitle => GoogleFonts.outfit(
+    fontSize: 22,
     fontWeight: FontWeight.bold,
     color: AppColors.textPrimary,
     letterSpacing: -0.3,
   );
 
-  static TextStyle get bodyLarge => GoogleFonts.inter(
-    fontSize: 16,
-    fontWeight: FontWeight.normal,
-    color: AppColors.textSecondary,
-  );
-
-  static TextStyle get bodyMedium => GoogleFonts.inter(
-    fontSize: 14,
-    fontWeight: FontWeight.normal,
-    color: AppColors.textSecondary,
-  );
-
-  static TextStyle get labelMedium => GoogleFonts.inter(
-    fontSize: 13,
-    fontWeight: FontWeight.w600,
-    color: AppColors.textPrimary,
-  );
-
-  static TextStyle get labelSmall => GoogleFonts.inter(
-    fontSize: 12,
+  static TextStyle get bodyLarge => GoogleFonts.plusJakartaSans(
+    fontSize: 15,
     fontWeight: FontWeight.w500,
     color: AppColors.textSecondary,
   );
 
-  static TextStyle get metricValue => GoogleFonts.inter(
+  static TextStyle get bodyMedium => GoogleFonts.plusJakartaSans(
+    fontSize: 13,
+    fontWeight: FontWeight.w500,
+    color: AppColors.textSecondary,
+  );
+
+  static TextStyle get labelMedium => GoogleFonts.plusJakartaSans(
+    fontSize: 13,
+    fontWeight: FontWeight.bold,
+    color: AppColors.textPrimary,
+  );
+
+  static TextStyle get labelSmall => GoogleFonts.plusJakartaSans(
+    fontSize: 11,
+    fontWeight: FontWeight.w600,
+    color: AppColors.textSecondary,
+  );
+
+  static TextStyle get metricValue => GoogleFonts.outfit(
     fontSize: 26,
     fontWeight: FontWeight.bold,
     color: AppColors.textPrimary,
   );
 
-  static TextStyle get metricUnit => GoogleFonts.inter(
-    fontSize: 14,
-    fontWeight: FontWeight.w500,
+  static TextStyle get metricUnit => GoogleFonts.plusJakartaSans(
+    fontSize: 13,
+    fontWeight: FontWeight.w600,
     color: AppColors.textSecondary,
   );
 }

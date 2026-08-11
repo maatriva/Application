@@ -30,9 +30,13 @@ class SummaryCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppColors.cardBg,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: AppColors.softShadow,
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: AppColors.clayShadow,
+          border: Border.all(
+            color: AppColors.softTeal.withValues(alpha: 0.3),
+            width: 1.2,
+          ),
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {

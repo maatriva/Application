@@ -21,6 +21,7 @@ const router = Router();
 router.use('/auth', authRoutes);
 router.use('/babies', babyRoutes);
 router.use('/caregivers', caregiversRoutes);
+router.use('/caregiver', caregiversRoutes);
 router.use('/devices', devicesRoutes);
 router.use('/ai', aiRoutes);
 router.use('/users', usersRoutes);

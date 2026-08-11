@@ -71,44 +71,45 @@ class ShareAccessCard extends StatelessWidget {
               ),
 
               // "SCAN ME" Badge positioned on the top right
-              Positioned(
-                top: 4,
-                right: -4,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
+              if (qrToken.isNotEmpty)
+                Positioned(
+                  top: 4,
+                  right: -4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withValues(alpha: 0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: const Text(
+                      'SCAN ME',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
                       ),
-                    ],
-                  ),
-                  child: const Text(
-                    'SCAN ME',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      letterSpacing: 0.5,
                     ),
                   ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 24),
 
           // Instant Scan Title
-          const Text(
-            'INSTANT SCAN',
-            style: TextStyle(
+          Text(
+            qrToken.isNotEmpty ? 'INSTANT SCAN' : 'AWAITING DURATION SELECTION',
+            style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.bold,
               color: AppColors.primary,
@@ -118,9 +119,11 @@ class ShareAccessCard extends StatelessWidget {
           const SizedBox(height: 8),
 
           // Subtitle description
-          const Text(
-            'Let them scan this code to join instantly.',
-            style: TextStyle(
+          Text(
+            qrToken.isNotEmpty
+                ? 'Let the caregiver scan this code to join instantly.'
+                : 'Select an access duration above (e.g. 30 Mins, 1 Hour) to generate the QR code.',
+            style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w500,
               color: AppColors.textSecondary,

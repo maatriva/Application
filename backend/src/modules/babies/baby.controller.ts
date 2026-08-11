@@ -11,12 +11,36 @@ const babyService = new BabyService();
  */
 function formatBabyResponse(baby: any) {
   if (!baby) return null;
-  const { birthDate, deletedAt, caregivers, ...rest } = baby;
-  const accessLevel = caregivers && caregivers.length > 0 ? caregivers[0].accessLevel : 'parent';
+  const { birthDate, deletedAt, caregivers, temporaryCaregiverPermissions, ...rest } = baby;
+  let accessLevel = 'parent';
+  if (caregivers && caregivers.length > 0) {
+    accessLevel = caregivers[0]?.accessLevel || 'parent';
+  } else if (temporaryCaregiverPermissions && temporaryCaregiverPermissions.length > 0) {
+    accessLevel = temporaryCaregiverPermissions[0]?.permission || 'LIVE_MONITOR_ONLY';
+  }
+
+  let dateOfBirth: string | null = null;
+  if (birthDate) {
+    if (birthDate instanceof Date && !isNaN(birthDate.getTime())) {
+      dateOfBirth = birthDate.toISOString().split('T')[0];
+    } else if (typeof birthDate === 'string') {
+      dateOfBirth = birthDate.split('T')[0];
+    } else {
+      try {
+        const parsed = new Date(birthDate);
+        if (!isNaN(parsed.getTime())) {
+          dateOfBirth = parsed.toISOString().split('T')[0];
+        }
+      } catch {
+        dateOfBirth = null;
+      }
+    }
+  }
+
   return {
     ...rest,
     accessLevel,
-    dateOfBirth: birthDate ? birthDate.toISOString().split('T')[0] : null,
+    dateOfBirth,
   };
 }
 
@@ -51,6 +75,7 @@ export class BabyController {
         data: formatBabyResponse(baby),
       });
     } catch (e: any) {
+      console.error('[Parent] POST /babies error:', e);
       const status = e.statusCode || 500;
       return res.status(status).json({
         success: false,
@@ -73,13 +98,25 @@ export class BabyController {
     }
 
     try {
+      console.log(`[Parent] Logged-in userId: ${parentId}`);
+      console.log(`[Parent] GET /babies`);
       const babies = await babyService.listBabies(parentId);
+      const formattedBabies = babies.map(formatBabyResponse).filter((b): b is NonNullable<typeof b> => b !== null);
+      const babyIds = formattedBabies.map((b: any) => b.id).join(', ');
+      const currentBabyName = formattedBabies.length > 0 ? formattedBabies[0].name : 'None';
+
+      console.log(`[Parent] Response status: 200`);
+      console.log(`[Parent] Babies returned: ${formattedBabies.length}`);
+      console.log(`[Parent] Baby IDs: ${babyIds}`);
+      console.log(`[Parent] Current baby: ${currentBabyName}`);
+
       return res.status(200).json({
         success: true,
         message: 'Babies fetched successfully.',
-        data: babies.map(formatBabyResponse),
+        data: formattedBabies,
       });
     } catch (e: any) {
+      console.error(`[Parent] GET /babies error:`, e);
       const status = e.statusCode || 500;
       return res.status(status).json({
         success: false,
@@ -87,6 +124,7 @@ export class BabyController {
       });
     }
   }
+
 
   /**
    * GET /babies/:id

@@ -161,4 +161,176 @@ export class CaregiversController {
       res.status(status).json({ success: false, error: e.message || 'Error listing received invitations.' });
     }
   }
+
+  /**
+   * POST /caregivers/grant-temporary
+   */
+  public static async grantTemporary(req: AuthenticatedRequest, res: Response) {
+    const parentId = req.user?.userId;
+    const { babyId, caregiverEmail, durationMinutes, permission } = req.body;
+
+    if (!parentId) {
+      return res.status(401).json({ error: 'Unauthorized.' });
+    }
+
+    if (!babyId) {
+      return res.status(400).json({ error: 'babyId is required.' });
+    }
+
+    try {
+      const result = await caregiversService.grantTemporaryAccess({
+        parentId,
+        babyId,
+        caregiverEmail,
+        durationMinutes: Number(durationMinutes) || 60,
+        permission,
+        permissions: req.body.permissions,
+      });
+      res.status(201).json({ success: true, data: result });
+    } catch (e: any) {
+      const status = e.statusCode || 400;
+      res.status(status).json({ success: false, error: e.message || 'Error granting temporary caregiver access.' });
+    }
+  }
+
+  /**
+   * GET /caregivers/active-permissions
+   */
+  public static async getActivePermissions(req: AuthenticatedRequest, res: Response) {
+    const caregiverId = req.user?.userId;
+
+    if (!caregiverId) {
+      return res.status(401).json({ error: 'Unauthorized.' });
+    }
+
+    try {
+      const permissions = await caregiversService.getActivePermissions(caregiverId);
+      res.json({ success: true, data: permissions });
+    } catch (e: any) {
+      const status = e.statusCode || 500;
+      res.status(status).json({ success: false, error: e.message || 'Error fetching active permissions.' });
+    }
+  }
+
+  /**
+   * DELETE /caregivers/temporary-permission/:id
+   */
+  public static async revokeTemporaryPermission(req: AuthenticatedRequest, res: Response) {
+    const permissionId = req.params.id;
+    const requesterId = req.user?.userId;
+
+    if (!requesterId) {
+      return res.status(401).json({ error: 'Unauthorized.' });
+    }
+
+    try {
+      const result = await caregiversService.revokeTemporaryPermission(permissionId, requesterId);
+      res.json({ success: true, data: result });
+    } catch (e: any) {
+      const status = e.statusCode || 400;
+      res.status(status).json({ success: false, error: e.message || 'Error revoking temporary permission.' });
+    }
+  }
+
+  /**
+   * PATCH /caregivers/temporary-permission/:id/permissions
+   * Parent edits feature-level permissions for caregiver
+   */
+  public static async updatePermissions(req: AuthenticatedRequest, res: Response) {
+    const permissionId = req.params.id;
+    const parentId = req.user?.userId;
+    const { permissions } = req.body;
+
+    if (!parentId) {
+      return res.status(401).json({ error: 'Unauthorized.' });
+    }
+
+    if (!permissions || typeof permissions !== 'object') {
+      return res.status(400).json({ error: 'permissions JSON object is required.' });
+    }
+
+    try {
+      const updated = await caregiversService.updateTemporaryPermissions(permissionId, parentId, permissions);
+      res.json({ success: true, data: updated });
+    } catch (e: any) {
+      const status = e.statusCode || 400;
+      res.status(status).json({ success: false, error: e.message || 'Error updating caregiver permissions.' });
+    }
+  }
+
+  /**
+   * PATCH /caregivers/temporary-permission/:id/extend
+   * Parent extends caregiver access duration (+15m, +30m, +1h, custom)
+   */
+  public static async extendAccess(req: AuthenticatedRequest, res: Response) {
+    const permissionId = req.params.id;
+    const parentId = req.user?.userId;
+    const { extensionMinutes } = req.body;
+
+    if (!parentId) {
+      return res.status(401).json({ error: 'Unauthorized.' });
+    }
+
+    if (!extensionMinutes || typeof extensionMinutes !== 'number') {
+      return res.status(400).json({ error: 'extensionMinutes number is required.' });
+    }
+
+    try {
+      const updated = await caregiversService.extendTemporaryAccess(permissionId, parentId, extensionMinutes);
+      res.json({ success: true, data: updated });
+    } catch (e: any) {
+      const status = e.statusCode || 400;
+      res.status(status).json({ success: false, error: e.message || 'Error extending caregiver access.' });
+    }
+  }
+
+  /**
+   * GET /caregiver/access (Caregiver API alias to query active access)
+   */
+  public static async getCaregiverAccess(req: AuthenticatedRequest, res: Response) {
+    const caregiverId = req.user?.userId;
+
+    if (!caregiverId) {
+      return res.status(401).json({ error: 'Unauthorized.' });
+    }
+
+    try {
+      const permissions = await caregiversService.getActivePermissions(caregiverId);
+      const active = permissions.length > 0 ? permissions[0] : null;
+
+      if (active) {
+        console.log('[Caregiver] Active permission found');
+        console.log(`[Caregiver] Permission expires at ${active.expiresAt}`);
+        return res.json({
+          success: true,
+          hasAccess: true,
+          babyId: active.babyId,
+          expiresAt: active.expiresAt,
+          permissions: {
+            liveMonitoring: active.permissions?.live_monitoring ?? true,
+            camera: active.permissions?.camera_snapshot ?? true,
+            alerts: active.permissions?.emergency_alerts ?? true,
+            customLullabies: active.permissions?.custom_music ?? false,
+          },
+          data: active,
+        });
+      }
+
+      // Check status for required debug log outputs
+      const statusCheck = await caregiversService.checkCaregiverPermissionStatus(caregiverId);
+      if (statusCheck.revoked) {
+        console.log('[Caregiver] Permission revoked');
+      } else if (statusCheck.expired) {
+        console.log('[Caregiver] Permission expired');
+      }
+
+      return res.json({
+        success: true,
+        hasAccess: false,
+      });
+    } catch (e: any) {
+      const status = e.statusCode || 500;
+      res.status(status).json({ success: false, error: e.message || 'Error fetching caregiver access.' });
+    }
+  }
 }

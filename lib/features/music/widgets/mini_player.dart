@@ -29,18 +29,12 @@ class MiniMusicPlayer extends ConsumerWidget {
       child: Container(
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
         decoration: BoxDecoration(
-          color: AppColors.cardBg,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withOpacity(0.08),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
-            ),
-          ],
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: AppColors.clayShadow,
           border: Border.all(
-            color: AppColors.primaryLight.withOpacity(0.5),
-            width: 1.5,
+            color: AppColors.softTeal.withValues(alpha: 0.35),
+            width: 1.2,
           ),
         ),
         child: ClipRRect(
@@ -117,16 +111,17 @@ class MiniMusicPlayer extends ConsumerWidget {
                         ref.read(musicProvider.notifier).togglePlayPause();
                       },
                     ),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.skip_next_rounded,
-                        color: AppColors.textSecondary,
-                        size: 26,
+                    if (musicState.activePlaylist != null)
+                      IconButton(
+                        icon: const Icon(
+                          Icons.skip_next_rounded,
+                          color: AppColors.textSecondary,
+                          size: 26,
+                        ),
+                        onPressed: () {
+                          ref.read(musicProvider.notifier).nextTrack();
+                        },
                       ),
-                      onPressed: () {
-                        ref.read(musicProvider.notifier).nextTrack();
-                      },
-                    ),
                     const SizedBox(width: 4),
                   ],
                 ),

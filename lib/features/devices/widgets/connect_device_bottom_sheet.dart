@@ -72,8 +72,10 @@ class _ConnectDeviceBottomSheetState extends State<ConnectDeviceBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 20.h),
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 20.h),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(32.r)),
@@ -109,8 +111,9 @@ class _ConnectDeviceBottomSheetState extends State<ConnectDeviceBottomSheet> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   // Step 1: Main options
   Widget _buildMainMenu() {

@@ -5,6 +5,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../core/services/providers.dart';
 import '../../../../shared/models/vitals_telemetry.dart';
 import '../../../../shared/models/user_session.dart';
 import '../../../authentication/presentation/providers/auth_provider.dart';
@@ -191,22 +192,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       bottomNavigationBar: BottomNavigation(
         currentIndex: _currentNavIndex,
         onTap: (index) {
-          if (index == 2) {
+          if (index == 0 || index == 1) {
+            setState(() {
+              _currentNavIndex = index;
+            });
+          } else if (index == 2) {
             if (isLiveMonitorOnly) {
               _showRestrictedAccessDialog(context, 'Health Analytics');
               return;
             }
             context.push('/predictive-health');
           } else if (index == 3) {
+            context.push('/music');
+          } else if (index == 4) {
             if (isLiveMonitorOnly) {
               _showRestrictedAccessDialog(context, 'Nursery Shop');
               return;
             }
             context.push('/shop');
-          } else {
-            setState(() {
-              _currentNavIndex = index;
-            });
           }
         },
       ),
@@ -254,24 +257,55 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return _buildSkeletonLoader();
     }
 
-    final errorMessage = ref.watch(dashboardProvider.select((s) => s.errorMessage));
-    if (errorMessage != null) {
-      return _buildErrorState(errorMessage);
+    final baby = ref.watch(dashboardProvider.select((s) => s.baby));
+    if (isCaregiver && baby == null) {
+      final errorMessage = ref.watch(dashboardProvider.select((s) => s.errorMessage));
+      return _buildEmptyState(
+        title: 'Join Shared Baby',
+        icon: Icons.qr_code_scanner_rounded,
+        message: (errorMessage != null && errorMessage.isNotEmpty)
+            ? errorMessage
+            : 'Caregiver access is currently inactive or revoked. Scan the QR code generated on the parent\'s device to monitor.',
+        actionLabel: 'Scan QR Code',
+        onActionPressed: () {
+          final authState = ref.read(authNotifierProvider);
+          if (authState.status != AuthStatus.authenticated) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Please log in / authorize first to scan QR code.')),
+            );
+            context.push('/login');
+          } else {
+            context.push('/join-shared-baby');
+          }
+        },
+      );
     }
 
-    final baby = ref.watch(dashboardProvider.select((s) => s.baby));
-    if (baby == null) {
+    final errorMessage = ref.watch(dashboardProvider.select((s) => s.errorMessage));
+    if (errorMessage != null) {
       if (isCaregiver) {
         return _buildEmptyState(
           title: 'Join Shared Baby',
           icon: Icons.qr_code_scanner_rounded,
-          message: 'Scan the QR code generated on the parent\'s device to start live baby monitoring.',
+          message: errorMessage,
           actionLabel: 'Scan QR Code',
           onActionPressed: () {
-            context.push('/join-shared-baby');
+            final authState = ref.read(authNotifierProvider);
+            if (authState.status != AuthStatus.authenticated) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Please log in / authorize first to scan QR code.')),
+              );
+              context.push('/login');
+            } else {
+              context.push('/join-shared-baby');
+            }
           },
         );
       }
+      return _buildErrorState(errorMessage);
+    }
+
+    if (baby == null) {
       return _buildEmptyState(
         title: 'Register Your Baby',
         icon: Icons.baby_changing_station_rounded,
@@ -313,9 +347,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               builder: (context, ref, child) {
                 final telemetry = ref.watch(dashboardProvider.select((s) => s.latestTelemetry));
                 final babyStatus = getBabyStatus(telemetry);
+                final authState = ref.watch(authNotifierProvider);
+                final isCaregiverUser = isCaregiver || authState.session?.role == UserRole.caregiver;
+                
+                final cacheService = ref.watch(cacheServiceProvider);
+                final caregiverSession = cacheService.getCaregiverGrantedSession();
+                DateTime? expiresAt;
+                if (caregiverSession != null && caregiverSession['expiresAt'] != null) {
+                  expiresAt = DateTime.tryParse(caregiverSession['expiresAt'] as String);
+                }
+
                 return GreetingSection(
                   motherName: parentName,
                   babyStatus: babyStatus,
+                  isCaregiver: isCaregiverUser,
+                  expiresAt: expiresAt,
                 );
               },
             ),
@@ -373,7 +419,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                     ),
                     TextButton.icon(
-                      onPressed: () => context.push('/join-shared-baby'),
+                      onPressed: () {
+                        final authState = ref.read(authNotifierProvider);
+                        if (authState.status != AuthStatus.authenticated) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Please log in / authorize first to scan QR code.')),
+                          );
+                          context.push('/login');
+                        } else {
+                          context.push('/join-shared-baby');
+                        }
+                      },
                       icon: Icon(Icons.sync_rounded, size: 16.r, color: AppColors.primary),
                       label: Text(
                         'Scan QR',

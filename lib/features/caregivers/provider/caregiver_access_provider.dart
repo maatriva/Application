@@ -66,18 +66,16 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
               'camera_snapshot': false,
               'custom_music': false,
             },
-            selectedDurationLabel: '30 Mins',
+            selectedDurationLabel: '',
             activeSessions: [],
             accessHistory: [],
             qrToken: '',
-            isGeneratingQR: true,
+            isGeneratingQR: false,
           ),
         ) {
     loadSessions();
     _startTimer();
     _startPolling();
-    // Auto-generate a real invite token on startup
-    _generateNewQR(silent: false);
   }
 
   Future<void> loadSessions() async {
@@ -132,11 +130,19 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
     }
   }
 
-  void togglePermission(String key) {
+  Future<void> togglePermission(String key) async {
     final updated = Map<String, bool>.from(state.permissions);
     updated[key] = !(updated[key] ?? false);
     state = state.copyWith(permissions: updated);
     _generateNewQR(silent: true);
+
+    // Instantly sync updated permissions to all active caregiver sessions in real-time (milliseconds)!
+    for (final session in state.activeSessions) {
+      await updateTemporaryPermissions(
+        permissionId: session.id,
+        permissions: updated,
+      );
+    }
   }
 
   void selectDuration(String label) {
@@ -172,6 +178,10 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
       case '24 hrs':
         duration = const Duration(hours: 24);
         break;
+      case '12 hours':
+      case '12 hrs':
+        duration = const Duration(hours: 12);
+        break;
       case '30 mins':
       case '30 minutes':
         duration = const Duration(minutes: 30);
@@ -185,7 +195,7 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
         duration = const Duration(hours: 4);
         break;
       default:
-        duration = const Duration(hours: 2);
+        duration = parseCustomDuration(state.selectedDurationLabel);
     }
 
     try {
@@ -293,6 +303,112 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
       email: '*',
       role: role,
     );
+  }
+
+  /// Grant temporary caregiver access for specific duration (Requirement 1 & 2)
+  Future<bool> grantTemporaryAccess({
+    required String babyId,
+    required String caregiverEmail,
+    required int durationMinutes,
+    String? permission,
+  }) async {
+    try {
+      await _caregiverRepo.grantTemporaryAccess(
+        babyId: babyId,
+        caregiverEmail: caregiverEmail,
+        durationMinutes: durationMinutes,
+        permission: permission,
+      );
+      await loadSessions();
+      return true;
+    } catch (e) {
+      debugPrint('[CaregiverAccessNotifier] grantTemporaryAccess error: $e');
+      return false;
+    }
+  }
+
+  /// Revoke temporary caregiver permission (Requirement 6)
+  Future<bool> revokeTemporaryPermission(String permissionId) async {
+    try {
+      await _caregiverRepo.revokeTemporaryPermission(permissionId);
+      await loadSessions();
+      return true;
+    } catch (e) {
+      debugPrint('[CaregiverAccessNotifier] revokeTemporaryPermission error: $e');
+      return false;
+    }
+  }
+
+  /// Fetch active unexpired permissions for caregiver (Requirement 4)
+  Future<List<Map<String, dynamic>>> checkActivePermissions() async {
+    try {
+      return await _caregiverRepo.getActivePermissions();
+    } catch (e) {
+      debugPrint('[CaregiverAccessNotifier] checkActivePermissions error: $e');
+      return [];
+    }
+  }
+
+  /// Edit feature-level permissions for active caregiver access
+  Future<bool> updateTemporaryPermissions({
+    required String permissionId,
+    required Map<String, bool> permissions,
+  }) async {
+    try {
+      await _caregiverRepo.updatePermissions(permissionId, permissions);
+      await loadSessions();
+      return true;
+    } catch (e) {
+      debugPrint('[CaregiverAccessNotifier] updateTemporaryPermissions error: $e');
+      return false;
+    }
+  }
+
+  /// Extend temporary access duration (+15m, +30m, +1h, custom)
+  Future<bool> extendTemporaryAccess({
+    required String permissionId,
+    required int extensionMinutes,
+  }) async {
+    try {
+      await _caregiverRepo.extendAccess(permissionId, extensionMinutes);
+      await loadSessions();
+      return true;
+    } catch (e) {
+      debugPrint('[CaregiverAccessNotifier] extendTemporaryAccess error: $e');
+      return false;
+    }
+  }
+
+  Duration parseCustomDuration(String label) {
+    final lower = label.toLowerCase();
+    final hoursMatch = RegExp(r'(\d+)\s*(?:hours|hour|hrs|hr|h)').firstMatch(lower);
+    final minsMatch = RegExp(r'(\d+)\s*(?:minutes|minute|mins|min|m)').firstMatch(lower);
+
+    int hours = 0;
+    int minutes = 0;
+
+    if (hoursMatch != null) {
+      hours = int.tryParse(hoursMatch.group(1) ?? '0') ?? 0;
+    }
+    if (minsMatch != null) {
+      minutes = int.tryParse(minsMatch.group(1) ?? '0') ?? 0;
+    } else if (hoursMatch == null) {
+      final numMatch = RegExp(r'(\d+)').firstMatch(lower);
+      if (numMatch != null) {
+        final val = int.tryParse(numMatch.group(1) ?? '120') ?? 120;
+        if (val >= 60) {
+          hours = val ~/ 60;
+          minutes = val % 60;
+        } else {
+          minutes = val;
+        }
+      }
+    }
+
+    if (hours == 0 && minutes == 0) {
+      return const Duration(hours: 2);
+    }
+    return Duration(hours: hours, minutes: minutes);
   }
 
   @override
