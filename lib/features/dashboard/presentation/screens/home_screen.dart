@@ -16,10 +16,14 @@ import '../../../../shared/widgets/app_drawer.dart';
 import '../providers/dashboard_provider.dart';
 import '../widgets/dashboard_header.dart';
 import '../widgets/greeting_section.dart';
-import '../widgets/live_camera_card.dart';
-import '../widgets/summary_card.dart';
+import '../widgets/baby_status_hero_card.dart';
+import '../widgets/wellness_section.dart';
+import '../widgets/smart_cradle_card.dart';
+import '../widgets/caregiver_status_card.dart';
 import '../widgets/ai_insight_card.dart';
 import '../widgets/quick_action_button.dart';
+import '../../../caregivers/provider/caregiver_access_provider.dart';
+import '../../../../shared/models/caregiver.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   final int initialTab;
@@ -35,13 +39,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _currentNavIndex = widget.initialTab;
+    _currentNavIndex = widget.initialTab == 1 ? 2 : widget.initialTab;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final onboardingState = ref.read(onboardingProvider);
       if (!onboardingState.isCompleted) {
         context.go('/onboarding');
       }
     });
+  }
+
+  @override
+  void didUpdateWidget(HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialTab != oldWidget.initialTab) {
+      setState(() {
+        _currentNavIndex = widget.initialTab == 1 ? 2 : widget.initialTab;
+      });
+    }
   }
 
   String calculateAge(DateTime birthDate) {
@@ -192,16 +206,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       bottomNavigationBar: BottomNavigation(
         currentIndex: _currentNavIndex,
         onTap: (index) {
-          if (index == 0 || index == 1) {
+          if (index == 0) {
             setState(() {
-              _currentNavIndex = index;
+              _currentNavIndex = 0;
             });
-          } else if (index == 2) {
+          } else if (index == 1) {
             if (isLiveMonitorOnly) {
               _showRestrictedAccessDialog(context, 'Health Analytics');
               return;
             }
             context.push('/predictive-health');
+          } else if (index == 2) {
+            setState(() {
+              _currentNavIndex = 2;
+            });
           } else if (index == 3) {
             context.push('/music');
           } else if (index == 4) {
@@ -220,34 +238,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     switch (_currentNavIndex) {
       case 0:
         return _buildHomeBody(isLiveMonitorOnly, isCaregiver);
-      case 1:
+      case 2:
         return const LiveMonitoringScreen();
       default:
-        return Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                _currentNavIndex == 2
-                    ? Icons.shopping_bag_outlined
-                    : Icons.person_outline_rounded,
-                size: 64.r,
-                color: AppColors.textSecondary.withOpacity(0.4),
-              ),
-              SizedBox(height: 16.h),
-              Text(
-                _currentNavIndex == 2
-                    ? 'Shop Coming Soon'
-                    : 'Profile Coming Soon',
-                style: TextStyle(
-                  fontSize: 16.sp,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        );
+        return _buildHomeBody(isLiveMonitorOnly, isCaregiver);
     }
   }
 
@@ -322,27 +316,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth > 600;
-    final isSmallPhone = screenWidth < 360;
-
-    final vitalsCrossAxisCount = isTablet ? 3 : 2;
-    final vitalsChildAspectRatio = isTablet 
-        ? 1.4 
-        : (isSmallPhone ? 1.25 : 1.15);
-
     final actionsCrossAxisCount = isTablet ? 6 : 3;
     final actionsChildAspectRatio = isTablet ? 1.25 : 1.05;
 
+    final cacheService = ref.watch(cacheServiceProvider);
+    final caregiverSession = cacheService.getCaregiverGrantedSession();
+    final perms = (caregiverSession?['permissions'] as Map<String, dynamic>?) ?? {};
+    final bool permsCamera = !isCaregiver || (perms['camera_snapshot'] == true);
+    final bool permsMusic = !isCaregiver || (perms['custom_music'] == true || perms['music'] == true);
+    final bool permsAi = !isCaregiver || (perms['ai_assistant'] == true);
+    final bool permsHealth = !isCaregiver || (perms['health_data'] == true);
+    final bool permsCradle = !isCaregiver || (perms['cradle_controls'] == true);
+
     return RefreshIndicator(
       onRefresh: () => ref.read(dashboardProvider.notifier).refresh(),
-      color: AppColors.primary,
+      color: AppColors.royalBlue,
       backgroundColor: Colors.white,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.only(left: 20.w, right: 20.w, top: 16.h, bottom: 100.h),
+        padding: EdgeInsets.only(left: 16.w, right: 16.w, top: 12.h, bottom: 110.h),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Greeting Header
+            // 1. Welcome Greeting Header Subtitle
             Consumer(
               builder: (context, ref, child) {
                 final telemetry = ref.watch(dashboardProvider.select((s) => s.latestTelemetry));
@@ -367,494 +363,83 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             SizedBox(height: 16.h),
 
-            if (isCaregiver) ...[
-              Container(
-                width: double.infinity,
-                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppColors.primary.withOpacity(0.12),
-                      AppColors.secondary.withOpacity(0.08),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(16.r),
-                  border: Border.all(
-                    color: AppColors.primary.withOpacity(0.2),
-                    width: 1.2,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: EdgeInsets.all(8.r),
-                      decoration: const BoxDecoration(
-                        color: AppColors.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.qr_code_scanner_rounded, color: Colors.white, size: 18.r),
-                    ),
-                    SizedBox(width: 12.w),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Caregiver Live Access',
-                            style: TextStyle(
-                              fontSize: 13.sp,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          SizedBox(height: 2.h),
-                          Text(
-                            'Time-limited live monitoring authorized by parent.',
-                            style: TextStyle(
-                              fontSize: 11.sp,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    TextButton.icon(
-                      onPressed: () {
-                        final authState = ref.read(authNotifierProvider);
-                        if (authState.status != AuthStatus.authenticated) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Please log in / authorize first to scan QR code.')),
-                          );
-                          context.push('/login');
-                        } else {
-                          context.push('/join-shared-baby');
-                        }
-                      },
-                      icon: Icon(Icons.sync_rounded, size: 16.r, color: AppColors.primary),
-                      label: Text(
-                        'Scan QR',
-                        style: TextStyle(
-                          fontSize: 12.sp,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
-                        backgroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(height: 16.h),
-            ],
-
-            // Unified Baby & Device Summary Card
-            Container(
-              padding: EdgeInsets.all(16.r),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24.r),
-                boxShadow: AppColors.softShadow,
-                border: Border.all(
-                  color: AppColors.primary.withOpacity(0.06),
-                  width: 1.5,
-                ),
-              ),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 24.r,
-                    backgroundColor: AppColors.primary.withOpacity(0.1),
-                    child: Icon(
-                      baby.gender.toLowerCase() == 'female'
-                          ? Icons.child_care_rounded
-                          : Icons.face_rounded,
-                      color: AppColors.primary,
-                      size: 26.r,
-                    ),
-                  ),
-                  SizedBox(width: 12.w),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          baby.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 15.sp,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        SizedBox(height: 2.h),
-                        Text(
-                          '${calculateAge(baby.birthDate)} • ${baby.gender}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11.sp,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    width: 1.w,
-                    height: 40.h,
-                    color: AppColors.divider,
-                    margin: EdgeInsets.symmetric(horizontal: 14.w),
-                  ),
-                  Expanded(
-                    child: Consumer(
-                      builder: (context, ref, child) {
-                        final device = ref.watch(dashboardProvider.select((s) => s.device));
-                        return device != null
-                            ? Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    device.deviceName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 13.sp,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                  SizedBox(height: 2.h),
-                                  Row(
-                                    children: [
-                                      Container(
-                                        width: 6.r,
-                                        height: 6.r,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: device.status == 'online' || device.status == 'ONLINE' || device.status == 'Connected' || device.status == 'PAIRED' ? AppColors.sleepText : Colors.grey,
-                                        ),
-                                      ),
-                                      SizedBox(width: 4.w),
-                                      Expanded(
-                                        child: Text(
-                                          device.status == 'online' || device.status == 'ONLINE' || device.status == 'Connected' || device.status == 'PAIRED' ? 'Online' : 'Offline',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: 9.sp,
-                                            fontWeight: FontWeight.bold,
-                                            color: device.status == 'online' || device.status == 'ONLINE' || device.status == 'Connected' || device.status == 'PAIRED' ? AppColors.sleepText : Colors.grey,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-
-                                  SizedBox(height: 2.h),
-                                  Row(
-                                    children: [
-                                      Icon(Icons.info_outline_rounded, size: 10.r, color: AppColors.textSecondary),
-                                      SizedBox(width: 2.w),
-                                      Expanded(
-                                        child: Text(
-                                          'Firmware: ${device.firmwareVersion}',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: 9.sp,
-                                            color: AppColors.textSecondary,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              )
-                            : Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'No Cradle Paired',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 12.sp,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                  if (!isLiveMonitorOnly) ...[
-                                    SizedBox(height: 6.h),
-                                    FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: ElevatedButton(
-                                        onPressed: () {
-                                          context.push('/profile/connected-devices/pair');
-                                        },
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppColors.primary,
-                                          foregroundColor: Colors.white,
-                                          elevation: 0,
-                                          padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(10.r),
-                                          ),
-                                        ),
-                                        child: Text(
-                                          'Pair Cradle',
-                                          style: TextStyle(fontSize: 8.sp, fontWeight: FontWeight.bold),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              );
-                      },
-                    ),
-                  ),
-                ],
-              ),
+            // 2. Baby Status Hero Card ("Is my baby okay?")
+            Consumer(
+              builder: (context, ref, child) {
+                final telemetry = ref.watch(dashboardProvider.select((s) => s.latestTelemetry));
+                return BabyStatusHeroCard(
+                  baby: baby,
+                  telemetry: telemetry,
+                  onTap: isLiveMonitorOnly ? null : () => context.push('/predictive-health'),
+                );
+              },
             ),
             SizedBox(height: 24.h),
 
-            // Device Offline Warning Card (Conditional)
+            // 3. Caregiver Access Banner / Timer (only shown if caregiver active or caregiver user)
             Consumer(
               builder: (context, ref, child) {
-                final deviceStatus = ref.watch(dashboardProvider.select((s) => s.device?.status));
-                final isOffline = deviceStatus == 'offline';
-                if (!isOffline) return const SizedBox.shrink();
-                return Container(
-                  margin: EdgeInsets.only(bottom: 24.h),
-                  padding: EdgeInsets.all(16.r),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFEBEE),
-                    borderRadius: BorderRadius.circular(24.r),
-                    border: Border.all(
-                      color: const Color(0xFFEF5350).withOpacity(0.4),
-                      width: 1.5,
-                    ),
-                    boxShadow: AppColors.softShadow,
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.warning_amber_rounded,
-                        color: Color(0xFFC62828),
-                        size: 28,
-                      ),
-                      SizedBox(width: 12.w),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Cradle is Offline',
-                              style: TextStyle(
-                                fontSize: 14.sp,
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFFC62828),
-                              ),
-                            ),
-                            SizedBox(height: 2.h),
-                            Text(
-                              'Please check the cradle\'s power supply and Wi-Fi connection.',
-                              style: TextStyle(
-                                fontSize: 11.sp,
-                                fontWeight: FontWeight.w500,
-                                color: const Color(0xFFC62828).withOpacity(0.8),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                final cacheService = ref.watch(cacheServiceProvider);
+                final caregiverSession = cacheService.getCaregiverGrantedSession();
+                DateTime? expiresAt;
+                if (caregiverSession != null && caregiverSession['expiresAt'] != null) {
+                  expiresAt = DateTime.tryParse(caregiverSession['expiresAt'] as String);
+                }
+
+                final caregiverState = ref.watch(caregiverAccessProvider);
+                final activeSessions = caregiverState.activeSessions
+                    .where((s) => s.status == SessionStatus.active)
+                    .toList();
+                final activeCaregiverName = activeSessions.isNotEmpty ? activeSessions.first.name : null;
+
+                if (!isCaregiver && (activeCaregiverName == null || activeCaregiverName.trim().isEmpty)) {
+                  return const SizedBox.shrink();
+                }
+
+                return Padding(
+                  padding: EdgeInsets.only(bottom: 24.h),
+                  child: CaregiverStatusCard(
+                    isCaregiver: isCaregiver,
+                    expiresAt: expiresAt,
+                    activeCaregiverName: activeCaregiverName,
+                    onLogoutExpired: () {
+                      ref.read(authNotifierProvider.notifier).logout();
+                    },
                   ),
                 );
               },
             ),
 
-            // Live Camera Card
-            Text('Nursery Stream', style: AppTypography.sectionTitle),
-            SizedBox(height: 12.h),
-            const LiveCameraCard(),
-            SizedBox(height: 28.h),
+            // 4. Baby's Wellness Section (4 Claymorphic Metric Cards)
+            if (!isCaregiver || permsHealth) ...[
+              Consumer(
+                builder: (context, ref, child) {
+                  final telemetry = ref.watch(dashboardProvider.select((s) => s.latestTelemetry));
+                  return WellnessSection(
+                    telemetry: telemetry,
+                    isRestricted: isLiveMonitorOnly,
+                  );
+                },
+              ),
+              SizedBox(height: 24.h),
+            ],
 
-            // Today's Vitals grid
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text("Today's Summary", style: AppTypography.sectionTitle),
-                Consumer(
-                  builder: (context, ref, child) {
-                    final telemetryTime = ref.watch(dashboardProvider.select((s) {
-                      final telemetry = s.latestTelemetry;
-                      return (telemetry != null && telemetry.isNotEmpty) ? telemetry.values.first.timestamp : null;
-                    }));
-                    return Text(
-                      telemetryTime != null
-                          ? 'Updated: ${formatTime(telemetryTime)}'
-                          : 'Waiting for live sensor data...',
-                      style: TextStyle(
-                        fontSize: 11.sp,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary.withOpacity(0.8),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-            SizedBox(height: 12.h),
-            GridView.count(
-              crossAxisCount: vitalsCrossAxisCount,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 14.w,
-              mainAxisSpacing: 14.h,
-              childAspectRatio: vitalsChildAspectRatio,
-              children: [
-                Consumer(
-                  builder: (context, ref, child) {
-                    final heartRate = ref.watch(dashboardProvider.select((s) => s.latestTelemetry?['heart_rate']?.value.toInt().toString() ?? '--'));
-                    return SummaryCard(
-                      label: 'Heart Rate',
-                      value: heartRate,
-                      unit: 'bpm',
-                      icon: Icons.favorite_border_rounded,
-                      iconBgColor: AppColors.heartBg,
-                      iconColor: AppColors.heartIcon,
-                      onTap: isLiveMonitorOnly ? null : () => context.push('/telemetry-history?type=heart_rate'),
-                    );
-                  },
-                ),
-                Consumer(
-                  builder: (context, ref, child) {
-                    final breathingRate = ref.watch(dashboardProvider.select((s) => s.latestTelemetry?['breathing_rate']?.value.toInt().toString() ?? '--'));
-                    return SummaryCard(
-                      label: 'Breathing Rate',
-                      value: breathingRate,
-                      unit: 'rpm',
-                      icon: Icons.air_rounded,
-                      iconBgColor: AppColors.connectBg,
-                      iconColor: AppColors.connectText,
-                      onTap: isLiveMonitorOnly ? null : () => context.push('/telemetry-history?type=breathing_rate'),
-                    );
-                  },
-                ),
-                Consumer(
-                  builder: (context, ref, child) {
-                    final bodyTemp = ref.watch(dashboardProvider.select((s) => s.latestTelemetry?['body_temperature']?.value.toStringAsFixed(1) ?? '--'));
-                    return SummaryCard(
-                      label: 'Body Temp',
-                      value: bodyTemp,
-                      unit: '°C',
-                      icon: Icons.thermostat_outlined,
-                      iconBgColor: AppColors.tempBg,
-                      iconColor: AppColors.tempIcon,
-                      onTap: isLiveMonitorOnly ? null : () => context.push('/telemetry-history?type=body_temperature'),
-                    );
-                  },
-                ),
-                Consumer(
-                  builder: (context, ref, child) {
-                    final roomTemp = ref.watch(dashboardProvider.select((s) => s.latestTelemetry?['room_temperature']?.value.toStringAsFixed(1) ?? '--'));
-                    return SummaryCard(
-                      label: 'Room Temp',
-                      value: roomTemp,
-                      unit: '°C',
-                      icon: Icons.home_outlined,
-                      iconBgColor: AppColors.healthBg,
-                      iconColor: AppColors.healthText,
-                      onTap: isLiveMonitorOnly ? null : () => context.push('/telemetry-history?type=room_temperature'),
-                    );
-                  },
-                ),
-                Consumer(
-                  builder: (context, ref, child) {
-                    final humidity = ref.watch(dashboardProvider.select((s) => s.latestTelemetry?['humidity']?.value.toInt().toString() ?? '--'));
-                    return SummaryCard(
-                      label: 'Humidity',
-                      value: humidity,
-                      unit: '%',
-                      icon: Icons.water_drop_outlined,
-                      iconBgColor: AppColors.tempBg,
-                      iconColor: AppColors.tempIcon,
-                      onTap: isLiveMonitorOnly ? null : () => context.push('/telemetry-history?type=humidity'),
-                    );
-                  },
-                ),
-                Consumer(
-                  builder: (context, ref, child) {
-                    final airQuality = ref.watch(dashboardProvider.select((s) => s.latestTelemetry?['air_quality']?.value.toInt().toString() ?? '--'));
-                    return SummaryCard(
-                      label: 'Air Quality',
-                      value: airQuality,
-                      unit: 'AQI',
-                      icon: Icons.eco_outlined,
-                      iconBgColor: AppColors.sleepBg,
-                      iconColor: AppColors.sleepText,
-                      onTap: isLiveMonitorOnly ? null : () => context.push('/telemetry-history?type=air_quality'),
-                    );
-                  },
-                ),
-                Consumer(
-                  builder: (context, ref, child) {
-                    final sleepStage = ref.watch(dashboardProvider.select((s) => s.latestTelemetry?['sleep_stage']?.unit ?? 'Awake'));
-                    return SummaryCard(
-                      label: 'Sleep Stage',
-                      value: sleepStage,
-                      unit: '',
-                      icon: Icons.nights_stay_outlined,
-                      iconBgColor: AppColors.sleepProgressBg,
-                      iconColor: AppColors.sleepProgressIcon,
-                      onTap: isLiveMonitorOnly ? null : () => context.push('/telemetry-history?type=sleep_stage'),
-                    );
-                  },
-                ),
-                Consumer(
-                  builder: (context, ref, child) {
-                    final isCryDetected = ref.watch(dashboardProvider.select((s) => (s.latestTelemetry?['cry_detection']?.value ?? 0.0) > 0));
-                    return SummaryCard(
-                      label: 'Cry Detection',
-                      value: isCryDetected ? 'Detected' : 'Silent',
-                      unit: '',
-                      icon: Icons.face_retouching_natural_outlined,
-                      iconBgColor: AppColors.cryBg,
-                      iconColor: AppColors.cryIcon,
-                      onTap: isLiveMonitorOnly ? null : () => context.push('/telemetry-history?type=cry_detection'),
-                    );
-                  },
-                ),
-                Consumer(
-                  builder: (context, ref, child) {
-                    final isMovementDetected = ref.watch(dashboardProvider.select((s) => (s.latestTelemetry?['movement_detection']?.value ?? 0.0) > 0));
-                    return SummaryCard(
-                      label: 'Movement',
-                      value: isMovementDetected ? 'Moving' : 'Still',
-                      unit: '',
-                      icon: Icons.directions_run_outlined,
-                      iconBgColor: AppColors.connectBg,
-                      iconColor: AppColors.connectText,
-                      onTap: isLiveMonitorOnly ? null : () => context.push('/telemetry-history?type=movement_detection'),
-                    );
-                  },
-                ),
+            // 5. Smart Cradle Card (Status, Rocking switch, Music shortcut, Vector cradle visual)
+            if (!isCaregiver || permsCradle) ...[
+              Consumer(
+                builder: (context, ref, child) {
+                  final device = ref.watch(dashboardProvider.select((s) => s.device));
+                  return SmartCradleCard(
+                    device: device,
+                    isRestricted: isLiveMonitorOnly,
+                  );
+                },
+              ),
+              SizedBox(height: 24.h),
+            ],
 
-              ],
-            ),
-            SizedBox(height: 28.h),
-
-            // AI Insight summary
-            if (!isLiveMonitorOnly) ...[
+            // 6. Maatriva AI Insight Card
+            if (!isCaregiver || permsAi) ...[
               Consumer(
                 builder: (context, ref, child) {
                   final state = ref.watch(dashboardProvider);
@@ -865,41 +450,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   );
                 },
               ),
-              SizedBox(height: 28.h),
+              SizedBox(height: 24.h),
             ],
 
-            // Quick Actions grid
+            // 7. Quick Actions Grid
             Text('Quick Actions', style: AppTypography.sectionTitle),
             SizedBox(height: 12.h),
-            if (isLiveMonitorOnly)
-              GridView.count(
-                crossAxisCount: 1,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisSpacing: 8.w,
-                mainAxisSpacing: 8.h,
-                childAspectRatio: 4.5,
-                children: [
-                  QuickActionButton(
-                    icon: Icons.videocam_outlined,
-                    label: 'Open Live Camera Stream',
-                    onTap: () {
-                      setState(() {
-                        _currentNavIndex = 1;
-                      });
-                    },
-                  ),
-                ],
-              )
-            else
-              GridView.count(
-                crossAxisCount: actionsCrossAxisCount,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisSpacing: 8.w,
-                mainAxisSpacing: 8.h,
-                childAspectRatio: actionsChildAspectRatio,
-                children: [
+            GridView.count(
+              crossAxisCount: actionsCrossAxisCount,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisSpacing: 10.w,
+              mainAxisSpacing: 10.h,
+              childAspectRatio: actionsChildAspectRatio,
+              children: [
+                if (!isCaregiver || permsCamera)
                   QuickActionButton(
                     icon: Icons.videocam_outlined,
                     label: 'Live Feed',
@@ -909,41 +474,45 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       });
                     },
                   ),
+                if (!isCaregiver || permsAi)
                   QuickActionButton(
                     icon: Icons.smart_toy_outlined,
                     label: 'AI Chat',
-                    onTap: isLiveMonitorOnly
-                        ? () => _showRestrictedAccessDialog(context, 'AI Assistant')
-                        : () => context.push('/ai-assistant'),
+                    onTap: () => context.push('/ai-assistant'),
                   ),
+                if (!isCaregiver || permsHealth)
                   QuickActionButton(
                     icon: Icons.favorite_border_rounded,
                     label: 'Health Stats',
-                    onTap: isLiveMonitorOnly
-                        ? () => _showRestrictedAccessDialog(context, 'Health Analytics')
-                        : () => context.push('/predictive-health'),
+                    onTap: () => context.push('/predictive-health'),
                   ),
+                if (!isCaregiver || permsCradle)
                   QuickActionButton(
-                    icon: Icons.medical_services_outlined,
-                    label: 'Pediatrician',
-                    onTap: isLiveMonitorOnly
-                        ? () => _showRestrictedAccessDialog(context, 'Pediatrician Records')
-                        : () {},
+                    icon: Icons.bedroom_baby_outlined,
+                    label: 'Cradle',
+                    onTap: () {
+                      final device = ref.read(dashboardProvider).device;
+                      if (device != null && device.deviceId.isNotEmpty) {
+                        context.push('/profile/connected-devices/detail?id=${device.deviceId}');
+                      } else {
+                        context.push('/profile/connected-devices');
+                      }
+                    },
                   ),
+                if (!isCaregiver)
                   QuickActionButton(
-                    icon: Icons.ios_share_rounded,
-                    label: 'Share Info',
-                    onTap: isLiveMonitorOnly
-                        ? () => _showRestrictedAccessDialog(context, 'Caregiver Access Management')
-                        : () => context.push('/caregiver-access'),
+                    icon: Icons.supervisor_account_outlined,
+                    label: 'Caretaker Access',
+                    onTap: () => context.push('/caregiver-access'),
                   ),
+                if (!isCaregiver || permsMusic)
                   QuickActionButton(
                     icon: Icons.music_note_outlined,
                     label: 'Lullabies',
                     onTap: () => context.push('/music'),
                   ),
-                ],
-              ),
+              ],
+            ),
           ],
         ),
       ),

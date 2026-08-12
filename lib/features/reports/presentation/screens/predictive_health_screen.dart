@@ -222,7 +222,7 @@ class _PredictiveHealthScreenState
                   ),
                 ),
                 // Expanded Bottom Navigation
-                const BottomNavigation(currentIndex: 2),
+                const BottomNavigation(currentIndex: 1),
               ],
             ),
           ),

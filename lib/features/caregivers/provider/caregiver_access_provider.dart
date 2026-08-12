@@ -66,7 +66,7 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
               'camera_snapshot': false,
               'custom_music': false,
             },
-            selectedDurationLabel: '',
+            selectedDurationLabel: '30 Mins',
             activeSessions: [],
             accessHistory: [],
             qrToken: '',
@@ -78,12 +78,49 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
     _startPolling();
   }
 
+  Duration parseDuration(String label) {
+    final lower = label.toLowerCase().trim();
+    if (lower.contains('15 min') || lower == '15m' || lower == '15 mins') {
+      return const Duration(minutes: 15);
+    }
+    if (lower.contains('30 min') || lower == '30m' || lower == '30 mins') {
+      return const Duration(minutes: 30);
+    }
+    if (lower.contains('45 min') || lower == '45m' || lower == '45 mins') {
+      return const Duration(minutes: 45);
+    }
+    if (lower.contains('1 hour') || lower == '1 hr' || lower == '1h') {
+      return const Duration(hours: 1);
+    }
+    if (lower.contains('2 hour') || lower == '2 hrs' || lower == '2h') {
+      return const Duration(hours: 2);
+    }
+    if (lower.contains('4 hour') || lower == '4 hrs' || lower == '4h') {
+      return const Duration(hours: 4);
+    }
+    if (lower.contains('12 hour') || lower == '12 hrs' || lower == '12h') {
+      return const Duration(hours: 12);
+    }
+    if (lower.contains('24 hour') || lower == '24 hrs' || lower == '24h') {
+      return const Duration(hours: 24);
+    }
+    return parseCustomDuration(label);
+  }
+
   Future<void> loadSessions() async {
     try {
       final sessions = await _caregiverRepo.getActiveSessions();
       final history = await _caregiverRepo.getAccessHistory();
+      
+      final now = DateTime.now();
+      final selectedDuration = parseDuration(state.selectedDurationLabel);
+
+      final updatedSessions = sessions.map((s) {
+        return s.copyWith(expiresAt: now.add(selectedDuration));
+      }).toList();
+
       state = state.copyWith(
-        activeSessions: sessions,
+        activeSessions: updatedSessions,
         accessHistory: history,
       );
     } catch (_) {}
@@ -147,6 +184,12 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
 
   void selectDuration(String label) {
     state = state.copyWith(selectedDurationLabel: label);
+    final duration = parseDuration(label);
+    final now = DateTime.now();
+    final updatedSessions = state.activeSessions.map((s) {
+      return s.copyWith(expiresAt: now.add(duration));
+    }).toList();
+    state = state.copyWith(activeSessions: updatedSessions);
     _generateNewQR(silent: true);
   }
 
@@ -172,31 +215,7 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
       state = state.copyWith(isGeneratingQR: true);
     }
 
-    Duration duration;
-    switch (state.selectedDurationLabel.toLowerCase()) {
-      case '24 hours':
-      case '24 hrs':
-        duration = const Duration(hours: 24);
-        break;
-      case '12 hours':
-      case '12 hrs':
-        duration = const Duration(hours: 12);
-        break;
-      case '30 mins':
-      case '30 minutes':
-        duration = const Duration(minutes: 30);
-        break;
-      case '1 hour':
-      case '1 hr':
-        duration = const Duration(hours: 1);
-        break;
-      case '4 hours':
-      case '4 hrs':
-        duration = const Duration(hours: 4);
-        break;
-      default:
-        duration = parseCustomDuration(state.selectedDurationLabel);
-    }
+    final duration = parseDuration(state.selectedDurationLabel);
 
     try {
       final token = await _caregiverRepo.generateInviteToken(
@@ -205,9 +224,16 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
         email: email,
         role: role,
       );
-      debugPrint('[QR] Token generated successfully. Data length: ${token.length}');
+      debugPrint('[QR] Token generated successfully with duration: ${duration.inMinutes}m. Data length: ${token.length}');
+      
+      final now = DateTime.now();
+      final updatedSessions = state.activeSessions.map((s) {
+        return s.copyWith(expiresAt: now.add(duration));
+      }).toList();
+
       state = state.copyWith(
         qrToken: token,
+        activeSessions: updatedSessions,
         isGeneratingQR: false,
         clearQrError: true,
       );

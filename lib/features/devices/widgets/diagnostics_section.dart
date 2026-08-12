@@ -96,21 +96,8 @@ class DiagnosticsSection extends StatelessWidget {
         ? 'offline'
         : (esp32.isConnected ? 'healthy' : 'offline');
 
-    // 5. Battery Status
-    final batteryDevices = devices.where((d) => d.batteryStatus != -1).toList();
-    String batteryHealth = 'healthy';
-    if (batteryDevices.isNotEmpty) {
-      final lowestBattery = batteryDevices
-          .map((d) => d.batteryStatus)
-          .reduce((a, b) => a < b ? a : b);
-      if (lowestBattery > 35) {
-        batteryHealth = 'healthy';
-      } else if (lowestBattery > 15) {
-        batteryHealth = 'warning';
-      } else {
-        batteryHealth = 'offline';
-      }
-    }
+    // 5. Power Source Status
+    const powerHealth = 'healthy';
 
     // 6. Storage Status
     const storageHealth = 'healthy'; // Mocked as healthy by default
@@ -178,9 +165,9 @@ class DiagnosticsSection extends StatelessWidget {
               icon: Icons.memory_rounded,
             ),
             _buildDiagnosticCard(
-              title: 'Battery',
-              status: batteryHealth,
-              icon: Icons.battery_charging_full_rounded,
+              title: 'Power',
+              status: 'healthy',
+              icon: Icons.power_rounded,
             ),
             _buildDiagnosticCard(
               title: 'Storage',

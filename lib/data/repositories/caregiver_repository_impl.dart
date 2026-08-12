@@ -33,12 +33,31 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
 
         final status = statusStr == 'disabled' ? SessionStatus.expired : SessionStatus.active;
 
+        DateTime expiresAt;
+        if (c['expiresAt'] != null) {
+          expiresAt = DateTime.parse(c['expiresAt'] as String);
+        } else if (c['expiresInMinutes'] != null) {
+          final mins = (c['expiresInMinutes'] as num).toInt();
+          final grantedAt = c['createdAt'] != null
+              ? DateTime.parse(c['createdAt'] as String)
+              : DateTime.now();
+          expiresAt = grantedAt.add(Duration(minutes: mins));
+        } else if (c['durationMinutes'] != null) {
+          final mins = (c['durationMinutes'] as num).toInt();
+          final grantedAt = c['createdAt'] != null
+              ? DateTime.parse(c['createdAt'] as String)
+              : DateTime.now();
+          expiresAt = grantedAt.add(Duration(minutes: mins));
+        } else {
+          expiresAt = DateTime.now().add(const Duration(minutes: 30));
+        }
+
         return ActiveSession(
           id: c['id'] as String,
           name: c['fullName'] as String? ?? c['email'] as String? ?? 'Caregiver',
           relationship: _mapRoleToRelationship(role),
           imageUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-          expiresAt: DateTime.now().add(const Duration(hours: 24)),
+          expiresAt: expiresAt,
           status: status,
         );
       }).toList();
@@ -96,6 +115,8 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
         'email': email ?? '*',
         'role': role ?? 'BABYSITTER',
         'expiresInMinutes': expiresInMinutes,
+        'singleUse': true,
+        'maxUses': 1,
       },
       requireAuth: true,
     );
@@ -115,6 +136,8 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
       'babyId': babyId,
       'expiresAt': expiresAt,
       'permissions': permissions,
+      'singleUse': true,
+      'maxUses': 1,
     };
 
     return jsonEncode(qrData);
@@ -225,7 +248,7 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
       if (resMap['hasAccess'] == true) {
         return resMap;
       }
-      return null;
+      return {'hasAccess': false, 'status': resMap['status'] ?? 'disabled'};
     } catch (_) {
       return null;
     }

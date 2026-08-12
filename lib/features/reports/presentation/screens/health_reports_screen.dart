@@ -96,7 +96,7 @@ class _HealthReportsScreenState extends ConsumerState<HealthReportsScreen> {
               ),
             ),
       // Integrated Bottom Navigation Bar matching user requirements
-      bottomNavigationBar: const BottomNavigation(currentIndex: 2),
+      bottomNavigationBar: const BottomNavigation(currentIndex: 1),
     );
   }
 

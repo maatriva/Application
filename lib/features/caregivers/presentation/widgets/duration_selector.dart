@@ -18,6 +18,7 @@ class DurationSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final List<String> options = [
+      '15 Mins',
       '30 Mins',
       '1 Hour',
       '4 Hours',
@@ -26,7 +27,7 @@ class DurationSelector extends StatelessWidget {
       'Custom',
     ];
 
-    final isCustomSelected = !options.take(5).contains(selectedLabel);
+    final isCustomSelected = !options.take(6).contains(selectedLabel);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

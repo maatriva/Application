@@ -141,7 +141,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       try {
         final cache = _ref.read(cacheServiceProvider);
+        final existingGrantedSession = cache.getCaregiverGrantedSession();
         await cache.clearCache();
+        
+        // Preserve active caregiver session if time is remaining
+        if (existingGrantedSession != null) {
+          final expiresAtStr = existingGrantedSession['expiresAt'] as String?;
+          if (expiresAtStr != null) {
+            final expiresAt = DateTime.tryParse(expiresAtStr);
+            if (expiresAt != null && DateTime.now().isBefore(expiresAt)) {
+              await cache.cacheCaregiverGrantedSession(existingGrantedSession);
+              debugPrint('[AUTH] Preserved valid caregiver granted session during login (expiresAt: $expiresAtStr)');
+            }
+          } else {
+            await cache.cacheCaregiverGrantedSession(existingGrantedSession);
+          }
+        }
+
         _ref.invalidate(dashboardProvider);
         _ref.invalidate(profileProvider);
         _ref.invalidate(healthReportsProvider);
@@ -273,31 +289,61 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final caregiverRepo = _ref.read(caregiverRepositoryProvider);
       final accessRes = await caregiverRepo.getCaregiverAccess();
 
-      final hasActive = accessRes != null && accessRes['hasAccess'] == true;
+      final cache = _ref.read(cacheServiceProvider);
+      final cachedSession = cache.getCaregiverGrantedSession();
+      bool isCachedValid = false;
+      if (cachedSession != null) {
+        final expiresAtStr = cachedSession['expiresAt'] as String?;
+        if (expiresAtStr != null) {
+          final expiresAt = DateTime.tryParse(expiresAtStr);
+          if (expiresAt != null && DateTime.now().isBefore(expiresAt)) {
+            isCachedValid = true;
+          }
+        } else {
+          isCachedValid = true;
+        }
+      }
+
+      bool hasActive = false;
+      if (accessRes != null) {
+        // Server responded — server status ALWAYS overrides cached session!
+        final serverHasAccess = accessRes['hasAccess'] == true;
+        final serverStatus = (accessRes['status'] as String?) ??
+            (accessRes['data']?['status'] as String?);
+        final isRevoked = serverStatus == 'disabled' || serverStatus == 'revoked';
+
+        hasActive = serverHasAccess && !isRevoked;
+      } else {
+        // Server unreachable / offline fallback — check if cached session has time remaining
+        hasActive = isCachedValid;
+      }
+
       _lastCaregiverCheckTime = DateTime.now();
       _lastCaregiverCheckResult = hasActive;
 
       if (hasActive) {
         debugPrint('[Caregiver] Permission found with remaining time! Restoring access.');
-        final babyId = accessRes['babyId'] as String? ??
-            (accessRes['data']?['babyId'] as String?) ??
-            (accessRes['data']?['baby']?['id'] as String?);
-        final expiresAt = accessRes['expiresAt'] as String? ??
-            (accessRes['data']?['expiresAt'] as String?);
-        final permsMap = (accessRes['data']?['permissions'] as Map<String, dynamic>?) ??
-            (accessRes['permissions'] as Map<String, dynamic>?);
-        final babyData = (accessRes['data']?['baby'] as Map<String, dynamic>?) ?? {
-          'id': babyId ?? '',
-          'name': accessRes['data']?['babyName'] ?? 'Shared Baby',
+        final babyId = accessRes?['babyId'] as String? ??
+            (accessRes?['data']?['babyId'] as String?) ??
+            (accessRes?['data']?['baby']?['id'] as String?) ??
+            cachedSession?['babyId'] as String?;
+        final expiresAt = accessRes?['expiresAt'] as String? ??
+            (accessRes?['data']?['expiresAt'] as String?) ??
+            cachedSession?['expiresAt'] as String?;
+        final permsMap = (accessRes?['data']?['permissions'] as Map<String, dynamic>?) ??
+            (accessRes?['permissions'] as Map<String, dynamic>?) ??
+            cachedSession?['permissions'] as Map<String, dynamic>?;
+        final babyData = (accessRes?['data']?['baby'] as Map<String, dynamic>?) ??
+            cachedSession?['baby'] as Map<String, dynamic>? ?? {
+          'id': babyId ?? 'shared_baby_01',
+          'name': accessRes?['data']?['babyName'] ?? cachedSession?['babyName'] ?? 'Shared Baby',
           'dateOfBirth': '2024-01-01',
           'gender': 'female',
         };
 
-        final cache = _ref.read(cacheServiceProvider);
-        await cache.clearCaregiverGrantedSession();
         if (expiresAt != null) {
           await cache.cacheCaregiverGrantedSession({
-            'babyId': babyId ?? '',
+            'babyId': babyId ?? 'shared_baby_01',
             'babyName': babyData['name'] ?? 'Shared Baby',
             'permissions': permsMap ?? {'live_monitoring': true},
             'expiresAt': expiresAt,

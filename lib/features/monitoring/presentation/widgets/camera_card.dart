@@ -63,12 +63,10 @@ class _CameraCardState extends ConsumerState<CameraCard> {
 
     // Extract real telemetry if available
     final telemetryMap = dashboardState.latestTelemetry;
-    final batteryVal = telemetryMap?['battery_level']?.value;
     final roomTempVal = telemetryMap?['room_temperature']?.value;
     final humidityVal = telemetryMap?['humidity']?.value;
     final sleepStageStr = telemetryMap?['sleep_stage']?.unit ?? 'Asleep';
 
-    final batteryText = batteryVal != null ? '${batteryVal.toInt()}%' : '92%';
     final tempText = roomTempVal != null ? '${roomTempVal.toStringAsFixed(1)}°C' : '22.4°C';
     final humidityText = humidityVal != null ? '${humidityVal.toInt()}%' : '55%';
 
@@ -136,7 +134,7 @@ class _CameraCardState extends ConsumerState<CameraCard> {
                   ],
                 ),
                 Text(
-                  'BATTERY $batteryText   |   TEMP $tempText   HUMIDITY $humidityText',
+                  'POWER AC Power   |   TEMP $tempText   HUMIDITY $humidityText',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.6),
                     fontSize: 8,

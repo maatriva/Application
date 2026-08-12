@@ -160,6 +160,10 @@ class _JoinSharedBabyScreenState extends ConsumerState<JoinSharedBabyScreen>
         throw const FormatException('Invalid QR code format. Missing keys: server, token or babyId.');
       }
 
+      if (data['isUsed'] == true || data['claimed'] == true || data['used'] == true) {
+        throw const FormatException('This QR code has already been used by another caretaker. Each QR code works for one person only.');
+      }
+
       final expiresAtStr = data['expiresAt'] as String?;
       if (expiresAtStr != null) {
         final expiresAt = DateTime.tryParse(expiresAtStr);

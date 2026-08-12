@@ -8,6 +8,7 @@ import '../features/reports/presentation/screens/health_reports_screen.dart';
 import '../features/reports/presentation/screens/predictive_health_screen.dart';
 import '../features/dashboard/presentation/screens/telemetry_history_screen.dart';
 import '../features/caregivers/presentation/screens/caregiver_access_screen.dart';
+import '../features/caregivers/presentation/screens/caretaker_management_screen.dart';
 import '../features/caregivers/presentation/screens/accept_invite_screen.dart';
 import '../features/caregivers/presentation/screens/join_shared_baby_screen.dart';
 import '../features/shop/presentation/screens/shop_screen.dart';
@@ -63,6 +64,7 @@ class AppRoutes {
   static const String predictiveHealth = '/predictive-health';
   static const String telemetryHistory = '/telemetry-history';
   static const String caregiverAccess = '/caregiver-access';
+  static const String caregiverManage = '/caregiver-access/manage';
   static const String caregiverAcceptInvite = '/accept-invite';
   static const String joinSharedBaby = '/join-shared-baby';
   static const String shop = '/shop';
@@ -238,6 +240,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.caregiverAccess,
         builder: (context, state) => const CaregiverAccessScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.caregiverManage,
+        builder: (context, state) {
+          final sessionId = state.uri.queryParameters['id'] ?? '';
+          return CaretakerManagementScreen(sessionId: sessionId);
+        },
       ),
       GoRoute(
         path: AppRoutes.caregiverAcceptInvite,

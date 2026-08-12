@@ -48,7 +48,7 @@ class AppColors {
   // Claymorphism Soft Shadows
   static List<BoxShadow> softShadow = [
     BoxShadow(
-      color: const Color(0xFF5E7FE0).withValues(alpha: 0.08),
+      color: const Color(0xFF5478E8).withValues(alpha: 0.08),
       blurRadius: 20,
       spreadRadius: 0,
       offset: const Offset(0, 8),
@@ -63,30 +63,91 @@ class AppColors {
 
   static List<BoxShadow> clayShadow = [
     BoxShadow(
-      color: Colors.white.withValues(alpha: 0.9),
-      blurRadius: 10,
+      color: Colors.white.withValues(alpha: 0.95),
+      blurRadius: 12,
       spreadRadius: -2,
-      offset: const Offset(-4, -4),
+      offset: const Offset(-5, -5),
     ),
     BoxShadow(
-      color: const Color(0xFF173A70).withValues(alpha: 0.06),
-      blurRadius: 16,
+      color: const Color(0xFF173A70).withValues(alpha: 0.08),
+      blurRadius: 18,
       spreadRadius: 0,
-      offset: const Offset(4, 8),
+      offset: const Offset(5, 9),
     ),
   ];
+
+  static List<BoxShadow> clayHeroShadow = [
+    BoxShadow(
+      color: Colors.white.withValues(alpha: 0.9),
+      blurRadius: 16,
+      spreadRadius: -3,
+      offset: const Offset(-6, -6),
+    ),
+    BoxShadow(
+      color: const Color(0xFF5478E8).withValues(alpha: 0.15),
+      blurRadius: 24,
+      spreadRadius: 0,
+      offset: const Offset(6, 12),
+    ),
+  ];
+
+  // Specific Prompt Brand Color Aliases
+  static const Color aquaBg = Color(0xFFEAFBFC);
+  static const Color aquaSoft = Color(0xFFDDF6F7);
+  static const Color aquaMint = Color(0xFFC9EEF0);
+  static const Color royalBlue = Color(0xFF5478E8);
+  static const Color royalBlueLight = Color(0xFF617FEA);
+  static const Color periwinkle = Color(0xFF6B82E8);
+  static const Color navyDeep = Color(0xFF173A70);
+  static const Color navyMedium = Color(0xFF1D3B70);
+  static const Color navyDark = Color(0xFF233F70);
+  static const Color lavenderAccent = Color(0xFFA98BFF);
+  static const Color lavenderLight = Color(0xFFB69CFF);
+  static const Color softMint = Color(0xFFDDF7ED);
+  static const Color softWarmAccent = Color(0xFFFFF3E0);
+  static const Color warmOrange = Color(0xFFFF9F43);
 
   // Gradients
   static const LinearGradient primaryGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF6B87EB), Color(0xFF4F6ED6)],
+    colors: [Color(0xFF5478E8), Color(0xFF6B82E8)],
+  );
+
+  static const LinearGradient heroCardGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xFFFFFFFF),
+      Color(0xFFF3FBFC),
+      Color(0xFFEEF7FF),
+    ],
+  );
+
+  static const LinearGradient cradleCardGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xFFFFFFFF),
+      Color(0xFFF4FAFC),
+      Color(0xFFEDF4FE),
+    ],
+  );
+
+  static const LinearGradient aiInsightGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xFFFFFDF8),
+      Color(0xFFF7F8FE),
+      Color(0xFFF0F6FF),
+    ],
   );
 
   static const LinearGradient backgroundGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [Color(0xFFE6F5F6), Color(0xFFF2FAF8)],
+    colors: [Color(0xFFEAFBFC), Color(0xFFF4FAFA)],
   );
 
   static const LinearGradient cardGradient = LinearGradient(

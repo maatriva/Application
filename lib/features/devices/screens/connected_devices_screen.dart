@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
-import '../../../../domain/repositories/baby_repository.dart';
 import '../../../../shared/models/baby_profile.dart';
+import '../../../../shared/models/device_model.dart';
 import '../../../../core/services/providers.dart';
 import '../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../providers/device_provider.dart';
@@ -279,14 +279,45 @@ class _ConnectedDevicesScreenState extends ConsumerState<ConnectedDevicesScreen>
 
   @override
   Widget build(BuildContext context) {
+    final dashboardDevice = ref.watch(dashboardProvider.select((s) => s.device));
     final state = ref.watch(deviceProvider);
     
-    // Find Smart Cradle for the Overview Card
-    final cradle = state.devices.firstWhere(
-      (d) => d.type == 'Smart Cradle',
-      orElse: () =>
-          state.devices.isNotEmpty ? state.devices.first : null as dynamic,
-    );
+    // Filter to include ONLY the logged-in registered cradle information
+    final userDevices = state.devices.where((d) {
+      if (dashboardDevice != null && dashboardDevice.deviceId.isNotEmpty) {
+        return d.deviceId == dashboardDevice.deviceId || d.id == dashboardDevice.deviceId;
+      }
+      return d.type == 'Smart Cradle';
+    }).toList();
+
+    // If list empty but dashboard device present, create single device list
+    final devices = userDevices.isNotEmpty
+        ? userDevices
+        : (dashboardDevice != null
+            ? [
+                DeviceModel(
+                  id: dashboardDevice.deviceId,
+                  name: dashboardDevice.deviceName.isNotEmpty ? dashboardDevice.deviceName : 'Smart Cradle',
+                  type: 'Smart Cradle',
+                  status: (dashboardDevice.status == 'online' || dashboardDevice.status == 'ONLINE' || dashboardDevice.status == 'Connected' || dashboardDevice.status == 'PAIRED') ? 'Connected' : 'Offline',
+                  lastSynced: 'Just now',
+                  firmwareVersion: dashboardDevice.firmwareVersion,
+                  latestFirmwareVersion: dashboardDevice.firmwareVersion,
+                  deviceId: dashboardDevice.deviceId,
+                  serialNumber: 'SN-DEV-${dashboardDevice.deviceId.hashCode.abs()}',
+                  lastConnected: 'Today, Just now',
+                  batteryStatus: -1,
+                  wifiSignal: 90,
+                  signalQuality: 'Excellent',
+                  description: 'Primary infant containment & sensory suite with automatic rocking.',
+                  hdReady: false,
+                  connectedNetwork: 'Maatriva_Nursery_5G',
+                  babyId: dashboardDevice.babyId,
+                )
+              ]
+            : <DeviceModel>[]);
+
+    final cradle = devices.isNotEmpty ? devices.first : null;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -319,7 +350,7 @@ class _ConnectedDevicesScreenState extends ConsumerState<ConnectedDevicesScreen>
                 await _loadBabies();
               },
               color: AppColors.primary,
-              child: state.devices.isEmpty
+              child: devices.isEmpty
                   ? SingleChildScrollView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 40.h),
@@ -338,7 +369,7 @@ class _ConnectedDevicesScreenState extends ConsumerState<ConnectedDevicesScreen>
                           SizedBox(height: 22.h),
 
                           // 2. Dynamic Diagnostics Grid
-                          DiagnosticsSection(devices: state.devices),
+                          DiagnosticsSection(devices: devices),
                           SizedBox(height: 24.h),
 
                           // 3. Section Header
@@ -354,7 +385,7 @@ class _ConnectedDevicesScreenState extends ConsumerState<ConnectedDevicesScreen>
                                 ),
                               ),
                               Text(
-                                '${state.devices.length} Active',
+                                '${devices.length} Active',
                                 style: TextStyle(
                                   color: AppColors.textSecondary,
                                   fontSize: 11.sp,
@@ -369,9 +400,9 @@ class _ConnectedDevicesScreenState extends ConsumerState<ConnectedDevicesScreen>
                           ListView.builder(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
-                            itemCount: state.devices.length,
+                            itemCount: devices.length,
                             itemBuilder: (context, index) {
-                              final device = state.devices[index];
+                              final device = devices[index];
                               final assignedBabyName = _babies
                                   .firstWhere((b) => b.id == device.babyId,
                                       orElse: () => BabyProfile(id: '', parentId: '', name: '', birthDate: DateTime.now(), gender: ''))
