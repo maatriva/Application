@@ -320,4 +320,39 @@ export class TelemetryController {
       });
     }
   }
+
+  /**
+   * GET /telemetry/sensor-report/:babyId
+   * Fetch period-aggregated sensor report (1d, 2d, 7d, 1m).
+   */
+  public static async getSensorReport(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    const parentId = req.user?.userId;
+    const babyId = req.params.babyId;
+
+    if (!parentId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized: Authentication required.',
+      });
+    }
+
+    const sensor = (req.query.sensor as string) || 'heart_rate';
+    const period = (req.query.period as string) || '1d';
+
+    try {
+      const report = await telemetryService.getSensorReport(babyId, parentId, sensor, period);
+      return res.status(200).json({
+        success: true,
+        message: 'Sensor report fetched successfully.',
+        data: report,
+      });
+    } catch (e: any) {
+      const status = e.statusCode || 500;
+      return res.status(status).json({
+        success: false,
+        message: e.message || 'Internal fetch sensor report error.',
+      });
+    }
+  }
 }
+

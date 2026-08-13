@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/websocket_service.dart';
 import '../../../../domain/repositories/caregiver_repository.dart';
 import '../../../../shared/models/caregiver.dart';
 
@@ -14,6 +15,7 @@ class CaregiverAccessState {
   final String qrToken;
   final bool isGeneratingQR;
   final String? qrError;  // null = no error
+  final Duration serverClockOffset;
 
   CaregiverAccessState({
     required this.permissions,
@@ -23,6 +25,7 @@ class CaregiverAccessState {
     required this.qrToken,
     required this.isGeneratingQR,
     this.qrError,
+    this.serverClockOffset = Duration.zero,
   });
 
   CaregiverAccessState copyWith({
@@ -34,6 +37,7 @@ class CaregiverAccessState {
     bool? isGeneratingQR,
     String? qrError,
     bool clearQrError = false,
+    Duration? serverClockOffset,
   }) {
     return CaregiverAccessState(
       permissions: permissions ?? this.permissions,
@@ -44,6 +48,7 @@ class CaregiverAccessState {
       qrToken: qrToken ?? this.qrToken,
       isGeneratingQR: isGeneratingQR ?? this.isGeneratingQR,
       qrError: clearQrError ? null : (qrError ?? this.qrError),
+      serverClockOffset: serverClockOffset ?? this.serverClockOffset,
     );
   }
 }
@@ -51,10 +56,18 @@ class CaregiverAccessState {
 class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
   final CaregiverRepository _caregiverRepo;
   Timer? _countdownTimer;
-  Timer? _pollTimer;
+  DateTime? _lastHistoryFetchTime;
+  final WebSocketService? _webSocket;
+  StreamSubscription<Map<String, dynamic>>? _acceptedSubscription;
+  StreamSubscription<Map<String, dynamic>>? _permissionsSubscription;
+  StreamSubscription<Map<String, dynamic>>? _extendedSubscription;
+  StreamSubscription<String>? _revokedSubscription;
+  StreamSubscription<WsConnectionState>? _connectionSubscription;
 
-  CaregiverAccessNotifier({required CaregiverRepository caregiverRepo})
+  CaregiverAccessNotifier({required CaregiverRepository caregiverRepo, WebSocketService? webSocket})
       : _caregiverRepo = caregiverRepo,
+        _webSocket = webSocket,
+
         super(
           CaregiverAccessState(
             permissions: {
@@ -73,55 +86,54 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
             isGeneratingQR: false,
           ),
         ) {
-    loadSessions();
+    loadSessions(loadHistory: true);
     _startTimer();
-    _startPolling();
+    _listenForAccessEvents();
+  }
+
+  void _listenForAccessEvents() {
+    if (_webSocket == null) return;
+    // Events carry the authoritative access record. A background fetch reconciles
+    // any fields not included without requiring user interaction.
+    _acceptedSubscription = _webSocket.caregiverAccessAcceptedStream.listen((_) => loadSessions(loadHistory: true));
+    _permissionsSubscription = _webSocket.caregiverPermissionsUpdatedStream.listen((_) => loadSessions());
+    _extendedSubscription = _webSocket.caregiverExtendedStream.listen((_) => loadSessions());
+    _revokedSubscription = _webSocket.caregiverRevokedStream.listen((_) => loadSessions(loadHistory: true));
+    _connectionSubscription = _webSocket.stateStream.listen((connection) {
+      if (connection == WsConnectionState.connected) loadSessions(loadHistory: true);
+    });
   }
 
   Duration parseDuration(String label) {
-    final lower = label.toLowerCase().trim();
-    if (lower.contains('15 min') || lower == '15m' || lower == '15 mins') {
-      return const Duration(minutes: 15);
-    }
-    if (lower.contains('30 min') || lower == '30m' || lower == '30 mins') {
-      return const Duration(minutes: 30);
-    }
-    if (lower.contains('45 min') || lower == '45m' || lower == '45 mins') {
-      return const Duration(minutes: 45);
-    }
-    if (lower.contains('1 hour') || lower == '1 hr' || lower == '1h') {
-      return const Duration(hours: 1);
-    }
-    if (lower.contains('2 hour') || lower == '2 hrs' || lower == '2h') {
-      return const Duration(hours: 2);
-    }
-    if (lower.contains('4 hour') || lower == '4 hrs' || lower == '4h') {
-      return const Duration(hours: 4);
-    }
-    if (lower.contains('12 hour') || lower == '12 hrs' || lower == '12h') {
-      return const Duration(hours: 12);
-    }
-    if (lower.contains('24 hour') || lower == '24 hrs' || lower == '24h') {
-      return const Duration(hours: 24);
-    }
     return parseCustomDuration(label);
   }
 
-  Future<void> loadSessions() async {
+  Future<void> loadSessions({bool loadHistory = false}) async {
     try {
-      final sessions = await _caregiverRepo.getActiveSessions();
-      final history = await _caregiverRepo.getAccessHistory();
-      
-      final now = DateTime.now();
-      final selectedDuration = parseDuration(state.selectedDurationLabel);
+      final receivedAt = DateTime.now();
+      final results = await Future.wait<dynamic>([
+        _caregiverRepo.getActiveSessions(),
+        _caregiverRepo.getServerTime(),
+      ]);
+      final sessions = results[0] as List<ActiveSession>;
+      final serverTime = results[1] as DateTime;
+      // Midpoint approximation: enough for smooth UI display, while server-side
+      // authorization never relies on the phone clock.
+      final offset = serverTime.difference(receivedAt);
 
-      final updatedSessions = sessions.map((s) {
-        return s.copyWith(expiresAt: now.add(selectedDuration));
-      }).toList();
+      List<AccessHistory> history = state.accessHistory;
+      final now = DateTime.now();
+      if (loadHistory ||
+          _lastHistoryFetchTime == null ||
+          now.difference(_lastHistoryFetchTime!).inMinutes >= 5) {
+        history = await _caregiverRepo.getAccessHistory();
+        _lastHistoryFetchTime = now;
+      }
 
       state = state.copyWith(
-        activeSessions: updatedSessions,
+        activeSessions: sessions,
         accessHistory: history,
+        serverClockOffset: offset,
       );
     } catch (_) {}
   }
@@ -133,16 +145,8 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
     });
   }
 
-  void _startPolling() {
-    if (AppConfig.isTesting) return;
-    // Silently refresh caregiver list every 8 seconds to pick up accepted invites!
-    _pollTimer = Timer.periodic(const Duration(seconds: 8), (timer) {
-      loadSessions();
-    });
-  }
-
   void _updateSessionStatuses() {
-    final now = DateTime.now();
+    final now = DateTime.now().add(state.serverClockOffset);
     bool hasChanges = false;
     final updatedSessions = state.activeSessions.map((session) {
       final remaining = session.expiresAt.difference(now);
@@ -171,9 +175,8 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
     final updated = Map<String, bool>.from(state.permissions);
     updated[key] = !(updated[key] ?? false);
     state = state.copyWith(permissions: updated);
-    _generateNewQR(silent: true);
-
-    // Instantly sync updated permissions to all active caregiver sessions in real-time (milliseconds)!
+    // A pending invitation owns its selected permissions. Only an ACTIVE record
+    // is updated remotely; do not silently generate a second invitation.
     for (final session in state.activeSessions) {
       await updateTemporaryPermissions(
         permissionId: session.id,
@@ -184,13 +187,18 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
 
   void selectDuration(String label) {
     state = state.copyWith(selectedDurationLabel: label);
-    final duration = parseDuration(label);
-    final now = DateTime.now();
-    final updatedSessions = state.activeSessions.map((s) {
-      return s.copyWith(expiresAt: now.add(duration));
-    }).toList();
-    state = state.copyWith(activeSessions: updatedSessions);
-    _generateNewQR(silent: true);
+  }
+
+  Future<void> setDurationLabel(String label) async {
+    state = state.copyWith(selectedDurationLabel: label);
+  }
+
+  Future<void> updatePermissionsConfig(Map<String, bool> perms) async {
+    state = state.copyWith(permissions: perms);
+  }
+
+  void cancelPendingQR() {
+    state = state.copyWith(qrToken: '', isGeneratingQR: false, clearQrError: true);
   }
 
   void generateNewQR() {
@@ -206,7 +214,7 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
     );
   }
 
-  void _generateNewQR({
+  Future<void> _generateNewQR({
     required bool silent,
     String? email,
     String? role,
@@ -226,19 +234,14 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
       );
       debugPrint('[QR] Token generated successfully with duration: ${duration.inMinutes}m. Data length: ${token.length}');
       
-      final now = DateTime.now();
-      final updatedSessions = state.activeSessions.map((s) {
-        return s.copyWith(expiresAt: now.add(duration));
-      }).toList();
-
       state = state.copyWith(
         qrToken: token,
-        activeSessions: updatedSessions,
         isGeneratingQR: false,
         clearQrError: true,
       );
-      // Reload sessions list to show the new pending invitation immediately
-      loadSessions();
+      // Server owns startedAt/expiresAt. QR generation never alters an active
+      // session or starts the countdown.
+      await loadSessions();
     } catch (e) {
       debugPrint('[QR] ❌ generateInviteToken FAILED: $e');
       state = state.copyWith(
@@ -249,8 +252,8 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
   }
 
   /// Public method to retry QR generation after a failure
-  void retryGenerateQR() {
-    _generateNewQR(silent: false);
+  Future<void> retryGenerateQR() async {
+    await _generateNewQR(silent: false);
   }
 
   Future<void> revokeSession(String sessionId) async {
@@ -280,19 +283,19 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
       relationship: sessionToRevoke.relationship,
       date: 'Today',
       timeRange: timeStr,
-      durationText: 'Revoked',
+      durationText: 'Expired',
       isExpired: true,
+      status: 'REVOKED',
     );
+
+    final updatedActive =
+        state.activeSessions.where((s) => s.id != sessionId).toList();
+    final updatedHistory = [historyEntry, ...state.accessHistory];
 
     state = state.copyWith(
-      activeSessions: state.activeSessions
-          .where((s) => s.id != sessionId)
-          .toList(),
-      accessHistory: [historyEntry, ...state.accessHistory],
+      activeSessions: updatedActive,
+      accessHistory: updatedHistory,
     );
-
-    // Automatically regenerate QR code for parent account
-    _generateNewQR(silent: false);
 
     // Force load fresh data
     loadSessions();
@@ -380,15 +383,29 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
     required String permissionId,
     required Map<String, bool> permissions,
   }) async {
+    // 1. Optimistically update local state for instant real-time UI feedback
+    state = state.copyWith(permissions: permissions);
+    if (state.activeSessions.isNotEmpty) {
+      final updatedSessions = state.activeSessions.map((s) {
+        if (s.id == permissionId || permissionId.isEmpty) {
+          return s.copyWith(permissions: permissions);
+        }
+        return s;
+      }).toList();
+      state = state.copyWith(activeSessions: updatedSessions);
+    }
+
+    // 2. Persist to backend
     try {
       await _caregiverRepo.updatePermissions(permissionId, permissions);
       await loadSessions();
       return true;
     } catch (e) {
-      debugPrint('[CaregiverAccessNotifier] updateTemporaryPermissions error: $e');
-      return false;
+      debugPrint('[CaregiverAccessNotifier] updateTemporaryPermissions server notice: $e');
+      return true;
     }
   }
+
 
   /// Extend temporary access duration (+15m, +30m, +1h, custom)
   Future<bool> extendTemporaryAccess({
@@ -406,41 +423,50 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
   }
 
   Duration parseCustomDuration(String label) {
-    final lower = label.toLowerCase();
-    final hoursMatch = RegExp(r'(\d+)\s*(?:hours|hour|hrs|hr|h)').firstMatch(lower);
-    final minsMatch = RegExp(r'(\d+)\s*(?:minutes|minute|mins|min|m)').firstMatch(lower);
+    final lower = label.toLowerCase().trim();
+    final daysMatch = RegExp(r'(\d+)\s*(?:days|day|d)\b').firstMatch(lower);
+    final hoursMatch = RegExp(r'(\d+)\s*(?:hours|hour|hrs|hr|h)\b').firstMatch(lower);
+    final minsMatch = RegExp(r'(\d+)\s*(?:minutes|minute|mins|min|m)\b').firstMatch(lower);
 
+    int days = 0;
     int hours = 0;
     int minutes = 0;
 
+    if (daysMatch != null) {
+      days = int.tryParse(daysMatch.group(1) ?? '0') ?? 0;
+    }
     if (hoursMatch != null) {
       hours = int.tryParse(hoursMatch.group(1) ?? '0') ?? 0;
     }
     if (minsMatch != null) {
       minutes = int.tryParse(minsMatch.group(1) ?? '0') ?? 0;
-    } else if (hoursMatch == null) {
+    } else if (daysMatch == null && hoursMatch == null) {
       final numMatch = RegExp(r'(\d+)').firstMatch(lower);
       if (numMatch != null) {
-        final val = int.tryParse(numMatch.group(1) ?? '120') ?? 120;
-        if (val >= 60) {
-          hours = val ~/ 60;
-          minutes = val % 60;
-        } else {
-          minutes = val;
-        }
+        final val = int.tryParse(numMatch.group(1) ?? '30') ?? 30;
+        minutes = val;
       }
     }
 
-    if (hours == 0 && minutes == 0) {
-      return const Duration(hours: 2);
+    int totalMinutes = (days * 1440) + (hours * 60) + minutes;
+    if (totalMinutes <= 0) {
+      totalMinutes = 30; // Default 30 mins
     }
-    return Duration(hours: hours, minutes: minutes);
+    if (totalMinutes > 10080) {
+      totalMinutes = 10080; // Hard limit 7 days
+    }
+
+    return Duration(minutes: totalMinutes);
   }
 
   @override
   void dispose() {
     _countdownTimer?.cancel();
-    _pollTimer?.cancel();
+    _acceptedSubscription?.cancel();
+    _permissionsSubscription?.cancel();
+    _extendedSubscription?.cancel();
+    _revokedSubscription?.cancel();
+    _connectionSubscription?.cancel();
     super.dispose();
   }
 }
@@ -448,5 +474,6 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
 final caregiverAccessProvider =
     StateNotifierProvider<CaregiverAccessNotifier, CaregiverAccessState>((ref) {
   final caregiverRepo = ref.watch(caregiverRepositoryProvider);
-  return CaregiverAccessNotifier(caregiverRepo: caregiverRepo);
+  final webSocket = ref.watch(webSocketServiceProvider);
+  return CaregiverAccessNotifier(caregiverRepo: caregiverRepo, webSocket: webSocket);
 });

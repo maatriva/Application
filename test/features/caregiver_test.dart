@@ -16,6 +16,9 @@ class MockCaregiverRepository implements CaregiverRepository {
   }
 
   @override
+  Future<DateTime> getServerTime() async => DateTime.now();
+
+  @override
   Future<List<AccessHistory>> getAccessHistory() async {
     return history;
   }

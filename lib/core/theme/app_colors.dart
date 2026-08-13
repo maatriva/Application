@@ -107,6 +107,25 @@ class AppColors {
   static const Color softWarmAccent = Color(0xFFFFF3E0);
   static const Color warmOrange = Color(0xFFFF9F43);
 
+  // Predictive Health Unified Design Tokens
+  static const Color predictiveCardBg = Color(0xFFEAF8F7);
+  static const Color predictiveCanvasBg = Color(0xFFDFF3F4);
+
+  static List<BoxShadow> predictiveClayShadow = [
+    BoxShadow(
+      color: Colors.white.withValues(alpha: 0.9),
+      blurRadius: 14,
+      spreadRadius: -2,
+      offset: const Offset(-4, -4),
+    ),
+    BoxShadow(
+      color: const Color(0xFF173A70).withValues(alpha: 0.07),
+      blurRadius: 18,
+      spreadRadius: 0,
+      offset: const Offset(4, 8),
+    ),
+  ];
+
   // Gradients
   static const LinearGradient primaryGradient = LinearGradient(
     begin: Alignment.topLeft,

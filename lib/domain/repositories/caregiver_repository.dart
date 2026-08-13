@@ -4,6 +4,9 @@ import '../../shared/models/caregiver.dart';
 abstract class CaregiverRepository {
   Future<List<ActiveSession>> getActiveSessions();
 
+  /// Server-authoritative reference used to keep UI countdowns synchronized.
+  Future<DateTime> getServerTime();
+
   Future<List<AccessHistory>> getAccessHistory();
 
   Future<String> generateInviteToken(

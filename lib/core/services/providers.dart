@@ -41,6 +41,7 @@ import '../../data/repositories/ai_repository_impl.dart';
 
 // Authentication Providers
 import '../../features/authentication/presentation/providers/auth_provider.dart';
+import '../../features/caregivers/provider/caregiver_access_provider.dart';
 
 // Global ScaffoldMessengerState Key
 final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -118,15 +119,22 @@ final Provider<WebSocketService> webSocketServiceProvider = Provider<WebSocketSe
 
   service.caregiverPermissionsUpdatedStream.listen((data) {
     debugPrint('[CaregiverPermissionsUpdated] Real-time permissions updated event received.');
-    ref.read(authNotifierProvider.notifier).verifyCaregiverActivePermissions();
+    ref.read(authNotifierProvider.notifier).verifyCaregiverActivePermissions(null, true);
     ref.read(musicProvider.notifier).refreshLibrary();
+    try {
+      ref.read(caregiverAccessProvider.notifier).loadSessions(loadHistory: true);
+    } catch (_) {}
   });
 
   service.caregiverGrantedStream.listen((data) {
     debugPrint('[CaregiverGranted] Real-time caregiver access granted event received.');
-    ref.read(authNotifierProvider.notifier).verifyCaregiverActivePermissions();
+    ref.read(authNotifierProvider.notifier).verifyCaregiverActivePermissions(null, true);
     ref.read(musicProvider.notifier).refreshLibrary();
+    try {
+      ref.read(caregiverAccessProvider.notifier).loadSessions(loadHistory: true);
+    } catch (_) {}
   });
+
 
 
 

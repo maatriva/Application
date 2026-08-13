@@ -50,7 +50,7 @@ class WellnessSection extends StatelessWidget {
             GestureDetector(
               onTap: () {
                 if (!isRestricted) {
-                  context.push('/telemetry-history?type=heart_rate');
+                  context.push('/wellness-monitoring');
                 }
               },
               child: Row(

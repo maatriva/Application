@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
+import 'package:maatriva/routes/app_routes.dart';
 import 'package:maatriva/shared/widgets/clay_container.dart';
 
 /// Caregiver Status Card displaying active caregiver monitoring status
@@ -149,7 +150,7 @@ class _CaregiverStatusCardState extends State<CaregiverStatusCard> {
 
     return ClayContainer(
       borderRadius: 22,
-      onTap: () => context.push('/caregiver-access'),
+      onTap: () => context.push(AppRoutes.caregiverAccess),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       shadows: AppColors.clayShadow,
       child: Row(

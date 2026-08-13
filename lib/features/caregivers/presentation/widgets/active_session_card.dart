@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
+import 'package:maatriva/routes/app_routes.dart';
 import '../../../../shared/models/caregiver.dart';
 
 class ActiveSessionCard extends StatelessWidget {
@@ -224,7 +225,7 @@ class ActiveSessionCard extends StatelessWidget {
             children: [
               OutlinedButton.icon(
                 onPressed: () {
-                  context.push('/caregiver-access/manage?id=${session.id}');
+                  context.push('${AppRoutes.caregiverManage}?id=${session.id}');
                 },
                 icon: const Icon(Icons.tune_rounded, size: 14),
                 label: const Text('Manage', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),

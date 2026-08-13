@@ -124,7 +124,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       });
       // Hide keyboard
       FocusScope.of(context).unfocus();
-      
+
       try {
         await ref.read(authNotifierProvider.notifier).login(
               email: _emailController.text.trim(),
@@ -145,10 +145,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final authState = ref.watch(authNotifierProvider);
     final onboardingState = ref.watch(onboardingProvider);
     final isLoading = _isSubmitting ||
-                     authState.status == AuthStatus.loading ||
-                     (authState.status == AuthStatus.authenticated && onboardingState.isLoading);
+        authState.status == AuthStatus.loading ||
+        (authState.status == AuthStatus.authenticated && onboardingState.isLoading);
 
-    // Listen for authentication errors and display them in a premium SnackBar
+    // Listen for authentication errors and display in SnackBar
     ref.listen<AuthState>(authNotifierProvider, (previous, next) {
       if (next.status == AuthStatus.error && next.errorMessage != null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -182,13 +182,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.background, // Soft Light Aqua Canvas (0xFFEBF7F8)
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 20.h),
+          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // Server IP Config Button
               Align(
                 alignment: Alignment.topRight,
                 child: InkWell(
@@ -208,7 +209,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         SizedBox(width: 6.w),
                         Text(
                           'Server IP',
-                          style: TextStyle(
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 11.sp,
                             fontWeight: FontWeight.w600,
                             color: AppColors.primary,
@@ -219,63 +220,73 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                 ),
               ),
-              SizedBox(height: 10.h),
-              
-              // Celestial Branding Header
-              Container(
-                width: 76.r,
-                height: 76.r,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: AppColors.softShadow,
-                  border: Border.all(
-                    color: AppColors.primary.withOpacity(0.06),
-                    width: 1.5,
-                  ),
-                ),
-                child: Icon(
-                  Icons.child_care_rounded,
-                  color: AppColors.primary,
-                  size: 38.r,
-                ),
-              ),
-              SizedBox(height: 16.h),
-              Text(
-                'MAATRIVA',
-                style: GoogleFonts.outfit(
-                  textStyle: TextStyle(
-                    fontSize: 24.sp,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2.0,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ),
-              Text(
-                'AI-POWERED SMART BABY MONITOR',
-                style: GoogleFonts.outfit(
-                  textStyle: TextStyle(
-                    fontSize: 9.sp,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.5,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ),
-              
-              SizedBox(height: 36.h),
 
-              // Celestial Claymorphism Card
+              SizedBox(height: 6.h),
+
+              // =================================================================
+              // 1. BRANDING HEADER (Logo + Title)
+              // =================================================================
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 52.r,
+                    height: 52.r,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: AppColors.softShadow,
+                      border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.child_care_rounded,
+                      color: AppColors.primary,
+                      size: 30.r,
+                    ),
+                  ),
+                  SizedBox(width: 12.w),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'MAATRIVA',
+                        style: GoogleFonts.outfit(
+                          fontSize: 22.sp,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 2.0,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        'Smart Care. Peaceful Moments.',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 10.sp,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
+              SizedBox(height: 20.h),
+
+              // =================================================================
+              // 2. MAIN CLAYMORPHIC CARD FOR LOGIN FORM
+              // =================================================================
               Container(
                 width: double.infinity,
-                padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 28.h),
+                padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 24.h),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(28.r),
                   border: Border.all(
-                    color: AppColors.softTeal.withValues(alpha: 0.35),
-                    width: 1.2,
+                    color: AppColors.primary.withValues(alpha: 0.08),
+                    width: 1.5,
                   ),
                   boxShadow: AppColors.clayShadow,
                 ),
@@ -284,42 +295,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Card Title & Subtitle
                       Text(
                         'Welcome Back',
                         style: GoogleFonts.outfit(
-                          textStyle: TextStyle(
-                            fontSize: 22.sp,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
+                          fontSize: 22.sp,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
                         ),
                       ),
                       SizedBox(height: 4.h),
                       Text(
-                        'Sign in to continue monitoring',
-                        style: TextStyle(
-                          fontSize: 13.sp,
-                          fontWeight: FontWeight.w500,
+                        'Login to continue caring for your little one. 💜',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12.sp,
                           color: AppColors.textSecondary,
                         ),
                       ),
+
                       SizedBox(height: 24.h),
 
                       // Email Field
-                      Text(
-                        'Email Address',
-                        style: TextStyle(
-                          fontSize: 12.sp,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      SizedBox(height: 8.h),
+                      _buildFieldLabel('Email Address'),
+                      SizedBox(height: 6.h),
                       TextFormField(
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
                         enabled: !isLoading,
-                        style: TextStyle(
+                        style: GoogleFonts.plusJakartaSans(
                           fontSize: 14.sp,
                           fontWeight: FontWeight.w600,
                           color: AppColors.textPrimary,
@@ -336,54 +339,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           }
                           return null;
                         },
-                        decoration: InputDecoration(
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 16.w,
-                            vertical: 14.h,
-                          ),
-                          prefixIcon: Icon(
-                            Icons.email_outlined,
-                            color: AppColors.primary.withOpacity(0.7),
-                            size: 20.r,
-                          ),
-                          filled: true,
-                          fillColor: AppColors.background,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16.r),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16.r),
-                            borderSide: const BorderSide(
-                              color: AppColors.primary,
-                              width: 1.5,
-                            ),
-                          ),
-                          errorStyle: TextStyle(
-                            fontSize: 11.sp,
-                            color: Colors.red,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        decoration: _buildInputDecoration(
+                          hintText: 'Enter your email',
+                          icon: Icons.email_outlined,
                         ),
                       ),
-                      SizedBox(height: 20.h),
+
+                      SizedBox(height: 16.h),
 
                       // Password Field
-                      Text(
-                        'Password',
-                        style: TextStyle(
-                          fontSize: 12.sp,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      SizedBox(height: 8.h),
+                      _buildFieldLabel('Password'),
+                      SizedBox(height: 6.h),
                       TextFormField(
                         controller: _passwordController,
                         obscureText: _obscurePassword,
                         enabled: !isLoading,
-                        style: TextStyle(
+                        style: GoogleFonts.plusJakartaSans(
                           fontSize: 14.sp,
                           fontWeight: FontWeight.w600,
                           color: AppColors.textPrimary,
@@ -394,17 +365,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           }
                           return null;
                         },
-                        decoration: InputDecoration(
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 16.w,
-                            vertical: 14.h,
-                          ),
-                          prefixIcon: Icon(
-                            Icons.lock_outlined,
-                            color: AppColors.primary.withOpacity(0.7),
-                            size: 20.r,
-                          ),
+                        decoration: _buildInputDecoration(
+                          hintText: 'Enter your password',
+                          icon: Icons.lock_outlined,
                           suffixIcon: GestureDetector(
                             onTap: () {
                               setState(() {
@@ -415,170 +378,172 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               _obscurePassword
                                   ? Icons.visibility_outlined
                                   : Icons.visibility_off_outlined,
-                              color: AppColors.textSecondary.withOpacity(0.7),
+                              color: AppColors.textSecondary.withValues(alpha: 0.7),
                               size: 20.r,
                             ),
                           ),
-                          filled: true,
-                          fillColor: AppColors.background,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16.r),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16.r),
-                            borderSide: const BorderSide(
-                              color: AppColors.primary,
-                              width: 1.5,
-                            ),
-                          ),
-                          errorStyle: TextStyle(
-                            fontSize: 11.sp,
-                            color: Colors.red,
-                            fontWeight: FontWeight.w500,
-                          ),
                         ),
                       ),
-                      
-                      // Forgot Password Button (Disabled)
+
+                      // Forgot Password Link
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
-                          onPressed: null, // Disabled
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Please contact your administrator to reset password.'),
+                              ),
+                            );
+                          },
                           style: TextButton.styleFrom(
-                            padding: EdgeInsets.symmetric(vertical: 8.h),
+                            padding: EdgeInsets.symmetric(vertical: 6.h, horizontal: 0),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
                           child: Text(
-                            'Forgot Password? (Disabled)',
-                            style: TextStyle(
-                              fontSize: 11.sp,
+                            'Forgot Password?',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12.sp,
                               fontWeight: FontWeight.bold,
-                              color: AppColors.textSecondary.withOpacity(0.5),
+                              color: AppColors.primary,
                             ),
                           ),
                         ),
                       ),
-                      
-                      SizedBox(height: 12.h),
 
-                      // Submit Login Button
-                      ElevatedButton(
-                        onPressed: isLoading ? null : _onLogin,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          minimumSize: Size(double.infinity, 52.h),
-                          disabledBackgroundColor:
-                              AppColors.primary.withOpacity(0.5),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(26.r),
-                          ),
+                      SizedBox(height: 20.h),
+
+                      // =======================================================
+                      // 3. LOGIN BUTTON
+                      // =======================================================
+                      Container(
+                        width: double.infinity,
+                        height: 52.h,
+                        decoration: BoxDecoration(
+                          gradient: isLoading ? null : AppColors.primaryGradient,
+                          borderRadius: BorderRadius.circular(26.r),
+                          boxShadow: isLoading
+                              ? null
+                              : [
+                                  BoxShadow(
+                                    color: AppColors.primary.withValues(alpha: 0.3),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
                         ),
-                        child: isLoading
-                            ? SizedBox(
-                                width: 20.r,
-                                height: 20.r,
-                                child: const CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2.5,
+                        child: ElevatedButton(
+                          onPressed: isLoading ? null : _onLogin,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(26.r),
+                            ),
+                            disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.4),
+                          ),
+                          child: isLoading
+                              ? Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    SizedBox(
+                                      width: 18.r,
+                                      height: 18.r,
+                                      child: const CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2.5,
+                                      ),
+                                    ),
+                                    SizedBox(width: 10.w),
+                                    Text(
+                                      'Logging in...',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 14.sp,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Text(
+                                  'Login',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 15.sp,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
                                 ),
-                              )
-                            : Text(
-                                'Sign In',
-                                style: TextStyle(
-                                  fontSize: 15.sp,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
 
-              SizedBox(height: 24.h),
+              SizedBox(height: 20.h),
 
-              // Placeholder Social Logins
+              // =================================================================
+              // 4. SOCIAL LOGIN / CAREGIVER SCANNER OPTIONS
+              // =================================================================
               Text(
                 'or continue with',
-                style: TextStyle(
+                style: GoogleFonts.plusJakartaSans(
                   fontSize: 12.sp,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary.withOpacity(0.7),
+                  color: AppColors.textSecondary.withValues(alpha: 0.7),
                 ),
               ),
-              SizedBox(height: 16.h),
+              SizedBox(height: 14.h),
+
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Social Login Google Placeholder (Disabled)
-                  Container(
-                    width: 50.r,
-                    height: 50.r,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppColors.primary.withOpacity(0.06),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Opacity(
-                      opacity: 0.4,
-                      child: Icon(
-                        Icons.g_mobiledata_rounded,
-                        color: AppColors.textPrimary,
-                        size: 32.r,
-                      ),
-                    ),
+                  // Google Social Pill
+                  _buildSocialPill(
+                    icon: Icons.g_mobiledata_rounded,
+                    label: 'Google',
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Google Sign-In is managed via your account email.')),
+                      );
+                    },
                   ),
-                  SizedBox(width: 16.w),
-                  // Social Login Apple Placeholder (Disabled)
-                  Container(
-                    width: 50.r,
-                    height: 50.r,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppColors.primary.withOpacity(0.06),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Opacity(
-                      opacity: 0.4,
-                      child: Icon(
-                        Icons.apple_rounded,
-                        color: AppColors.textPrimary,
-                        size: 24.r,
-                      ),
-                    ),
+                  SizedBox(width: 12.w),
+                  // Apple Social Pill
+                  _buildSocialPill(
+                    icon: Icons.apple_rounded,
+                    label: 'Apple',
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Apple Sign-In is managed via your account email.')),
+                      );
+                    },
                   ),
                 ],
               ),
 
               SizedBox(height: 24.h),
 
-              // Navigate to Register Option
+              // =================================================================
+              // 5. SIGNUP NAVIGATION LINK
+              // =================================================================
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
                     "Don't have an account? ",
-                    style: TextStyle(
+                    style: GoogleFonts.plusJakartaSans(
                       fontSize: 13.sp,
                       fontWeight: FontWeight.w500,
                       color: AppColors.textSecondary,
                     ),
                   ),
                   GestureDetector(
-                    onTap: isLoading
-                        ? null
-                        : () => context.go(AppRoutes.register),
+                    onTap: isLoading ? null : () => context.go(AppRoutes.register),
                     child: Text(
-                      'Register',
-                      style: TextStyle(
+                      'Create Account',
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 13.sp,
                         fontWeight: FontWeight.bold,
                         color: AppColors.primary,
@@ -587,30 +552,101 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                 ],
               ),
-              SizedBox(height: 16.h),
-              OutlinedButton.icon(
-                onPressed: isLoading
-                    ? null
-                    : () => context.push(AppRoutes.joinSharedBaby),
-                icon: Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary, size: 18.r),
-                label: Text(
-                  'Join Shared Baby (Caregiver QR)',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                    fontSize: 13.sp,
-                  ),
-                ),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.primary, width: 1.5),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20.r),
-                  ),
-                  padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 10.h),
-                ),
-              ),
+              SizedBox(height: 12.h),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFieldLabel(String label) {
+    return Text(
+      label,
+      style: GoogleFonts.plusJakartaSans(
+        fontSize: 12.sp,
+        fontWeight: FontWeight.bold,
+        color: AppColors.textSecondary,
+      ),
+    );
+  }
+
+  InputDecoration _buildInputDecoration({
+    required String hintText,
+    required IconData icon,
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      isDense: true,
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: 16.w,
+        vertical: 13.h,
+      ),
+      hintText: hintText,
+      hintStyle: GoogleFonts.plusJakartaSans(
+        fontSize: 13.sp,
+        color: AppColors.textMuted,
+      ),
+      prefixIcon: Icon(
+        icon,
+        color: AppColors.primary.withValues(alpha: 0.7),
+        size: 20.r,
+      ),
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: AppColors.backgroundLight,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18.r),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18.r),
+        borderSide: const BorderSide(
+          color: AppColors.primary,
+          width: 1.5,
+        ),
+      ),
+      errorStyle: GoogleFonts.plusJakartaSans(
+        fontSize: 11.sp,
+        color: Colors.red,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+  }
+
+  Widget _buildSocialPill({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16.r),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 10.h),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16.r),
+          border: Border.all(
+            color: AppColors.primary.withValues(alpha: 0.1),
+            width: 1.2,
+          ),
+          boxShadow: AppColors.softShadow,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 20.r, color: AppColors.textPrimary),
+            SizedBox(width: 8.w),
+            Text(
+              label,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12.sp,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
         ),
       ),
     );

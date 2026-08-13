@@ -3,19 +3,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
-import 'package:maatriva/shared/widgets/bottom_navigation.dart';
-import '../../provider/caregiver_access_provider.dart';
-import '../widgets/caregiver_header.dart';
-import '../widgets/share_access_card.dart';
-import '../widgets/duration_selector.dart';
-import '../widgets/permission_card.dart';
-import '../widgets/active_session_card.dart';
-import '../widgets/access_history_card.dart';
-import '../widgets/custom_clock_time_picker.dart';
+import 'package:maatriva/routes/app_routes.dart';
 import 'package:maatriva/shared/models/caregiver.dart';
 import 'package:maatriva/shared/models/user_session.dart';
 import '../../../authentication/presentation/providers/auth_provider.dart';
+import '../../provider/caregiver_access_provider.dart';
+import '../widgets/countdown_flip_clock.dart';
+import '../widgets/qr_code_card.dart';
+import '../widgets/access_history_card.dart';
 
+/// Main Parent & Caregiver Access Control Screen supporting 5 distinct states:
+/// STATE 1: No Active Caregiver (Welcome graphic + "+ Generate Caregiver QR" button)
+/// STATE 2: QR Generated / Waiting for Caregiver scan
+/// STATE 3: Active Caregiver (🟢 LIVE + Real-time Countdown Flip Clock + Manage/Revoke)
+/// STATE 4 & 5: Access Expired / Revoked (Access History + "Generate New Access" button)
 class CaregiverAccessScreen extends ConsumerStatefulWidget {
   const CaregiverAccessScreen({super.key});
 
@@ -25,42 +26,136 @@ class CaregiverAccessScreen extends ConsumerStatefulWidget {
 }
 
 class _CaregiverAccessScreenState extends ConsumerState<CaregiverAccessScreen> {
-
-  static const Map<String, IconData> permIcons = {
-    'live_monitoring': Icons.videocam_outlined,
-    'health_data': Icons.favorite_border_rounded,
-    'ai_assistant': Icons.smart_toy_outlined,
-    'notifications': Icons.notifications_outlined,
-    'emergency_alerts': Icons.warning_amber_rounded,
-    'camera_snapshot': Icons.photo_camera_outlined,
-    'custom_music': Icons.library_music_outlined,
-    'music': Icons.music_note_outlined,
-    'cradle_controls': Icons.tune_outlined,
-  };
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(caregiverAccessProvider.notifier).loadSessions(loadHistory: true);
+    });
+  }
 
   static const Map<String, String> permTitles = {
     'live_monitoring': 'Live Monitoring',
     'health_data': 'Telemetry & Health Data',
     'ai_assistant': 'AI Pediatrician',
-    'notifications': 'Notifications',
+    'notifications': 'Notifications & Alerts',
     'emergency_alerts': 'Alerts',
     'camera_snapshot': 'Camera',
-    'custom_music': 'Custom Lullabies',
     'music': 'Music',
     'cradle_controls': 'Cradle Controls',
   };
 
-  static const Map<String, String> permDescs = {
-    'live_monitoring': 'Real-time video & audio feed',
-    'health_data': 'Sleep patterns & vitals history',
-    'ai_assistant': 'Allow caregiver to ask the AI assistant',
-    'notifications': 'Receive important baby alerts',
-    'emergency_alerts': 'Critical emergency notifications',
-    'camera_snapshot': 'Allow viewing captured images & snapshots',
-    'custom_music': 'Access to parent custom lullabies',
-    'music': 'Access default music library',
-    'cradle_controls': 'Control cradle rocking & soothing',
-  };
+  void _showSingleCaregiverNotice(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Row(
+            children: [
+              const Icon(Icons.info_outline_rounded, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Active Caregiver Exists',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: AppColors.navyDeep,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'An active caregiver already has access to your baby.\n\nOnly ONE active caregiver is permitted at a time. You must revoke the existing caregiver before creating a new access invitation.',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 13.5,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(
+                'Got It',
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _confirmRevoke(BuildContext context, ActiveSession session) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Text(
+            'Revoke Caregiver Access?',
+            style: GoogleFonts.outfit(
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+              color: const Color(0xFFEF4444),
+            ),
+          ),
+          content: Text(
+            '${session.name} will immediately lose access to your baby\'s information and live telemetry.',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 13.5,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.plusJakartaSans(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(dialogContext);
+                final notifier = ref.read(caregiverAccessProvider.notifier);
+                await notifier.revokeSession(session.id);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('✓ Access for ${session.name} has been revoked.'),
+                      backgroundColor: const Color(0xFFEF4444),
+                    ),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFEF4444),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                elevation: 0,
+              ),
+              child: Text(
+                'Revoke Access',
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -69,13 +164,22 @@ class _CaregiverAccessScreenState extends ConsumerState<CaregiverAccessScreen> {
     final authState = ref.watch(authNotifierProvider);
     final isCaregiver = authState.session?.role == UserRole.caregiver;
 
-    final liveSessionsCount = state.activeSessions.where((s) {
-      final remaining = s.expiresAt.difference(DateTime.now());
-      return !remaining.isNegative;
-    }).length;
+    final activeSession = state.activeSessions.isNotEmpty
+        ? state.activeSessions.firstWhere(
+            (s) => s.status == SessionStatus.active || s.status == SessionStatus.expiring,
+            orElse: () => state.activeSessions.first,
+          )
+        : null;
+
+    final hasActiveCaregiver = activeSession != null &&
+        !activeSession.expiresAt
+            .difference(DateTime.now().add(state.serverClockOffset))
+            .isNegative;
+
+    final hasPendingQR = !hasActiveCaregiver && state.qrToken.isNotEmpty;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.background, // Pale aqua canvas #EBF7F8
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -84,7 +188,7 @@ class _CaregiverAccessScreenState extends ConsumerState<CaregiverAccessScreen> {
           borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
         ),
         title: Text(
-          isCaregiver ? 'Parent Granted Access Timings' : 'Caregiver QR Access',
+          isCaregiver ? 'Caregiver Access Status' : 'Caregiver Access',
           style: GoogleFonts.outfit(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.bold,
@@ -103,340 +207,484 @@ class _CaregiverAccessScreenState extends ConsumerState<CaregiverAccessScreen> {
       ),
 
       body: SingleChildScrollView(
-        padding: const EdgeInsets.only(
-          bottom: 110,
-        ),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 110),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Centered elegant headers
-            const CaregiverHeader(),
+            // STATE 3: ACTIVE CAREGIVER EXISTS
+            if (hasActiveCaregiver) ...[
+              _buildState3ActiveCaregiver(activeSession!, state.serverClockOffset),
+            ]
+            // STATE 2: PENDING QR GENERATED
+            else if (hasPendingQR) ...[
+              _buildState2QRWaiting(state, notifier),
+            ]
+            // STATE 1: NO ACTIVE CAREGIVER
+            else ...[
+              _buildState1NoCaregiver(),
+            ],
 
-            // 1. Temporary Access duration selection bubbles (Decided time by parent)
-            DurationSelector(
-              selectedLabel: state.selectedDurationLabel,
-              isCaregiver: isCaregiver,
-              onSelected: (label) {
-                notifier.selectDuration(label);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Set access duration limit to: $label. Generating QR code...'),
-                    duration: const Duration(milliseconds: 1200),
-                    backgroundColor: AppColors.primary,
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 24),
 
-            // 2. Share Access QR code section card (Only for parents)
-            if (!isCaregiver)
-              ShareAccessCard(
-                qrToken: state.qrToken,
-                isLoading: state.isGeneratingQR,
-                qrError: state.qrError,
-                onRetry: () => notifier.retryGenerateQR(),
-              ),
-            const SizedBox(height: 16),
-
-            // Permissions section
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-              child: Text(
-                'Permissions',
-                style: TextStyle(
+            // ACCESS HISTORY SECTION (States 4 & 5)
+            if (state.accessHistory.isNotEmpty) ...[
+              Text(
+                'Access History',
+                style: GoogleFonts.outfit(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
                 ),
               ),
-            ),
+              const SizedBox(height: 12),
+              ...state.accessHistory.map((h) => AccessHistoryCard(item: h)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 
-            ...state.permissions.entries.map((entry) {
-              final key = entry.key;
-              final val = entry.value;
-              return PermissionCard(
-                title: permTitles[key] ?? key,
-                description: permDescs[key] ?? '',
-                icon: permIcons[key] ?? Icons.settings_rounded,
-                value: val,
-                onChanged: (_) {
-                  notifier.togglePermission(key);
+  // STATE 1: NO ACTIVE CAREGIVER
+  Widget _buildState1NoCaregiver() {
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: AppColors.predictiveCardBg, // Pale aqua #EAF8F7
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: Colors.white, width: 1.5),
+            boxShadow: AppColors.predictiveClayShadow,
+          ),
+          child: Column(
+            children: [
+              // Friendly Maatriva Illustration Container
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.2),
+                    width: 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Icon(
+                    Icons.child_care_rounded,
+                    size: 52,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              Text(
+                'Caregiver Access',
+                style: GoogleFonts.outfit(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.navyDeep,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Share temporary, real-time access with someone you trust.',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13.5,
+                  color: AppColors.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+
+              // Large Primary Action Button
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: () {
+                    context.push(AppRoutes.createCaregiverAccess);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.add_rounded, size: 22),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Generate Caregiver QR',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              Text(
+                'Give a trusted caregiver temporary access to your baby\'s care.',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 11.5,
+                  color: AppColors.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // STATE 2: QR GENERATED / WAITING
+  Widget _buildState2QRWaiting(
+    CaregiverAccessState state,
+    CaregiverAccessNotifier notifier,
+  ) {
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: AppColors.softShadow,
+          ),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF8E1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFFFE082)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.hourglass_empty_rounded,
+                        size: 16, color: Color(0xFFF57F17)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Waiting for caregiver...',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFFF57F17),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              Text(
+                'Caregiver Access Ready',
+                style: GoogleFonts.outfit(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.navyDeep,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Ask the caregiver to scan this code with the Maatriva app.',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12.5,
+                  color: AppColors.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+
+              // QR Code Card
+              QRCodeCard(
+                qrToken: state.qrToken,
+                isLoading: state.isGeneratingQR,
+                qrError: state.qrError,
+              ),
+
+              const SizedBox(height: 16),
+              Text(
+                'Configured Duration: ${state.selectedDurationLabel}',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.navyDeep,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Cancel Invitation Button
+              TextButton(
+                onPressed: () {
+                  notifier.cancelPendingQR();
                 },
-              );
-            }),
-            const SizedBox(height: 24),
+                child: Text(
+                  'Cancel Invitation',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFFEF4444),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
-            // Active Sessions Section
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-              child: Row(
+  // STATE 3: ACTIVE CAREGIVER
+  Widget _buildState3ActiveCaregiver(ActiveSession session, Duration serverClockOffset) {
+    final expiresFormatted =
+        'Today • ${_formatTime(session.expiresAt)}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header Banner
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE8F5E9),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFA5D6A7)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF2E7D32),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'ACTIVE CAREGIVER SESSION',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF2E7D32),
+                  letterSpacing: 1.1,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Caregiver Profile Card
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(26),
+            boxShadow: AppColors.softShadow,
+          ),
+          child: Column(
+            children: [
+              Row(
                 children: [
-                  const Text(
-                    'Active Sessions',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
+                  CircleAvatar(
+                    radius: 28,
+                    backgroundImage: NetworkImage(session.imageUrl),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          session.name,
+                          style: GoogleFonts.outfit(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.navyDeep,
+                          ),
+                        ),
+                        Text(
+                          session.relationship,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
+                        horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
+                      color: const Color(0xFFE8F5E9),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      '$liveSessionsCount Live',
-                      style: const TextStyle(
+                      '🟢 Access Active',
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
+                        color: const Color(0xFF2E7D32),
                       ),
                     ),
                   ),
                 ],
               ),
-            ),
+              const SizedBox(height: 20),
 
-            if (state.activeSessions.isEmpty)
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: AppColors.primary.withOpacity(0.05),
+              // Countdown Flip Clock Widget
+              CountdownFlipClock(
+                targetExpiry: session.expiresAt,
+                serverClockOffset: serverClockOffset,
+              ),
+
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.event_available_rounded,
+                      size: 16, color: AppColors.textSecondary),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Expires: $expiresFormatted',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
-                ),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.people_outline_rounded,
-                      size: 40,
-                      color: AppColors.textSecondary.withOpacity(0.4),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'No Active Guest Tokens',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Invite caregivers by tapping "Generate New QR" below.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              )
-            else
-              ...state.activeSessions.map((session) {
-                return ActiveSessionCard(
-                  session: session,
-                  onExtend: () => _showExtendAccessDialog(context, notifier, session),
-                  onRevoke: () {
-                    notifier.revokeSession(session.id);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Revoked all access tokens for ${session.name}.',
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Action Buttons Row
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        context.push(
+                          '${AppRoutes.caregiverManage}?id=${session.id}',
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                        backgroundColor: const Color(0xFFE53935),
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                    );
-                  },
-                );
-              }),
-            const SizedBox(height: 24),
+                      child: Text(
+                        'Manage Access',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _confirmRevoke(context, session),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(
+                            color: Color(0xFFEF4444), width: 1.5),
+                        foregroundColor: const Color(0xFFEF4444),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: Text(
+                        'Revoke Access',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
 
-            // Access History Log Section
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-              child: Text(
-                'Access History',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
+        const SizedBox(height: 16),
+
+        // Disabled "+ Generate Caregiver QR" notice if tapped
+        GestureDetector(
+          onTap: () => _showSingleCaregiverNotice(context),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: AppColors.divider,
+                width: 1,
               ),
             ),
-
-            if (state.accessHistory.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                child: Text(
-                  'No historical logs.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
+            child: Row(
+              children: [
+                Icon(Icons.add_circle_outline_rounded,
+                    color: AppColors.textSecondary.withValues(alpha: 0.6)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '+ Generate Caregiver QR (1 Active Limit)',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textSecondary.withValues(alpha: 0.7),
+                    ),
                   ),
                 ),
-              )
-            else
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: state.accessHistory.length,
-                itemBuilder: (context, index) {
-                  final item = state.accessHistory[index];
-                  return AccessHistoryCard(item: item);
-                },
-              ),
-          ],
+                const Icon(Icons.lock_outline_rounded,
+                    size: 16, color: AppColors.textSecondary),
+              ],
+            ),
+          ),
         ),
-      ),
-
-      // Bottom Navigation integrated matching the exact Maatriva active bubble style (index 3: Profile)
-      bottomNavigationBar: const BottomNavigation(currentIndex: -1),
+      ],
     );
   }
 
-  void _showExtendAccessDialog(
-    BuildContext context,
-    CaregiverAccessNotifier notifier,
-    ActiveSession session,
-  ) {
-    final customMinutesController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text('Extend Access for ${session.name}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Choose extension duration:'),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ActionChip(
-                  label: const Text('+15 Mins'),
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    await notifier.extendTemporaryAccess(
-                      permissionId: session.id,
-                      extensionMinutes: 15,
-                    );
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Extended access for ${session.name} by 15 minutes.')),
-                      );
-                    }
-                  },
-                ),
-                ActionChip(
-                  label: const Text('+30 Mins'),
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    await notifier.extendTemporaryAccess(
-                      permissionId: session.id,
-                      extensionMinutes: 30,
-                    );
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Extended access for ${session.name} by 30 minutes.')),
-                      );
-                    }
-                  },
-                ),
-                ActionChip(
-                  label: const Text('+1 Hour'),
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    await notifier.extendTemporaryAccess(
-                      permissionId: session.id,
-                      extensionMinutes: 60,
-                    );
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Extended access for ${session.name} by 1 hour.')),
-                      );
-                    }
-                  },
-                ),
-                ActionChip(
-                  avatar: const Icon(Icons.access_time_filled_rounded, size: 16, color: AppColors.primary),
-                  label: const Text('Clock Picker'),
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    final customTime = await CustomClockTimePicker.show(
-                      context,
-                      initialLabel: '1 Hour',
-                      onTimeSelected: (_) {},
-                    );
-                    if (customTime != null && customTime.isNotEmpty) {
-                      final mins = notifier.parseCustomDuration(customTime).inMinutes;
-                      if (mins > 0) {
-                        await notifier.extendTemporaryAccess(
-                          permissionId: session.id,
-                          extensionMinutes: mins,
-                        );
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Extended access for ${session.name} by $customTime.')),
-                          );
-                        }
-                      }
-                    }
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: customMinutesController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Custom Duration (Minutes)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final minutes = int.tryParse(customMinutesController.text.trim());
-              if (minutes != null && minutes > 0) {
-                Navigator.pop(context);
-                await notifier.extendTemporaryAccess(
-                  permissionId: session.id,
-                  extensionMinutes: minutes,
-                );
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Extended access for ${session.name} by $minutes minutes.')),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-            child: const Text('Extend', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
+  String _formatTime(DateTime dt) {
+    final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+    final minute = dt.minute.toString().padLeft(2, '0');
+    return '$hour:$minute $ampm';
   }
 }

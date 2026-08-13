@@ -4,9 +4,21 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
-import 'package:maatriva/shared/widgets/bottom_navigation.dart';
-import '../../provider/predictive_health_provider.dart';
 
+import '../../../../shared/widgets/bottom_navigation.dart';
+import '../../provider/predictive_health_provider.dart';
+import '../widgets/baby_cloud_mascot.dart';
+import '../widgets/insight_detail_sheet.dart';
+
+/// Redesigned Predictive Health Screen in Maatriva Flutter Application.
+///
+/// Strictly enforces the "Safe & Secure" claymorphic design language:
+/// - Unified pale aqua/mint card surface (`#EAF8F7` / `AppColors.predictiveCardBg`) across ALL cards
+/// - Pale cyan canvas background (`#DFF3F4`) to create high depth and contrast
+/// - Soft 26px rounded corners, subtle white highlight, soft clay depth shadows
+/// - Status colors reserved strictly for badges, icons, borders, and text accents
+/// - Larger, spacious, touch-friendly cards with clear visual hierarchy
+/// - Preserves 100% of underlying backend data streams, Riverpod state, and AI logic
 class PredictiveHealthScreen extends ConsumerStatefulWidget {
   const PredictiveHealthScreen({super.key});
 
@@ -18,12 +30,49 @@ class PredictiveHealthScreen extends ConsumerStatefulWidget {
 class _PredictiveHealthScreenState
     extends ConsumerState<PredictiveHealthScreen> {
   final ScrollController _scrollController = ScrollController();
-  bool _isPatternsExpanded = true;
+  bool _isTransparencyExpanded = false;
 
   @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();
+  }
+
+  /// Unified Claymorphic Card Container Builder.
+  /// Guarantees that ALL cards on this page share the exact same pale aqua/mint
+  /// surface, corner radius, soft depth shadows, and border treatment.
+  Widget _buildClayCard({
+    required Widget child,
+    EdgeInsetsGeometry? padding,
+    double borderRadius = 26.0,
+    VoidCallback? onTap,
+    double? width,
+    double? height,
+  }) {
+    final cardWidget = Container(
+      width: width,
+      height: height,
+      padding: padding ?? EdgeInsets.all(20.r),
+      decoration: BoxDecoration(
+        color: AppColors.predictiveCardBg, // Soft pale aqua/mint #EAF8F7
+        borderRadius: BorderRadius.circular(borderRadius.r),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.85),
+          width: 1.5,
+        ),
+        boxShadow: AppColors.predictiveClayShadow,
+      ),
+      child: child,
+    );
+
+    if (onTap != null) {
+      return GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: cardWidget,
+      );
+    }
+    return cardWidget;
   }
 
   @override
@@ -32,9 +81,9 @@ class _PredictiveHealthScreenState
     final notifier = ref.read(predictiveHealthProvider.notifier);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFBF8FD),
+      backgroundColor: AppColors.predictiveCanvasBg, // Soft pale cyan #DFF3F4
       appBar: PreferredSize(
-        preferredSize: Size.fromHeight(60.h),
+        preferredSize: Size.fromHeight(74.h),
         child: Container(
           color: Colors.transparent,
           padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
@@ -45,10 +94,28 @@ class _PredictiveHealthScreenState
                 Row(
                   children: [
                     IconButton(
-                      icon: Icon(
-                        Icons.arrow_back_rounded,
-                        color: const Color(0xFF6E3DE0),
-                        size: 24.r,
+                      icon: Container(
+                        padding: EdgeInsets.all(8.r),
+                        decoration: BoxDecoration(
+                          color: AppColors.predictiveCardBg,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            width: 1.2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF173A70).withValues(alpha: 0.08),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          Icons.arrow_back_rounded,
+                          color: const Color(0xFF173A70),
+                          size: 20.r,
+                        ),
                       ),
                       onPressed: () {
                         if (Navigator.of(context).canPop()) {
@@ -58,70 +125,57 @@ class _PredictiveHealthScreenState
                         }
                       },
                     ),
-                    SizedBox(width: 4.w),
-                    CircleAvatar(
-                      radius: 18.r,
-                      backgroundImage: const NetworkImage(
-                        "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=120",
-                      ),
-                    ),
-                    SizedBox(width: 10.w),
+                    SizedBox(width: 8.w),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          'Predictive',
-                          style: GoogleFonts.inter(
-                            fontSize: 16.sp,
+                          'Predictive Health',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 20.sp,
                             fontWeight: FontWeight.bold,
-                            color: const Color(0xFF6E3DE0),
-                            height: 1.1,
+                            color: const Color(0xFF173A70),
                           ),
                         ),
+                        SizedBox(height: 2.h),
                         Text(
-                          'Health',
-                          style: GoogleFonts.inter(
-                            fontSize: 16.sp,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF6E3DE0),
-                            height: 1.1,
+                          'AI-powered insights from monitored patterns',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11.sp,
+                            color: const Color(0xFF64748B),
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
                     ),
                   ],
                 ),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        Icons.share_outlined,
-                        color: AppColors.textSecondary,
-                        size: 22.r,
+                IconButton(
+                  icon: Container(
+                    padding: EdgeInsets.all(8.r),
+                    decoration: BoxDecoration(
+                      color: AppColors.predictiveCardBg,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        width: 1.2,
                       ),
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              "Sharing report with pediatricians...",
-                            ),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      },
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF173A70).withValues(alpha: 0.08),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
                     ),
-                    IconButton(
-                      icon: Icon(
-                        Icons.settings_outlined,
-                        color: AppColors.textSecondary,
-                        size: 22.r,
-                      ),
-                      onPressed: () {
-                        context.push('/profile');
-                      },
+                    child: Icon(
+                      Icons.refresh_rounded,
+                      color: AppColors.primary,
+                      size: 20.r,
                     ),
-                  ],
+                  ),
+                  onPressed: state.isAnalyzing ? null : () => notifier.analyzeLatestData(),
                 ),
               ],
             ),
@@ -130,446 +184,588 @@ class _PredictiveHealthScreenState
       ),
       body: Stack(
         children: [
-          SingleChildScrollView(
-            controller: _scrollController,
-            padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 140.h),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 1. System Stability Index Card
-                _buildStabilityIndexCard(state, notifier),
-                SizedBox(height: 20.h),
+          RefreshIndicator(
+            color: AppColors.primary,
+            backgroundColor: AppColors.predictiveCardBg,
+            onRefresh: () async {
+              await notifier.analyzeLatestData();
+            },
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              padding: EdgeInsets.fromLTRB(20.w, 6.h, 20.w, 130.h),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. AI Analysis Status Pill Banner
+                  _buildAiStatusHeader(state),
+                  SizedBox(height: 20.h),
 
-                // 2. Vitals Indicators Row
-                _buildVitalsRow(state),
-                SizedBox(height: 24.h),
+                  if (state.isLoading) ...[
+                    _buildLoadingShimmer(),
+                  ] else if (state.errorMessage != null && state.riskInsights.isEmpty) ...[
+                    _buildErrorView(state.errorMessage!, notifier),
+                  ] else if (state.isInsufficientData) ...[
+                    _buildInsufficientDataView(),
+                  ] else ...[
+                    // 2. Hero Section: Overall Health Insight Card + Mascot
+                    _buildHeroSection(state),
+                    SizedBox(height: 24.h),
 
-                // 3. Potential Chronic Patterns Expandable Section
-                _buildChronicPatternsSection(state),
-                SizedBox(height: 24.h),
+                    // 3. AI Risk Insights Section
+                    _buildRiskInsightsSection(state),
+                    SizedBox(height: 28.h),
 
-                // 4. Correlation Trends Section (30 Days)
-                _buildCorrelationTrendsSection(state),
-                SizedBox(height: 24.h),
+                    // 4. Monitoring Factors Section
+                    _buildMonitoringFactorsSection(state),
+                    SizedBox(height: 28.h),
 
-                // 5. Preventive Recommendations Section
-                _buildRecommendationsSection(state),
-              ],
+                    // 5. AI Pattern Insights Section
+                    _buildPatternInsightsSection(state),
+                    SizedBox(height: 28.h),
+
+                    // 6. AI Recommendations Section
+                    _buildRecommendationsSection(state),
+                    SizedBox(height: 28.h),
+
+                    // 7. AI Transparency & Safety Disclaimer
+                    _buildTransparencySection(state),
+                  ],
+                ],
+              ),
             ),
           ),
 
-          // Sticky Consult Doctor & Bottom Bar Panel
-          Positioned(
+          // Bottom Bar Navigation
+          const Positioned(
             bottom: 0,
             left: 0,
             right: 0,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Consult Doctor Button (Sticky above the bottom nav)
-                Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 20.w,
-                    vertical: 8.h,
-                  ),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF3B82F6).withOpacity(0.2),
-                          blurRadius: 15,
-                          offset: const Offset(0, 5),
-                        ),
-                      ],
-                    ),
-                    child: ElevatedButton(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              "Initiating call with Pediatrician...",
-                            ),
-                            behavior: SnackBarBehavior.floating,
-                            backgroundColor: Color(0xFF3B82F6),
-                          ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF4FA0FF),
-                        foregroundColor: Colors.white,
-                        shadowColor: Colors.transparent,
-                        minimumSize: Size(double.infinity, 50.h),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16.r),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.phone_in_talk_rounded, size: 18.r),
-                          SizedBox(width: 8.w),
-                          Text(
-                            "Consult Doctor",
-                            style: GoogleFonts.inter(
-                              fontSize: 14.sp,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                // Expanded Bottom Navigation
-                const BottomNavigation(currentIndex: 1),
-              ],
-            ),
+            child: BottomNavigation(currentIndex: 1),
           ),
         ],
       ),
     );
   }
 
-  // =========================================================================
-  // CARD 1: SYSTEM STABILITY INDEX
-  // =========================================================================
-  Widget _buildStabilityIndexCard(
-    PredictiveHealthState state,
-    PredictiveHealthNotifier notifier,
-  ) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(28.r),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+  /// 1. AI Status Indicator Pill Header
+  Widget _buildAiStatusHeader(PredictiveHealthState state) {
+    return Row(
+      children: [
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+          decoration: BoxDecoration(
+            color: AppColors.predictiveCardBg,
+            borderRadius: BorderRadius.circular(24.r),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.9),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF173A70).withValues(alpha: 0.06),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
-        ],
-      ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (state.isAnalyzing) ...[
+                SizedBox(
+                  width: 14.r,
+                  height: 14.r,
+                  child: const CircularProgressIndicator(
+                    strokeWidth: 2.2,
+                    color: AppColors.primary,
+                  ),
+                ),
+                SizedBox(width: 10.w),
+                Text(
+                  '✨ Analyzing latest patterns...',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ] else ...[
+                Icon(
+                  Icons.auto_awesome_rounded,
+                  color: AppColors.primary,
+                  size: 15.r,
+                ),
+                SizedBox(width: 8.w),
+                Text(
+                  '✨ AI Analysis Updated',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const Spacer(),
+        Row(
+          children: [
+            Icon(
+              Icons.access_time_rounded,
+              size: 14.r,
+              color: const Color(0xFF64748B),
+            ),
+            SizedBox(width: 4.w),
+            Text(
+              state.lastAnalysisTimeStr,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 11.sp,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF64748B),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// 2. Hero Section: Overall Health Insight Card + Baby Mascot
+  Widget _buildHeroSection(PredictiveHealthState state) {
+    return _buildClayCard(
       padding: EdgeInsets.all(22.r),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 10.w,
-                      vertical: 4.h,
+              // Left Info Side
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: EdgeInsets.all(8.r),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFECEE),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFFFFC1C8),
+                              width: 1,
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.favorite_rounded,
+                            color: const Color(0xFFEE5265),
+                            size: 18.r,
+                          ),
+                        ),
+                        SizedBox(width: 8.w),
+                        Text(
+                          'Overall Health Insight',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13.sp,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF173A70),
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      ],
                     ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF3EDFA),
-                      borderRadius: BorderRadius.circular(8.r),
-                    ),
-                    child: Text(
-                      "AI Diagnostic Insight",
-                      style: GoogleFonts.inter(
-                        fontSize: 10.sp,
+                    SizedBox(height: 12.h),
+
+                    Text(
+                      state.overallStatusText,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 15.sp,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFF8855EC),
+                        color: const Color(0xFF173A70),
+                        height: 1.35,
                       ),
                     ),
-                  ),
-                  SizedBox(height: 8.h),
-                  Text(
-                    "System Stability\nIndex",
-                    style: GoogleFonts.inter(
-                      fontSize: 22.sp,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                      height: 1.1,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-              // Gauge
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  SizedBox(
-                    width: 64.r,
-                    height: 64.r,
-                    child: CircularProgressIndicator(
-                      value: state.stabilityIndex / 100.0,
-                      strokeWidth: 6.r,
-                      backgroundColor: const Color(0xFFF1EEFA),
-                      color: const Color(0xFF6E3DE0),
-                    ),
-                  ),
-                  Text(
-                    "${state.stabilityIndex}",
-                    style: GoogleFonts.inter(
-                      fontSize: 20.sp,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF6E3DE0),
-                    ),
-                  ),
-                ],
-              ),
+
+              SizedBox(width: 10.w),
+
+              // Right Baby Mascot Illustration
+              const BabyCloudMascot(width: 110, height: 100),
             ],
           ),
           SizedBox(height: 16.h),
-          Text(
-            state.diagnosticInsight,
-            style: GoogleFonts.inter(
-              fontSize: 12.sp,
-              color: AppColors.textSecondary,
-              height: 1.5,
-            ),
-          ),
-          SizedBox(height: 20.h),
-          ElevatedButton(
-            onPressed: state.isAnalyzing
-                ? null
-                : () => notifier.runAIAnalysis(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6E3DE0),
-              foregroundColor: Colors.white,
-              minimumSize: Size(double.infinity, 44.h),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(22.r),
-              ),
-              elevation: 0,
-            ),
-            child: state.isAnalyzing
-                ? SizedBox(
-                    width: 20.r,
-                    height: 20.r,
-                    child: const CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.analytics_outlined, size: 16.r),
-                      SizedBox(width: 6.w),
-                      Text(
-                        "Generate Full AI Analysis",
-                        style: GoogleFonts.inter(
-                          fontSize: 12.sp,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
+
+          // Status Badges Row (Low Risk / Stable, Trend: Stable, Today)
+          Wrap(
+            spacing: 8.w,
+            runSpacing: 8.h,
+            children: [
+              // Risk Level Pill Badge
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+                decoration: BoxDecoration(
+                  color: state.overallLevel.bgColor,
+                  borderRadius: BorderRadius.circular(18.r),
+                  border: Border.all(
+                    color: state.overallLevel.color.withValues(alpha: 0.35),
                   ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 8.r,
+                      height: 8.r,
+                      decoration: BoxDecoration(
+                        color: state.overallLevel.color,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    SizedBox(width: 6.w),
+                    Text(
+                      state.overallLevel == RiskLevel.stable
+                          ? 'Low Risk'
+                          : state.overallLevel.displayName,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11.sp,
+                        fontWeight: FontWeight.bold,
+                        color: state.overallLevel.color,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Pattern Trend Pill Badge
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F5E9),
+                  borderRadius: BorderRadius.circular(18.r),
+                  border: Border.all(
+                    color: const Color(0xFF81C784).withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.trending_up_rounded,
+                      color: const Color(0xFF2E7D32),
+                      size: 14.r,
+                    ),
+                    SizedBox(width: 6.w),
+                    Text(
+                      'Stable Pattern',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11.sp,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF2E7D32),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Timestamp Pill Badge
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(18.r),
+                  border: Border.all(
+                    color: const Color(0xFFCBD5E1),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.today_rounded,
+                      color: const Color(0xFF64748B),
+                      size: 14.r,
+                    ),
+                    SizedBox(width: 6.w),
+                    Text(
+                      'Today',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11.sp,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF475569),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  // =========================================================================
-  // SECTION 2: VITALS INDICATORS ROW
-  // =========================================================================
-  Widget _buildVitalsRow(PredictiveHealthState state) {
-    return Row(
-      children: state.vitals.map((vital) {
-        return Expanded(
-          child: Container(
-            margin: EdgeInsets.symmetric(horizontal: 4.w),
-            padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 8.w),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20.r),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.015),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(vital.icon, color: vital.color, size: 14.r),
-                    SizedBox(width: 4.w),
-                    Text(
-                      vital.name,
-                      style: GoogleFonts.inter(
-                        fontSize: 10.sp,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 6.h),
-                Text(
-                  vital.status,
-                  style: GoogleFonts.inter(
-                    fontSize: 14.sp,
-                    fontWeight: FontWeight.bold,
-                    color: vital.color,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  // =========================================================================
-  // SECTION 3: POTENTIAL CHRONIC PATTERNS
-  // =========================================================================
-  Widget _buildChronicPatternsSection(PredictiveHealthState state) {
+  /// 3. AI Risk Insights Section (Cards with unified #EAF8F7 surface)
+  Widget _buildRiskInsightsSection(PredictiveHealthState state) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              _isPatternsExpanded = !_isPatternsExpanded;
-            });
-          },
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 2.w),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                "Potential Chronic Patterns",
-                style: GoogleFonts.inter(
-                  fontSize: 16.sp,
+                'AI Risk Insights',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 18.sp,
                   fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
+                  color: const Color(0xFF173A70),
                 ),
               ),
-              Icon(
-                _isPatternsExpanded
-                    ? Icons.keyboard_arrow_up_rounded
-                    : Icons.keyboard_arrow_down_rounded,
-                color: const Color(0xFF6E3DE0),
-                size: 20.r,
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  borderRadius: BorderRadius.circular(14.r),
+                  border: Border.all(color: const Color(0xFFCBD5E1)),
+                ),
+                child: Text(
+                  '${state.riskInsights.length} Patterns Monitored',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11.sp,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF475569),
+                  ),
+                ),
               ),
             ],
           ),
         ),
-        if (_isPatternsExpanded) ...[
-          SizedBox(height: 12.h),
-          Column(
-            children: state.chronicPatterns.map((pattern) {
-              return Container(
-                margin: EdgeInsets.only(bottom: 12.h),
-                padding: EdgeInsets.all(16.r),
+        SizedBox(height: 14.h),
+
+        SizedBox(
+          height: 220.h,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.none,
+            itemCount: state.riskInsights.length,
+            separatorBuilder: (_, __) => SizedBox(width: 16.w),
+            itemBuilder: (context, index) {
+              final item = state.riskInsights[index];
+              return _buildRiskInsightCard(context, item);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRiskInsightCard(BuildContext context, PredictiveRiskInsight item) {
+    return _buildClayCard(
+      width: 250.w,
+      height: 220.h,
+      padding: EdgeInsets.all(18.r),
+      onTap: () => InsightDetailSheet.show(context, item),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Soft rounded icon container
+              Container(
+                padding: EdgeInsets.all(10.r),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(22.r),
+                  color: item.riskLevel.bgColor,
+                  borderRadius: BorderRadius.circular(16.r),
+                  border: Border.all(
+                    color: item.riskLevel.color.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Icon(
+                  item.icon,
+                  color: item.riskLevel.color,
+                  size: 20.r,
+                ),
+              ),
+
+              // Status badge pill
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
+                decoration: BoxDecoration(
+                  color: item.riskLevel.bgColor,
+                  borderRadius: BorderRadius.circular(14.r),
+                  border: Border.all(
+                    color: item.riskLevel.color.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Text(
+                  item.riskLevel.badgeTitle,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 9.5.sp,
+                    fontWeight: FontWeight.w800,
+                    color: item.riskLevel.color,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8.h),
+
+          Text(
+            item.title,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 15.sp,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF173A70),
+            ),
+          ),
+          SizedBox(height: 4.h),
+
+          Text(
+            item.summary,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 11.5.sp,
+              color: const Color(0xFF64748B),
+              height: 1.35,
+            ),
+          ),
+          SizedBox(height: 8.h),
+
+          Row(
+            children: [
+              Text(
+                'View Details',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
+                ),
+              ),
+              SizedBox(width: 4.w),
+              Icon(
+                Icons.arrow_forward_rounded,
+                size: 15.r,
+                color: AppColors.primary,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 4. Monitoring Factors Section (Spacious 2-column grid inside unified #EAF8F7 card)
+  Widget _buildMonitoringFactorsSection(PredictiveHealthState state) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 2.w),
+          child: Text(
+            'Monitoring Factors',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 18.sp,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF173A70),
+            ),
+          ),
+        ),
+        SizedBox(height: 14.h),
+
+        _buildClayCard(
+          padding: EdgeInsets.all(18.r),
+          child: GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 1.85,
+              crossAxisSpacing: 12.w,
+              mainAxisSpacing: 12.h,
+            ),
+            itemCount: state.monitoringFactors.length,
+            itemBuilder: (context, index) {
+              final factor = state.monitoringFactors[index];
+              return Container(
+                padding: EdgeInsets.all(12.r),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.75),
+                  borderRadius: BorderRadius.circular(18.r),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    width: 1.2,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.015),
-                      blurRadius: 10,
+                      color: const Color(0xFF173A70).withValues(alpha: 0.04),
+                      blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
                   ],
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 36.r,
-                          height: 36.r,
-                          decoration: BoxDecoration(
-                            color: pattern.iconBgColor,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            pattern.icon,
-                            color: pattern.iconColor,
-                            size: 18.r,
-                          ),
-                        ),
-                        SizedBox(width: 12.w),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                pattern.name,
-                                style: GoogleFonts.inter(
-                                  fontSize: 13.sp,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                              SizedBox(height: 4.h),
-                              Text(
-                                pattern.description,
-                                style: GoogleFonts.inter(
-                                  fontSize: 11.sp,
-                                  color: AppColors.textSecondary,
-                                  height: 1.4,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        SizedBox(width: 8.w),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              "${pattern.probability}%",
-                              style: GoogleFonts.inter(
-                                fontSize: 12.sp,
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFFEF4444),
-                              ),
-                            ),
-                            Text(
-                              "Prob.",
-                              style: GoogleFonts.inter(
-                                fontSize: 9.sp,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 12.h),
                     Container(
-                      width: double.infinity,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 12.w,
-                        vertical: 8.h,
-                      ),
+                      padding: EdgeInsets.all(9.r),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF3EDFA).withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(12.r),
+                        color: factor.bgColor,
+                        borderRadius: BorderRadius.circular(14.r),
                       ),
-                      child: Row(
+                      child: Icon(
+                        factor.icon,
+                        color: factor.iconColor,
+                        size: 20.r,
+                      ),
+                    ),
+                    SizedBox(width: 10.w),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
-                            Icons.history_toggle_off_rounded,
-                            color: const Color(0xFF8855EC),
-                            size: 14.r,
+                          Text(
+                            factor.title,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11.sp,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF64748B),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          SizedBox(width: 6.w),
-                          Expanded(
+                          SizedBox(height: 3.h),
+                          Text(
+                            factor.valueText,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF173A70),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          SizedBox(height: 3.h),
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+                            decoration: BoxDecoration(
+                              color: factor.statusLevel.bgColor,
+                              borderRadius: BorderRadius.circular(8.r),
+                            ),
                             child: Text(
-                              pattern.evidence,
-                              style: GoogleFonts.inter(
-                                fontSize: 10.sp,
-                                fontWeight: FontWeight.w500,
-                                color: const Color(0xFF8855EC),
+                              factor.statusTag,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 9.sp,
+                                fontWeight: FontWeight.bold,
+                                color: factor.statusLevel.color,
                               ),
                             ),
                           ),
@@ -579,156 +775,122 @@ class _PredictiveHealthScreenState
                   ],
                 ),
               );
-            }).toList(),
+            },
           ),
-        ],
+        ),
       ],
     );
   }
 
-  // =========================================================================
-  // SECTION 4: CORRELATION TRENDS (30 DAYS)
-  // =========================================================================
-  Widget _buildCorrelationTrendsSection(PredictiveHealthState state) {
-    // Render side-by-side vertical bars for a custom bar chart
+  /// 5. AI Pattern Insights Section
+  Widget _buildPatternInsightsSection(PredictiveHealthState state) {
+    if (state.patternInsights.isEmpty) return const SizedBox.shrink();
+
+    final item = state.patternInsights.first;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          "Correlation Trends (30 Days)",
-          style: GoogleFonts.inter(
-            fontSize: 16.sp,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 2.w),
+          child: Text(
+            'AI Pattern Insights',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 18.sp,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF173A70),
+            ),
           ),
         ),
-        SizedBox(height: 12.h),
-        Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(24.r),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.015),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          padding: EdgeInsets.symmetric(vertical: 20.h, horizontal: 16.w),
+        SizedBox(height: 14.h),
+
+        _buildClayCard(
+          padding: EdgeInsets.all(20.r),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Custom Bar Chart Representation
-              SizedBox(
-                height: 140.h,
-                child: Stack(
-                  children: [
-                    // Grid Lines
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: List.generate(4, (index) {
-                        return Container(
-                          height: 1.h,
-                          color: const Color(0xFFF3EEFA).withOpacity(0.6),
-                        );
-                      }),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    item.title,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16.sp,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF173A70),
                     ),
-                    // Bars
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 10.w),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: state.trendData.map((dataPoint) {
-                          // Standardized heights based on values
-                          final hrPercent =
-                              (dataPoint.heartRate - 100) /
-                              30.0; // 0.0 to 1.0 range
-                          final tempPercent =
-                              (dataPoint.temperature - 36.0) /
-                              1.5; // 0.0 to 1.0 range
-
-                          final hrHeight =
-                              40.h + (hrPercent * 80.h).clamp(0.0, 90.h);
-                          final tempHeight =
-                              30.h + (tempPercent * 90.h).clamp(0.0, 90.h);
-
-                          return SizedBox(
-                            height: 140.h,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                // Heart Rate Bar (Purple)
-                                Container(
-                                  width: 8.w,
-                                  height: hrHeight,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFC0A4FA),
-                                    borderRadius: BorderRadius.circular(4.r),
-                                  ),
-                                ),
-                                SizedBox(width: 4.w),
-                                // Temp Bar (Blue)
-                                Container(
-                                  width: 8.w,
-                                  height: tempHeight,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF007DFE),
-                                    borderRadius: BorderRadius.circular(4.r),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
+                  ),
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3E8FF),
+                      borderRadius: BorderRadius.circular(14.r),
+                      border: Border.all(
+                        color: const Color(0xFFD8B4FE),
                       ),
                     ),
-                  ],
-                ),
-              ),
-              SizedBox(height: 16.h),
-              // Legend
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 8.r,
-                    height: 8.r,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFC0A4FA),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  SizedBox(width: 6.w),
-                  Text(
-                    "Heart Rate",
-                    style: GoogleFonts.inter(
-                      fontSize: 10.sp,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  SizedBox(width: 24.w),
-                  Container(
-                    width: 8.r,
-                    height: 8.r,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF007DFE),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  SizedBox(width: 6.w),
-                  Text(
-                    "Body Temp",
-                    style: GoogleFonts.inter(
-                      fontSize: 10.sp,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textSecondary,
+                    child: Text(
+                      'Observed: ${item.observedPeriod}',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 10.sp,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF7C3AED),
+                      ),
                     ),
                   ),
                 ],
               ),
+              SizedBox(height: 12.h),
+
+              Text(
+                item.summaryText,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13.sp,
+                  color: const Color(0xFF334155),
+                  height: 1.45,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              SizedBox(height: 16.h),
+
+              Text(
+                'Contributing factors:',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF64748B),
+                ),
+              ),
+              SizedBox(height: 8.h),
+
+              ...item.contributingFactors.map((factor) {
+                return Padding(
+                  padding: EdgeInsets.only(bottom: 6.h),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 7.r,
+                        height: 7.r,
+                        decoration: const BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      SizedBox(width: 10.w),
+                      Expanded(
+                        child: Text(
+                          factor,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12.sp,
+                            color: const Color(0xFF475569),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
             ],
           ),
         ),
@@ -736,59 +898,296 @@ class _PredictiveHealthScreenState
     );
   }
 
-  // =========================================================================
-  // SECTION 5: PREVENTIVE RECOMMENDATIONS
-  // =========================================================================
+  /// 6. AI Recommendations Section (Horizontal/Vertical Cards with unified #EAF8F7 surface)
   Widget _buildRecommendationsSection(PredictiveHealthState state) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          "Preventive Recommendations",
-          style: GoogleFonts.inter(
-            fontSize: 16.sp,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 2.w),
+          child: Text(
+            'AI Recommendations',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 18.sp,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF173A70),
+            ),
           ),
         ),
-        SizedBox(height: 12.h),
-        Column(
-          children: state.recommendations.map((rec) {
-            return Container(
-              margin: EdgeInsets.only(bottom: 10.h),
-              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF3EDFA),
-                borderRadius: BorderRadius.circular(18.r),
-              ),
+        SizedBox(height: 14.h),
+
+        ...state.recommendations.map((rec) {
+          return Padding(
+            padding: EdgeInsets.only(bottom: 14.h),
+            child: _buildClayCard(
+              padding: EdgeInsets.all(18.r),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    width: 32.r,
-                    height: 32.r,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(rec.icon, color: rec.iconColor, size: 16.r),
-                  ),
-                  SizedBox(width: 12.w),
-                  Expanded(
-                    child: Text(
-                      rec.text,
-                      style: GoogleFonts.inter(
-                        fontSize: 11.sp,
-                        color: AppColors.textPrimary,
-                        height: 1.4,
+                    padding: EdgeInsets.all(12.r),
+                    decoration: BoxDecoration(
+                      color: rec.bgColor,
+                      borderRadius: BorderRadius.circular(18.r),
+                      border: Border.all(
+                        color: rec.iconColor.withValues(alpha: 0.25),
                       ),
+                    ),
+                    child: Icon(
+                      rec.icon,
+                      color: rec.iconColor,
+                      size: 22.r,
+                    ),
+                  ),
+                  SizedBox(width: 14.w),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          rec.category.toUpperCase(),
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 10.sp,
+                            fontWeight: FontWeight.w800,
+                            color: rec.iconColor,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                        SizedBox(height: 3.h),
+                        Text(
+                          rec.title,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF173A70),
+                          ),
+                        ),
+                        SizedBox(height: 4.h),
+                        Text(
+                          rec.explanation,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12.sp,
+                            color: const Color(0xFF64748B),
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
-            );
-          }).toList(),
-        ),
+            ),
+          );
+        }),
       ],
+    );
+  }
+
+  /// 7. AI Transparency & Safety Medical Disclaimer Section
+  Widget _buildTransparencySection(PredictiveHealthState state) {
+    return _buildClayCard(
+      padding: EdgeInsets.all(20.r),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _isTransparencyExpanded = !_isTransparencyExpanded;
+              });
+            },
+            behavior: HitTestBehavior.opaque,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline_rounded,
+                      color: AppColors.primary,
+                      size: 20.r,
+                    ),
+                    SizedBox(width: 8.w),
+                    Text(
+                      'How does Maatriva analyze this?',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF173A70),
+                      ),
+                    ),
+                  ],
+                ),
+                Icon(
+                  _isTransparencyExpanded
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  color: const Color(0xFF64748B),
+                ),
+              ],
+            ),
+          ),
+          if (_isTransparencyExpanded) ...[
+            SizedBox(height: 12.h),
+            Text(
+              'Maatriva continuously evaluates sensor telemetry, ambient nursery environment metrics, and historical baseline trends to present supportive wellness insights for parents.',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12.sp,
+                color: const Color(0xFF475569),
+                height: 1.45,
+              ),
+            ),
+          ],
+          SizedBox(height: 16.h),
+
+          // Mandatory Medical Disclaimer Box
+          Container(
+            padding: EdgeInsets.all(14.r),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(18.r),
+              border: Border.all(color: const Color(0xFFCBD5E1)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.shield_outlined,
+                  color: const Color(0xFF64748B),
+                  size: 20.r,
+                ),
+                SizedBox(width: 10.w),
+                Expanded(
+                  child: Text(
+                    'AI-generated insights are not a medical diagnosis. Consult a qualified healthcare professional for medical concerns.',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11.5.sp,
+                      color: const Color(0xFF64748B),
+                      height: 1.4,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Shimmer / Spinner Loading State View inside unified Clay Card
+  Widget _buildLoadingShimmer() {
+    return _buildClayCard(
+      padding: EdgeInsets.all(28.r),
+      child: Column(
+        children: [
+          SizedBox(height: 12.h),
+          const CircularProgressIndicator(
+            color: AppColors.primary,
+            strokeWidth: 3,
+          ),
+          SizedBox(height: 18.h),
+          Text(
+            '✨ Analyzing your baby\'s recent patterns...',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 15.sp,
+              fontWeight: FontWeight.bold,
+              color: AppColors.primary,
+            ),
+          ),
+          SizedBox(height: 6.h),
+          Text(
+            'Processing real-time sensor streams and nursery ambient signals.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12.sp,
+              color: const Color(0xFF64748B),
+            ),
+          ),
+          SizedBox(height: 12.h),
+        ],
+      ),
+    );
+  }
+
+  /// Insufficient Data State View inside unified Clay Card
+  Widget _buildInsufficientDataView() {
+    return _buildClayCard(
+      padding: EdgeInsets.all(28.r),
+      child: Column(
+        children: [
+          Icon(Icons.query_stats_rounded, size: 52.r, color: const Color(0xFF94A3B8)),
+          SizedBox(height: 14.h),
+          Text(
+            'Not Enough Data Yet',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 17.sp,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF173A70),
+            ),
+          ),
+          SizedBox(height: 8.h),
+          Text(
+            'Continue monitoring and Maatriva will provide AI insights once enough telemetry data has been collected.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12.5.sp,
+              color: const Color(0xFF64748B),
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Error State View inside unified Clay Card
+  Widget _buildErrorView(String message, PredictiveHealthNotifier notifier) {
+    return _buildClayCard(
+      padding: EdgeInsets.all(28.r),
+      child: Column(
+        children: [
+          Icon(Icons.wifi_off_rounded, size: 48.r, color: const Color(0xFFEA580C)),
+          SizedBox(height: 14.h),
+          Text(
+            'AI Analysis Temporarily Unavailable',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 16.sp,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF173A70),
+            ),
+          ),
+          SizedBox(height: 8.h),
+          Text(
+            'Live monitoring is still active.',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 13.sp,
+              color: const Color(0xFF64748B),
+            ),
+          ),
+          SizedBox(height: 20.h),
+          ElevatedButton(
+            onPressed: () => notifier.fetchAnalysisData(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 12.h),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16.r),
+              ),
+              elevation: 0,
+            ),
+            child: Text(
+              'Try Again',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 13.sp,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

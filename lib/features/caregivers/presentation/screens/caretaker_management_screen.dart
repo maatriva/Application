@@ -7,6 +7,8 @@ import 'package:maatriva/core/theme/app_colors.dart';
 import 'package:maatriva/shared/models/caregiver.dart';
 import 'package:maatriva/shared/widgets/bottom_navigation.dart';
 import '../../provider/caregiver_access_provider.dart';
+import '../widgets/countdown_flip_clock.dart';
+import '../widgets/flip_clock_duration_selector.dart';
 
 /// Dedicated Caretaker Management / Access Details Screen.
 /// Allows parents to inspect remaining time, extend access, modify permissions, and revoke access.
@@ -113,15 +115,17 @@ class _CaretakerManagementScreenState
     final sessionMatches = state.activeSessions.where((s) => s.id == widget.sessionId).toList();
     final ActiveSession session = sessionMatches.isNotEmpty
         ? sessionMatches.first
-        : ActiveSession(
-            id: widget.sessionId,
-            name: 'Grandma',
-            relationship: 'Grandmother',
-            imageUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=120',
-            expiresAt: DateTime.now().add(const Duration(hours: 23, minutes: 42)),
-            status: SessionStatus.active,
-            permissions: state.permissions,
-          );
+        : (state.activeSessions.isNotEmpty
+            ? state.activeSessions.first
+            : ActiveSession(
+                id: widget.sessionId,
+                name: 'Caregiver',
+                relationship: 'Temporary Caregiver',
+                imageUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=120',
+                expiresAt: DateTime.now().add(const Duration(minutes: 30)),
+                status: SessionStatus.active,
+                permissions: state.permissions,
+              ));
 
     final now = DateTime.now();
     final remaining = session.expiresAt.difference(now);
@@ -389,7 +393,7 @@ class _CaretakerManagementScreenState
                 ),
 
               // -------------------------------------------------------------
-              // 4. REMAINING ACCESS TIME CARD
+              // 4. REMAINING ACCESS TIME CARD (COUNTDOWN FLIP CLOCK)
               // -------------------------------------------------------------
               Container(
                 width: double.infinity,
@@ -397,13 +401,7 @@ class _CaretakerManagementScreenState
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF183B70).withValues(alpha: 0.05),
-                      blurRadius: 16,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
+                  boxShadow: AppColors.softShadow,
                   border: Border.all(
                     color: const Color(0xFFE4F0F2),
                     width: 1.5,
@@ -413,38 +411,19 @@ class _CaretakerManagementScreenState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'ACCESS REMAINING',
+                      'REAL-TIME ACCESS COUNTDOWN',
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
-                        color: AppColors.royalBlue,
+                        color: AppColors.primary,
                         letterSpacing: 1.2,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _formatRemainingTime(remaining),
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w900,
-                        color: isExpired ? const Color(0xFFE53935) : AppColors.navyDeep,
-                      ),
-                    ),
                     const SizedBox(height: 12),
-                    // Visual progress indicator
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: LinearProgressIndicator(
-                        value: progressValue,
-                        minHeight: 10,
-                        backgroundColor: const Color(0xFFEBF1FF),
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          isExpired
-                              ? const Color(0xFFE53935)
-                              : (isExpiringSoon ? const Color(0xFFF57C00) : AppColors.royalBlue),
-                        ),
-                      ),
-                    ),
+
+                    // Countdown Flip Clock Widget
+                    CountdownFlipClock(targetExpiry: session.expiresAt),
+
                     const SizedBox(height: 14),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -482,7 +461,7 @@ class _CaretakerManagementScreenState
                           ),
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.royalBlue,
+                          backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
@@ -681,62 +660,81 @@ class _CaretakerManagementScreenState
     );
   }
 
-  /// Extend Access Modal Bottom Sheet
+  /// Extend Access Modal Bottom Sheet using Flip Clock
   void _showExtendBottomSheet(
     BuildContext context,
     CaregiverAccessNotifier notifier,
     ActiveSession session,
   ) {
+    int selectedExtensionMinutes = 60; // Default 1 hour extension
+
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         return Container(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(20),
           decoration: const BoxDecoration(
-            color: Colors.white,
+            color: AppColors.predictiveCanvasBg,
             borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
+          child: SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 14),
+
+                  FlipClockDurationSelector(
+                    title: 'EXTEND ACCESS BY',
+                    initialDurationLabel: '1 Hour',
+                    showConfirmButton: true,
+                    onTotalMinutesChanged: (totalMins) {
+                      selectedExtensionMinutes = totalMins;
+                    },
+                    onDurationChanged: (_) {},
+                    onConfirm: () async {
+                      Navigator.pop(sheetContext);
+                      if (selectedExtensionMinutes <= 0) return;
+
+                      final success = await notifier.extendTemporaryAccess(
+                        permissionId: session.id,
+                        extensionMinutes: selectedExtensionMinutes,
+                      );
+                      if (mounted) {
+                        if (success) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '✓ Extended access for ${session.name} by ${selectedExtensionMinutes ~/ 60 > 0 ? '${selectedExtensionMinutes ~/ 60}h ' : ''}${selectedExtensionMinutes % 60 > 0 ? '${selectedExtensionMinutes % 60}m' : ''}.',
+                              ),
+                              backgroundColor: const Color(0xFF00B894),
+                            ),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Unable to update access duration.'),
+                              backgroundColor: Color(0xFFE53935),
+                            ),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 18),
-              Text(
-                'Extend Caretaker Access',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.navyDeep,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'How long would you like to extend access for ${session.name}?',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 12.5,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 20),
-              _buildDurationOption(sheetContext, notifier, session, '1 hour', 60),
-              _buildDurationOption(sheetContext, notifier, session, '6 hours', 360),
-              _buildDurationOption(sheetContext, notifier, session, '12 hours', 720),
-              _buildDurationOption(sheetContext, notifier, session, '24 hours', 1440),
-              _buildDurationOption(sheetContext, notifier, session, '3 days', 4320),
-              _buildDurationOption(sheetContext, notifier, session, '7 days', 10080),
-              const SizedBox(height: 16),
-            ],
+            ),
           ),
         );
       },

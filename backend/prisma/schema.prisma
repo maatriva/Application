@@ -313,6 +313,7 @@ model TemporaryCaregiverPermission {
   invitationExpiresAt   DateTime? @map("invitation_expires_at") @db.Timestamptz
   permission            String    @default("LIVE_MONITOR_ONLY") @db.VarChar(50)
   permissions           Json?     @default("{}")
+  durationMinutes       Int       @map("duration_minutes")
   grantedAt             DateTime  @default(now()) @map("granted_at") @db.Timestamptz
   expiresAt             DateTime  @map("expires_at") @db.Timestamptz
   acceptedAt            DateTime? @map("accepted_at") @db.Timestamptz
@@ -344,5 +345,4 @@ model TemporaryCaregiverPermission {
   @@index([invitationToken])
   @@map("temporary_caregiver_permissions")
 }
-
 

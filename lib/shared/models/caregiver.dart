@@ -137,6 +137,7 @@ class AccessHistory extends Equatable {
   final String timeRange;
   final String durationText;
   final bool isExpired;
+  final String status;
 
   const AccessHistory({
     required this.id,
@@ -146,6 +147,7 @@ class AccessHistory extends Equatable {
     required this.timeRange,
     required this.durationText,
     this.isExpired = true,
+    this.status = 'Completed',
   });
 
   factory AccessHistory.fromJson(Map<String, dynamic> json) {
@@ -157,6 +159,7 @@ class AccessHistory extends Equatable {
       timeRange: json['timeRange'] as String? ?? '',
       durationText: json['durationText'] as String? ?? '',
       isExpired: json['isExpired'] as bool? ?? true,
+      status: json['status'] as String? ?? 'Completed',
     );
   }
 
@@ -169,6 +172,7 @@ class AccessHistory extends Equatable {
       'timeRange': timeRange,
       'durationText': durationText,
       'isExpired': isExpired,
+      'status': status,
     };
   }
 
@@ -180,6 +184,7 @@ class AccessHistory extends Equatable {
     String? timeRange,
     String? durationText,
     bool? isExpired,
+    String? status,
   }) {
     return AccessHistory(
       id: id ?? this.id,
@@ -189,9 +194,11 @@ class AccessHistory extends Equatable {
       timeRange: timeRange ?? this.timeRange,
       durationText: durationText ?? this.durationText,
       isExpired: isExpired ?? this.isExpired,
+      status: status ?? this.status,
     );
   }
 
   @override
-  List<Object?> get props => [id, name, relationship, date, timeRange, durationText, isExpired];
+  List<Object?> get props => [id, name, relationship, date, timeRange, durationText, isExpired, status];
 }
+

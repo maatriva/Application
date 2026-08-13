@@ -5,6 +5,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../routes/app_routes.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../shared/models/vitals_telemetry.dart';
 import '../../../../shared/models/user_session.dart';
@@ -482,9 +483,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                 if (!isCaregiver || permsHealth)
                   QuickActionButton(
-                    icon: Icons.favorite_border_rounded,
-                    label: 'Health Stats',
-                    onTap: () => context.push('/predictive-health'),
+                    icon: Icons.bar_chart_rounded,
+                    label: 'Sensor Reports',
+                    onTap: () => context.push('/wellness-monitoring'),
                   ),
                 if (!isCaregiver || permsCradle)
                   QuickActionButton(
@@ -503,7 +504,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   QuickActionButton(
                     icon: Icons.supervisor_account_outlined,
                     label: 'Caretaker Access',
-                    onTap: () => context.push('/caregiver-access'),
+                    onTap: () => context.push(AppRoutes.caregiverAccess),
                   ),
                 if (!isCaregiver || permsMusic)
                   QuickActionButton(

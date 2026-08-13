@@ -330,9 +330,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         final expiresAt = accessRes?['expiresAt'] as String? ??
             (accessRes?['data']?['expiresAt'] as String?) ??
             cachedSession?['expiresAt'] as String?;
-        final permsMap = (accessRes?['data']?['permissions'] as Map<String, dynamic>?) ??
-            (accessRes?['permissions'] as Map<String, dynamic>?) ??
-            cachedSession?['permissions'] as Map<String, dynamic>?;
+        final parsedPerms = _parseServerPermissions(accessRes);
+        final cachedPerms = cachedSession?['permissions'] as Map<String, dynamic>?;
+        final permsMap = parsedPerms.isNotEmpty ? parsedPerms : (cachedPerms ?? {'live_monitoring': true});
+
         final babyData = (accessRes?['data']?['baby'] as Map<String, dynamic>?) ??
             cachedSession?['baby'] as Map<String, dynamic>? ?? {
           'id': babyId ?? 'shared_baby_01',
@@ -341,15 +342,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
           'gender': 'female',
         };
 
-        if (expiresAt != null) {
-          await cache.cacheCaregiverGrantedSession({
-            'babyId': babyId ?? 'shared_baby_01',
-            'babyName': babyData['name'] ?? 'Shared Baby',
-            'permissions': permsMap ?? {'live_monitoring': true},
-            'expiresAt': expiresAt,
-            'baby': babyData,
-          });
-        }
+        await cache.cacheCaregiverGrantedSession({
+          'babyId': babyId ?? 'shared_baby_01',
+          'babyName': babyData['name'] ?? 'Shared Baby',
+          'permissions': permsMap,
+          'expiresAt': expiresAt ?? DateTime.now().add(const Duration(hours: 24)).toIso8601String(),
+          'baby': babyData,
+        });
+
 
         if (mounted && state.session != null && state.session!.hasActiveCaregiverPermission != true) {
           state = AuthState.authenticated(
@@ -451,8 +451,56 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  Map<String, bool> _parseServerPermissions(Map<String, dynamic>? raw) {
+    if (raw == null) return {};
+
+    final Map<String, bool> result = {};
+
+    // 1. If explicit map exists in raw['permissions'] or raw['data']['permissions']
+    final mapObj = (raw['data']?['permissions'] as Map?) ?? (raw['permissions'] as Map?);
+    if (mapObj != null) {
+      mapObj.forEach((k, v) {
+        if (k is String) {
+          result[k] = v == true || v == 'true' || v == 1;
+        }
+      });
+    }
+
+    // 2. Parse boolean flags (canViewLiveMonitoring, canViewCamera, etc.)
+    final data = (raw['data'] as Map<String, dynamic>?) ?? raw;
+    if (data.containsKey('canViewLiveMonitoring') || data.containsKey('canViewCamera') || data.containsKey('canViewTelemetry')) {
+      result['live_monitoring'] = data['canViewLiveMonitoring'] == true;
+      result['camera_snapshot'] = data['canViewCamera'] == true;
+      result['health_data'] = data['canViewTelemetry'] == true;
+      result['emergency_alerts'] = data['canReceiveAlerts'] == true;
+      result['notifications'] = data['canReceiveAlerts'] == true;
+      result['ai_assistant'] = data['canUseAi'] == true;
+      result['custom_music'] = data['canPlayMusic'] == true;
+      result['cradle_controls'] = data['canControlCradle'] == true;
+    }
+
+    // 3. Parse comma-separated string "permission": "live_monitoring,notifications,..."
+    final permStr = (data['permission'] as String?) ?? (raw['permission'] as String?);
+    if (permStr != null && permStr.isNotEmpty) {
+      final tokens = permStr.split(',').map((s) => s.trim().toLowerCase()).toSet();
+      if (tokens.contains('live_monitoring')) result['live_monitoring'] = true;
+      if (tokens.contains('camera_snapshot') || tokens.contains('camera')) result['camera_snapshot'] = true;
+      if (tokens.contains('health_data') || tokens.contains('telemetry')) result['health_data'] = true;
+      if (tokens.contains('emergency_alerts') || tokens.contains('notifications') || tokens.contains('alerts')) {
+        result['emergency_alerts'] = true;
+        result['notifications'] = true;
+      }
+      if (tokens.contains('ai_assistant') || tokens.contains('ai')) result['ai_assistant'] = true;
+      if (tokens.contains('custom_music') || tokens.contains('music')) result['custom_music'] = true;
+      if (tokens.contains('cradle_controls') || tokens.contains('cradle')) result['cradle_controls'] = true;
+    }
+
+    return result;
+  }
+
   @override
   void dispose() {
+
     _caregiverPermissionTimer?.cancel();
     super.dispose();
   }

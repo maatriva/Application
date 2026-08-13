@@ -39,6 +39,22 @@ class _JoinSharedBabyScreenState extends ConsumerState<JoinSharedBabyScreen>
     _scanAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _scanController, curve: Curves.easeInOut),
     );
+
+    // A QR scanned before login is retained locally. Once authentication routes
+    // the caregiver back here, resume the exact invitation instead of asking
+    // them to scan a second time.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _resumePendingQrJoin());
+  }
+
+  Future<void> _resumePendingQrJoin() async {
+    final auth = ref.read(authNotifierProvider);
+    if (auth.status != AuthStatus.authenticated) return;
+
+    final prefs = ref.read(sharedPreferencesProvider);
+    final pendingQr = prefs.getString('pending_qr_join_data');
+    if (pendingQr == null || pendingQr.isEmpty) return;
+
+    await _processQRData(pendingQr);
   }
 
   @override
@@ -366,7 +382,12 @@ class _JoinSharedBabyScreenState extends ConsumerState<JoinSharedBabyScreen>
           e.toString().contains('503');
 
       String errMsg = e.toString().replaceAll('ApiException: ', '').replaceAll('Exception: ', '');
-      if (isAuthError) {
+      final lowerErr = errMsg.toLowerCase();
+      if (lowerErr.contains('used') || lowerErr.contains('invalid token')) {
+        errMsg = 'Invitation Already Used.\n\nThis caregiver invitation has already been accepted or is no longer valid. Ask the parent for a new invitation.';
+      } else if (lowerErr.contains('active caregiver') || lowerErr.contains('limit')) {
+        errMsg = 'An Active Caregiver Already Exists.\n\nOnly one caregiver can have active access at a time. The parent must revoke existing access before adding a new caregiver.';
+      } else if (isAuthError) {
         errMsg = 'Caregiver login is required to accept access.\n\nYour scanned invitation has been saved. Please log in to complete access.';
       } else if (e is FormatException) {
         errMsg = 'Invalid QR structure: ${e.message}\n\nPlease scan a valid MAATRIVA invite.';
@@ -779,4 +800,3 @@ class _JoinSharedBabyScreenState extends ConsumerState<JoinSharedBabyScreen>
     );
   }
 }
-

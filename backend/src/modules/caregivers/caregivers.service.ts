@@ -97,7 +97,7 @@ export class CaregiversService {
         throw { statusCode: 400, message: 'This caregiver invitation has been revoked by the parent.' };
       }
 
-      if (tempRecord.status !== 'PENDING' && tempRecord.caregiverId && tempRecord.caregiverId !== userId) {
+      if (tempRecord.status !== 'PENDING') {
         throw { statusCode: 400, message: 'This QR code invitation has already been used by another caregiver.' };
       }
 
@@ -110,52 +110,37 @@ export class CaregiversService {
         throw { statusCode: 400, message: 'QR Code has expired. Please ask the parent for a new QR code.' };
       }
 
-      if (now > tempRecord.expiresAt) {
-        await (prisma as any).temporaryCaregiverPermission.update({
-          where: { id: tempRecord.id },
-          data: { status: 'EXPIRED' },
+      // The acceptance transition must be atomic. The server's transaction time is
+      // the authoritative start time; invitation expiry never shortens access time.
+      const updated = await (prisma as any).$transaction(async (tx: any) => {
+        const invitation = await tx.temporaryCaregiverPermission.findUnique({
+          where: { id: tempRecord.id }, include: { baby: true },
         });
-        throw { statusCode: 400, message: 'Caregiver access duration set by parent has already expired.' };
-      }
-
-      const durationMs = tempRecord.expiresAt.getTime() - tempRecord.grantedAt.getTime();
-      const freshExpiresAt = new Date(now.getTime() + Math.max(durationMs, 60000));
-
-      // Mark permission as ACTIVE for this caregiver with fresh expiresAt starting upon scan
-      const updated = await (prisma as any).temporaryCaregiverPermission.update({
-        where: { id: tempRecord.id },
-        data: {
-          caregiverId: userId,
-          status: 'ACTIVE',
-          expiresAt: freshExpiresAt,
-          acceptedAt: now,
-          lastActiveAt: now,
-        },
-        include: {
-          baby: { select: { id: true, name: true, gender: true, birthDate: true, photoUrl: true } },
-        },
-      });
-
-      // Upsert base Caregiver record
-      await prisma.caregiver.upsert({
-        where: {
-          babyId_userId: {
-            babyId: tempRecord.babyId,
-            userId,
-          },
-        },
-        update: {
-          accessLevel: tempRecord.permission || 'LIVE_MONITOR_ONLY',
-          status: 'accepted',
-        },
-        create: {
-          babyId: tempRecord.babyId,
-          userId,
-          accessLevel: tempRecord.permission || 'LIVE_MONITOR_ONLY',
-          status: 'accepted',
-          invitedBy: tempRecord.parentId,
-        },
-      });
+        const acceptedAt = new Date();
+        if (!invitation || invitation.status !== 'PENDING' || invitation.revoked) {
+          throw { statusCode: 400, message: 'Invitation already used or revoked.' };
+        }
+        if (invitation.invitationExpiresAt && acceptedAt >= invitation.invitationExpiresAt) {
+          await tx.temporaryCaregiverPermission.update({ where: { id: tempRecord.id }, data: { status: 'EXPIRED' } });
+          throw { statusCode: 400, message: 'QR Code has expired. Please ask the parent for a new QR code.' };
+        }
+        const conflicting = await tx.temporaryCaregiverPermission.findFirst({
+          where: { babyId: invitation.babyId, status: 'ACTIVE', revoked: false, expiresAt: { gt: acceptedAt } },
+        });
+        if (conflicting) throw { statusCode: 409, message: 'An active caregiver already has access.' };
+        const expiresAt = new Date(acceptedAt.getTime() + invitation.durationMinutes * 60000);
+        const access = await tx.temporaryCaregiverPermission.update({
+          where: { id: invitation.id },
+          data: { caregiverId: userId, status: 'ACTIVE', grantedAt: acceptedAt, acceptedAt, lastActiveAt: acceptedAt, expiresAt },
+          include: { baby: { select: { id: true, name: true, gender: true, birthDate: true, photoUrl: true } }, caregiver: { select: { fullName: true, email: true } } },
+        });
+        await tx.caregiver.upsert({
+          where: { babyId_userId: { babyId: invitation.babyId, userId } },
+          update: { accessLevel: invitation.permission || 'LIVE_MONITOR_ONLY', status: 'accepted' },
+          create: { babyId: invitation.babyId, userId, accessLevel: invitation.permission || 'LIVE_MONITOR_ONLY', status: 'accepted', invitedBy: invitation.parentId },
+        });
+        return access;
+      }, { isolationLevel: 'Serializable' });
 
       // Audit Log
       await prisma.auditLog.create({
@@ -171,14 +156,19 @@ export class CaregiversService {
       // Real-Time Socket.IO Push Event
       try {
         const payload = {
-          permissionId: tempRecord.id,
+          accessId: updated.id,
+          permissionId: updated.id,
           babyId: tempRecord.babyId,
           babyName: tempRecord.baby.name,
-          expiresAt: tempRecord.expiresAt.toISOString(),
-          permission: tempRecord.permission,
-          permissions: tempRecord.permissions,
+          caregiverId: userId,
+          caregiverName: updated.caregiver?.fullName || updated.caregiver?.email || 'Caregiver',
+          status: 'ACTIVE',
+          startedAt: updated.acceptedAt.toISOString(),
+          expiresAt: updated.expiresAt.toISOString(),
+          permissions: updated.permissions,
           baby: updated.baby,
         };
+        WebsocketServerManager.getInstance().emitToUser(tempRecord.parentId, 'caregiver.access.accepted', payload);
         WebsocketServerManager.getInstance().emitToUser(userId, 'caregiver:access_granted', payload);
         WebsocketServerManager.getInstance().emitToUser(userId, 'caregiver_access_granted', payload);
       } catch (_) {}
@@ -320,12 +310,15 @@ export class CaregiversService {
       },
     });
 
-    const temporaryPermissions = await (prisma as any).temporaryCaregiverPermission.findMany({
+      const temporaryPermissions = await (prisma as any).temporaryCaregiverPermission.findMany({
       where: {
         babyId,
         status: { in: ['PENDING', 'ACTIVE'] },
         revoked: false,
-        expiresAt: { gt: new Date() },
+        OR: [
+          { status: 'PENDING', invitationExpiresAt: { gt: new Date() } },
+          { status: 'ACTIVE', expiresAt: { gt: new Date() } },
+        ],
       },
       include: {
         caregiver: { select: { id: true, fullName: true, email: true } },
@@ -349,6 +342,7 @@ export class CaregiversService {
         caregiverName: tp.caregiver?.fullName || 'Guest Caregiver',
         caregiverEmail: tp.caregiver?.email || '',
         status: tp.status,
+        durationMinutes: tp.durationMinutes,
         grantedAt: tp.grantedAt?.toISOString() || tp.createdAt.toISOString(),
         expiresAt: tp.expiresAt.toISOString(),
         invitationExpiresAt: tp.invitationExpiresAt?.toISOString(),
@@ -525,9 +519,14 @@ export class CaregiversService {
       }
     }
 
-    const minutes = Math.max(1, data.durationMinutes || 60);
+    const minutes = Number(data.durationMinutes);
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 10080) {
+      throw { statusCode: 400, message: 'durationMinutes must be between 1 minute and 7 days.' };
+    }
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + minutes * 60 * 1000);
+    // This is only a placeholder while the invitation is waiting. The actual
+    // access expiry is computed from acceptedAt + durationMinutes at acceptance.
+    const expiresAt = now;
     const invitationExpiresAt = new Date(now.getTime() + 10 * 60 * 1000); // QR invitation scannable for 10 minutes
     const permType = data.permission || 'LIVE_MONITOR_ONLY';
 
@@ -546,13 +545,18 @@ export class CaregiversService {
       cradle_controls: false,
     };
 
-    // Invalidate/expire old pending/active temporary permissions for this parent/baby before creating a new one
+    const active = await (prisma as any).temporaryCaregiverPermission.findFirst({
+      where: { parentId: data.parentId, babyId: data.babyId, status: 'ACTIVE', revoked: false, expiresAt: { gt: now } },
+    });
+    if (active) throw { statusCode: 409, message: 'An active caregiver already has access.' };
+
+    // Replace stale pending invitations only; never invalidate an active access.
     try {
       await (prisma as any).temporaryCaregiverPermission.updateMany({
         where: {
           parentId: data.parentId,
           babyId: data.babyId,
-          status: { in: ['PENDING', 'ACTIVE'] },
+          status: 'PENDING',
         },
         data: {
           status: 'EXPIRED',
@@ -573,9 +577,10 @@ export class CaregiversService {
         invitationExpiresAt,
         permission: permType,
         permissions: permsObj,
+        durationMinutes: minutes,
         grantedAt: now,
         expiresAt,
-        status: caregiverUserId ? 'ACTIVE' : 'PENDING',
+        status: 'PENDING',
         revoked: false,
         canViewLiveMonitoring: permsObj.live_monitoring ?? true,
         canViewCamera: permsObj.camera_snapshot ?? false,
@@ -607,7 +612,8 @@ export class CaregiversService {
       invitationToken,
       babyId: data.babyId,
       grantedAt: tempPermission.grantedAt,
-      expiresAt: tempPermission.expiresAt,
+      durationMinutes: tempPermission.durationMinutes,
+      expiresAt: null,
       invitationExpiresAt: tempPermission.invitationExpiresAt,
       status: tempPermission.status,
       permissions: tempPermission.permissions,
@@ -828,6 +834,7 @@ export class CaregiversService {
         };
         WebsocketServerManager.getInstance().emitToUser(record.caregiverId, 'caregiver_permissions_updated', payload);
         WebsocketServerManager.getInstance().emitToUser(record.caregiverId, 'caregiver:permissions_updated', payload);
+        WebsocketServerManager.getInstance().emitToUser(record.parentId, 'caregiver.permission.updated', payload);
       } catch (wsErr) {
         console.error('[CaregiversService] Error emitting permissions updated event:', wsErr);
       }
@@ -885,6 +892,7 @@ export class CaregiversService {
         };
         WebsocketServerManager.getInstance().emitToUser(record.caregiverId, 'caregiver_access_extended', payload);
         WebsocketServerManager.getInstance().emitToUser(record.caregiverId, 'caregiver:access_extended', payload);
+        WebsocketServerManager.getInstance().emitToUser(record.parentId, 'caregiver.access.extended', payload);
       } catch (wsErr) {
         console.error('[CaregiversService] Error emitting access extended event:', wsErr);
       }
@@ -963,6 +971,7 @@ export class CaregiversService {
         };
         WebsocketServerManager.getInstance().emitToUser(record.caregiverId, 'caregiver_access_revoked', payload);
         WebsocketServerManager.getInstance().emitToUser(record.caregiverId, 'caregiver:access_revoked', payload);
+        WebsocketServerManager.getInstance().emitToUser(record.parentId, 'caregiver.access.revoked', payload);
       } catch (wsErr) {
         console.error('[CaregiversService] Error emitting real-time revocation event:', wsErr);
       }
@@ -1001,5 +1010,61 @@ export class CaregiversService {
       where: whereClause,
     });
     return count > 0;
+  }
+
+  /**
+   * Fetch persisted access history for a baby profile.
+   */
+  public async getAccessHistory(babyId: string) {
+    const records = await (prisma as any).temporaryCaregiverPermission.findMany({
+      where: { babyId },
+      include: {
+        caregiver: { select: { id: true, fullName: true, email: true } },
+        parent: { select: { id: true, fullName: true, email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    const now = new Date();
+
+    return records.map((rec: any) => {
+      const isRevoked = rec.status === 'REVOKED' || rec.revoked;
+      const isExpired = rec.expiresAt < now || rec.status === 'EXPIRED';
+      const isActive = rec.status === 'ACTIVE' && !isRevoked && !isExpired;
+
+      let status = 'Completed';
+      if (isRevoked) {
+        status = 'Revoked';
+      } else if (isExpired) {
+        status = 'Expired';
+      } else if (isActive) {
+        status = 'Active';
+      }
+
+      const startTime = rec.acceptedAt || rec.grantedAt || rec.createdAt;
+      const endTime = rec.revokedAt || rec.expiresAt;
+
+      const durationMs = (endTime.getTime() - startTime.getTime());
+      const durationMins = Math.max(1, Math.round(durationMs / (1000 * 60)));
+      let durationText = `${durationMins} mins`;
+      if (durationMins >= 60) {
+        const hrs = (durationMins / 60).toFixed(1).replace('.0', '');
+        durationText = `${hrs} ${Number(hrs) === 1 ? 'hour' : 'hours'}`;
+      }
+
+      return {
+        id: rec.id,
+        name: rec.caregiver?.fullName || rec.caregiver?.email || 'Caregiver Guest',
+        relationship: rec.permission === 'LIVE_MONITOR_ONLY' ? 'Temporary Caregiver' : 'Family Caregiver',
+        grantedAt: rec.grantedAt?.toISOString() || rec.createdAt.toISOString(),
+        acceptedAt: rec.acceptedAt?.toISOString(),
+        expiresAt: rec.expiresAt.toISOString(),
+        revokedAt: rec.revokedAt?.toISOString(),
+        status,
+        durationText,
+        permissions: rec.permissions,
+      };
+    });
   }
 }

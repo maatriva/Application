@@ -22,11 +22,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  
+
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isSubmitting = false;
-  String _selectedRole = 'parent';
+  String _selectedRole = 'parent'; // 'parent' or 'caregiver'
 
   @override
   void dispose() {
@@ -47,7 +47,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         _isSubmitting = true;
       });
       FocusScope.of(context).unfocus();
-      
+
       try {
         await ref.read(authNotifierProvider.notifier).register(
               email: _emailController.text.trim(),
@@ -70,8 +70,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final authState = ref.watch(authNotifierProvider);
     final onboardingState = ref.watch(onboardingProvider);
     final isLoading = _isSubmitting ||
-                     authState.status == AuthStatus.loading ||
-                     (authState.status == AuthStatus.authenticated && onboardingState.isLoading);
+        authState.status == AuthStatus.loading ||
+        (authState.status == AuthStatus.authenticated && onboardingState.isLoading);
 
     // Listen for authentication errors and display in SnackBar
     ref.listen<AuthState>(authNotifierProvider, (previous, next) {
@@ -107,103 +107,115 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     });
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.background, // Light Aqua Canvas (0xFFEBF7F8)
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 20.h),
+          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              SizedBox(height: 10.h),
-              
-              // Celestial Branding Header
-              Container(
-                width: 70.r,
-                height: 70.r,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: AppColors.softShadow,
-                  border: Border.all(
-                    color: AppColors.primary.withOpacity(0.06),
-                    width: 1.5,
-                  ),
-                ),
-                child: Icon(
-                  Icons.child_care_rounded,
-                  color: AppColors.primary,
-                  size: 36.r,
-                ),
-              ),
-              SizedBox(height: 12.h),
-              Text(
-                'MAATRIVA',
-                style: GoogleFonts.outfit(
-                  textStyle: TextStyle(
-                    fontSize: 22.sp,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2.0,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ),
-              
-              SizedBox(height: 24.h),
+              SizedBox(height: 8.h),
 
-              // Celestial Claymorphism Card
+              // =================================================================
+              // 1. BRANDING HEADER (Logo + MAATRIVA)
+              // =================================================================
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 52.r,
+                    height: 52.r,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: AppColors.softShadow,
+                      border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.child_care_rounded,
+                      color: AppColors.primary,
+                      size: 30.r,
+                    ),
+                  ),
+                  SizedBox(width: 12.w),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'MAATRIVA',
+                        style: GoogleFonts.outfit(
+                          fontSize: 22.sp,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 2.0,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        'Smart Care. Peaceful Moments.',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 10.sp,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
+              SizedBox(height: 20.h),
+
+              // =================================================================
+              // 2. MAIN CLAYMORPHIC CARD FOR CREATE ACCOUNT FORM
+              // =================================================================
               Container(
                 width: double.infinity,
-                padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 24.h),
+                padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 22.h),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(28.r),
                   border: Border.all(
-                    color: AppColors.primary.withOpacity(0.08),
+                    color: AppColors.primary.withValues(alpha: 0.08),
                     width: 1.5,
                   ),
-                  boxShadow: AppColors.softShadow,
+                  boxShadow: AppColors.clayShadow,
                 ),
                 child: Form(
                   key: _formKey,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Card Title & Subtitle
                       Text(
-                        'Create Account',
+                        'Create Your Account',
                         style: GoogleFonts.outfit(
-                          textStyle: TextStyle(
-                            fontSize: 20.sp,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
+                          fontSize: 20.sp,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
                         ),
                       ),
                       SizedBox(height: 4.h),
                       Text(
-                        'Register to manage baby telemetry',
-                        style: TextStyle(
+                        'Create your Maatriva account and start caring smarter.',
+                        style: GoogleFonts.plusJakartaSans(
                           fontSize: 12.sp,
-                          fontWeight: FontWeight.w500,
                           color: AppColors.textSecondary,
                         ),
                       ),
+
                       SizedBox(height: 20.h),
 
                       // Full Name Field
-                      Text(
-                        'Full Name',
-                        style: TextStyle(
-                          fontSize: 12.sp,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
+                      _buildFieldLabel('Full Name'),
                       SizedBox(height: 6.h),
                       TextFormField(
                         controller: _nameController,
                         keyboardType: TextInputType.name,
                         enabled: !isLoading,
-                        style: TextStyle(
+                        style: GoogleFonts.plusJakartaSans(
                           fontSize: 14.sp,
                           fontWeight: FontWeight.w600,
                           color: AppColors.textPrimary,
@@ -214,54 +226,22 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           }
                           return null;
                         },
-                        decoration: InputDecoration(
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 16.w,
-                            vertical: 13.h,
-                          ),
-                          prefixIcon: Icon(
-                            Icons.person_outline_rounded,
-                            color: AppColors.primary.withOpacity(0.7),
-                            size: 20.r,
-                          ),
-                          filled: true,
-                          fillColor: AppColors.background,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16.r),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16.r),
-                            borderSide: const BorderSide(
-                              color: AppColors.primary,
-                              width: 1.5,
-                            ),
-                          ),
-                          errorStyle: TextStyle(
-                            fontSize: 11.sp,
-                            color: Colors.red,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        decoration: _buildInputDecoration(
+                          hintText: 'Your full name',
+                          icon: Icons.person_outline_rounded,
                         ),
                       ),
-                      SizedBox(height: 16.h),
+
+                      SizedBox(height: 14.h),
 
                       // Email Field
-                      Text(
-                        'Email Address',
-                        style: TextStyle(
-                          fontSize: 12.sp,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
+                      _buildFieldLabel('Email Address'),
                       SizedBox(height: 6.h),
                       TextFormField(
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
                         enabled: !isLoading,
-                        style: TextStyle(
+                        style: GoogleFonts.plusJakartaSans(
                           fontSize: 14.sp,
                           fontWeight: FontWeight.w600,
                           color: AppColors.textPrimary,
@@ -278,54 +258,22 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           }
                           return null;
                         },
-                        decoration: InputDecoration(
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 16.w,
-                            vertical: 13.h,
-                          ),
-                          prefixIcon: Icon(
-                            Icons.email_outlined,
-                            color: AppColors.primary.withOpacity(0.7),
-                            size: 20.r,
-                          ),
-                          filled: true,
-                          fillColor: AppColors.background,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16.r),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16.r),
-                            borderSide: const BorderSide(
-                              color: AppColors.primary,
-                              width: 1.5,
-                            ),
-                          ),
-                          errorStyle: TextStyle(
-                            fontSize: 11.sp,
-                            color: Colors.red,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        decoration: _buildInputDecoration(
+                          hintText: 'Your email address',
+                          icon: Icons.email_outlined,
                         ),
                       ),
-                      SizedBox(height: 16.h),
+
+                      SizedBox(height: 14.h),
 
                       // Password Field
-                      Text(
-                        'Password',
-                        style: TextStyle(
-                          fontSize: 12.sp,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
+                      _buildFieldLabel('Password'),
                       SizedBox(height: 6.h),
                       TextFormField(
                         controller: _passwordController,
                         obscureText: _obscurePassword,
                         enabled: !isLoading,
-                        style: TextStyle(
+                        style: GoogleFonts.plusJakartaSans(
                           fontSize: 14.sp,
                           fontWeight: FontWeight.w600,
                           color: AppColors.textPrimary,
@@ -339,17 +287,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           }
                           return null;
                         },
-                        decoration: InputDecoration(
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 16.w,
-                            vertical: 13.h,
-                          ),
-                          prefixIcon: Icon(
-                            Icons.lock_outlined,
-                            color: AppColors.primary.withOpacity(0.7),
-                            size: 20.r,
-                          ),
+                        decoration: _buildInputDecoration(
+                          hintText: 'Password (min 8 characters)',
+                          icon: Icons.lock_outlined,
                           suffixIcon: GestureDetector(
                             onTap: () {
                               setState(() {
@@ -360,47 +300,23 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               _obscurePassword
                                   ? Icons.visibility_outlined
                                   : Icons.visibility_off_outlined,
-                              color: AppColors.textSecondary.withOpacity(0.7),
+                              color: AppColors.textSecondary.withValues(alpha: 0.7),
                               size: 20.r,
                             ),
                           ),
-                          filled: true,
-                          fillColor: AppColors.background,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16.r),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16.r),
-                            borderSide: const BorderSide(
-                              color: AppColors.primary,
-                              width: 1.5,
-                            ),
-                          ),
-                          errorStyle: TextStyle(
-                            fontSize: 11.sp,
-                            color: Colors.red,
-                            fontWeight: FontWeight.w500,
-                          ),
                         ),
                       ),
-                      SizedBox(height: 16.h),
+
+                      SizedBox(height: 14.h),
 
                       // Confirm Password Field
-                      Text(
-                        'Confirm Password',
-                        style: TextStyle(
-                          fontSize: 12.sp,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
+                      _buildFieldLabel('Confirm Password'),
                       SizedBox(height: 6.h),
                       TextFormField(
                         controller: _confirmPasswordController,
                         obscureText: _obscureConfirmPassword,
                         enabled: !isLoading,
-                        style: TextStyle(
+                        style: GoogleFonts.plusJakartaSans(
                           fontSize: 14.sp,
                           fontWeight: FontWeight.w600,
                           color: AppColors.textPrimary,
@@ -414,17 +330,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           }
                           return null;
                         },
-                        decoration: InputDecoration(
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 16.w,
-                            vertical: 13.h,
-                          ),
-                          prefixIcon: Icon(
-                            Icons.lock_reset_rounded,
-                            color: AppColors.primary.withOpacity(0.7),
-                            size: 20.r,
-                          ),
+                        decoration: _buildInputDecoration(
+                          hintText: 'Confirm password',
+                          icon: Icons.lock_reset_rounded,
                           suffixIcon: GestureDetector(
                             onTap: () {
                               setState(() {
@@ -435,160 +343,146 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               _obscureConfirmPassword
                                   ? Icons.visibility_outlined
                                   : Icons.visibility_off_outlined,
-                              color: AppColors.textSecondary.withOpacity(0.7),
+                              color: AppColors.textSecondary.withValues(alpha: 0.7),
                               size: 20.r,
                             ),
                           ),
-                          filled: true,
-                          fillColor: AppColors.background,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16.r),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16.r),
-                            borderSide: const BorderSide(
-                              color: AppColors.primary,
-                              width: 1.5,
-                            ),
-                          ),
-                          errorStyle: TextStyle(
-                            fontSize: 11.sp,
-                            color: Colors.red,
-                            fontWeight: FontWeight.w500,
-                          ),
                         ),
                       ),
-                      
-                      SizedBox(height: 16.h),
+
+                      SizedBox(height: 20.h),
+
+                      // =======================================================
+                      // 3. PROMINENT ACCOUNT TYPE SELECTOR ("I am signing up as")
+                      // =======================================================
                       Text(
-                        'Register as',
-                        style: TextStyle(
-                          fontSize: 12.sp,
+                        'I am signing up as',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13.sp,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.textSecondary,
+                          color: AppColors.textPrimary,
                         ),
                       ),
-                      SizedBox(height: 8.h),
+                      SizedBox(height: 10.h),
+
                       Row(
                         children: [
+                          // Parent Card
                           Expanded(
-                            child: OutlinedButton(
-                              onPressed: () => setState(() => _selectedRole = 'parent'),
-                              style: OutlinedButton.styleFrom(
-                                backgroundColor: _selectedRole == 'parent'
-                                    ? AppColors.primary
-                                    : Colors.transparent,
-                                side: const BorderSide(
-                                  color: AppColors.primary,
-                                  width: 1.5,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16.r),
-                                ),
-                                padding: EdgeInsets.symmetric(vertical: 12.h),
-                              ),
-                              child: Text(
-                                'Parent',
-                                style: TextStyle(
-                                  color: _selectedRole == 'parent'
-                                      ? Colors.white
-                                      : AppColors.primary,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                            child: _buildRoleCard(
+                              roleKey: 'parent',
+                              title: 'Parent',
+                              emoji: '👨‍👩‍👧',
+                              description: 'Manage your baby\'s care & devices',
+                              isSelected: _selectedRole == 'parent',
+                              onTap: isLoading ? null : () => setState(() => _selectedRole = 'parent'),
                             ),
                           ),
-                          SizedBox(width: 16.w),
+                          SizedBox(width: 12.w),
+                          // Caregiver Card
                           Expanded(
-                            child: OutlinedButton(
-                              onPressed: () => setState(() => _selectedRole = 'caregiver'),
-                              style: OutlinedButton.styleFrom(
-                                backgroundColor: _selectedRole == 'caregiver'
-                                    ? AppColors.primary
-                                    : Colors.transparent,
-                                side: const BorderSide(
-                                  color: AppColors.primary,
-                                  width: 1.5,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16.r),
-                                ),
-                                padding: EdgeInsets.symmetric(vertical: 12.h),
-                              ),
-                              child: Text(
-                                'Caregiver',
-                                style: TextStyle(
-                                  color: _selectedRole == 'caregiver'
-                                      ? Colors.white
-                                      : AppColors.primary,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                            child: _buildRoleCard(
+                              roleKey: 'caregiver',
+                              title: 'Caregiver',
+                              emoji: '🤝',
+                              description: 'Access a baby\'s care by invitation',
+                              isSelected: _selectedRole == 'caregiver',
+                              onTap: isLoading ? null : () => setState(() => _selectedRole = 'caregiver'),
                             ),
                           ),
                         ],
                       ),
-                      
+
                       SizedBox(height: 24.h),
 
-                      // Register Button
-                      ElevatedButton(
-                        onPressed: isLoading ? null : _onRegister,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          minimumSize: Size(double.infinity, 52.h),
-                          disabledBackgroundColor:
-                              AppColors.primary.withOpacity(0.5),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(26.r),
-                          ),
+                      // =======================================================
+                      // 4. SIGN UP BUTTON
+                      // =======================================================
+                      Container(
+                        width: double.infinity,
+                        height: 52.h,
+                        decoration: BoxDecoration(
+                          gradient: isLoading ? null : AppColors.primaryGradient,
+                          borderRadius: BorderRadius.circular(26.r),
+                          boxShadow: isLoading
+                              ? null
+                              : [
+                                  BoxShadow(
+                                    color: AppColors.primary.withValues(alpha: 0.3),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
                         ),
-                        child: isLoading
-                            ? SizedBox(
-                                width: 20.r,
-                                height: 20.r,
-                                child: const CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2.5,
+                        child: ElevatedButton(
+                          onPressed: isLoading ? null : _onRegister,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(26.r),
+                            ),
+                            disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.4),
+                          ),
+                          child: isLoading
+                              ? Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    SizedBox(
+                                      width: 18.r,
+                                      height: 18.r,
+                                      child: const CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2.5,
+                                      ),
+                                    ),
+                                    SizedBox(width: 10.w),
+                                    Text(
+                                      'Creating account...',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 14.sp,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Text(
+                                  'Create Account',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 15.sp,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
                                 ),
-                              )
-                            : Text(
-                                'Sign Up',
-                                style: TextStyle(
-                                  fontSize: 15.sp,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
 
-              SizedBox(height: 24.h),
+              SizedBox(height: 20.h),
 
-              // Navigate to Login Option
+              // =================================================================
+              // 5. LOGIN NAVIGATION LINK
+              // =================================================================
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
                     'Already have an account? ',
-                    style: TextStyle(
+                    style: GoogleFonts.plusJakartaSans(
                       fontSize: 13.sp,
                       fontWeight: FontWeight.w500,
                       color: AppColors.textSecondary,
                     ),
                   ),
                   GestureDetector(
-                    onTap: isLoading
-                        ? null
-                        : () => context.go(AppRoutes.login),
+                    onTap: isLoading ? null : () => context.go(AppRoutes.login),
                     child: Text(
-                      'Sign In',
-                      style: TextStyle(
+                      'Login',
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 13.sp,
                         fontWeight: FontWeight.bold,
                         color: AppColors.primary,
@@ -597,8 +491,149 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   ),
                 ],
               ),
+              SizedBox(height: 12.h),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFieldLabel(String label) {
+    return Text(
+      label,
+      style: GoogleFonts.plusJakartaSans(
+        fontSize: 12.sp,
+        fontWeight: FontWeight.bold,
+        color: AppColors.textSecondary,
+      ),
+    );
+  }
+
+  InputDecoration _buildInputDecoration({
+    required String hintText,
+    required IconData icon,
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      isDense: true,
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: 16.w,
+        vertical: 13.h,
+      ),
+      hintText: hintText,
+      hintStyle: GoogleFonts.plusJakartaSans(
+        fontSize: 13.sp,
+        color: AppColors.textMuted,
+      ),
+      prefixIcon: Icon(
+        icon,
+        color: AppColors.primary.withValues(alpha: 0.7),
+        size: 20.r,
+      ),
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: AppColors.backgroundLight,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18.r),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18.r),
+        borderSide: const BorderSide(
+          color: AppColors.primary,
+          width: 1.5,
+        ),
+      ),
+      errorStyle: GoogleFonts.plusJakartaSans(
+        fontSize: 11.sp,
+        color: Colors.red,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+  }
+
+  Widget _buildRoleCard({
+    required String roleKey,
+    required String title,
+    required String emoji,
+    required String description,
+    required bool isSelected,
+    required VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: EdgeInsets.all(12.w),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primaryLight : Colors.white,
+          borderRadius: BorderRadius.circular(20.r),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : AppColors.divider,
+            width: isSelected ? 2.0 : 1.0,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.15),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : AppColors.softShadow,
+        ),
+        child: Stack(
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  emoji,
+                  style: TextStyle(fontSize: 24.sp),
+                ),
+                SizedBox(height: 6.h),
+                Text(
+                  title,
+                  style: GoogleFonts.outfit(
+                    fontSize: 15.sp,
+                    fontWeight: FontWeight.bold,
+                    color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                  ),
+                ),
+                SizedBox(height: 2.h),
+                Text(
+                  description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 10.sp,
+                    height: 1.2,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                    color: isSelected ? AppColors.textPrimary : AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+
+            if (isSelected)
+              Positioned(
+                top: 0,
+                right: 0,
+                child: Container(
+                  padding: EdgeInsets.all(3.r),
+                  decoration: const BoxDecoration(
+                    color: AppColors.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.check_rounded,
+                    color: Colors.white,
+                    size: 10.r,
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

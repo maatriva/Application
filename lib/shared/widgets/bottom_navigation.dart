@@ -11,9 +11,12 @@ import 'package:maatriva/shared/models/user_session.dart';
 /// Features 5 items:
 /// 0. Home (🏠) -> /?tab=0
 /// 1. Health (❤️) -> /predictive-health
-/// 2. Live Monitor (📹 - Elevated Center Button) -> /?tab=1
+/// 2. Live Monitor (📹) -> /?tab=1
 /// 3. Music (🎵) -> /music
 /// 4. Shop (🛍️) -> /shop
+///
+/// Dynamic Active State: Whichever tab is active dynamically rises from the navigation bar
+/// with an elevated claymorphic container, gradient fill, and soft depth shadow.
 class BottomNavigation extends ConsumerWidget {
   final int currentIndex;
   final ValueChanged<int>? onTap;
@@ -23,6 +26,43 @@ class BottomNavigation extends ConsumerWidget {
     required this.currentIndex,
     this.onTap,
   });
+
+  /// Resolves the active navigation index based on current route location and query params,
+  /// preserving parent section highlighting during deep navigation.
+  int _getEffectiveIndex(BuildContext context) {
+    try {
+      final location = GoRouterState.of(context).matchedLocation;
+
+      // Root / Home path check
+      if (location == '/' || location.isEmpty) {
+        final tabStr = GoRouterState.of(context).uri.queryParameters['tab'];
+        if (tabStr == '1') return 2; // Live Monitor tab
+        return 0; // Home tab
+      }
+
+      // Health section child routes
+      if (location.startsWith('/predictive-health') ||
+          location.startsWith('/health-reports') ||
+          location.startsWith('/telemetry-history') ||
+          location.startsWith('/wellness-monitoring') ||
+          location.startsWith('/profile/medical-history')) {
+        return 1;
+      }
+
+      // Music section child routes
+      if (location.startsWith('/music')) {
+        return 3;
+      }
+
+      // Shop section child routes
+      if (location.startsWith('/shop')) {
+        return 4;
+      }
+    } catch (_) {}
+
+    // Fallback to passed currentIndex if valid and >= 0, else default to 0
+    return currentIndex >= 0 ? currentIndex : 0;
+  }
 
   void _handleTap(BuildContext context, WidgetRef ref, int index) {
     final authState = ref.read(authNotifierProvider);
@@ -95,6 +135,7 @@ class BottomNavigation extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final activeIndex = _getEffectiveIndex(context);
     final screenWidth = MediaQuery.of(context).size.width;
     final isNarrow = screenWidth < 360;
 
@@ -107,122 +148,109 @@ class BottomNavigation extends ConsumerWidget {
           bottom: 12,
         ),
         height: 68,
-        child: Stack(
-          clipBehavior: Clip.none,
-          alignment: Alignment.bottomCenter,
-          children: [
-            // Base Claymorphic Floating Container
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.96),
-                borderRadius: BorderRadius.circular(30),
-                boxShadow: AppColors.clayShadow,
-                border: Border.all(
-                  color: AppColors.softTeal.withValues(alpha: 0.4),
-                  width: 1.5,
-                ),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildNavItem(context, ref, 0, Icons.home_rounded, 'Home'),
-                  _buildNavItem(context, ref, 1, Icons.favorite_rounded, 'Health'),
-                  // Empty space slot for the elevated center Live Monitoring button
-                  SizedBox(width: isNarrow ? 44 : 52),
-                  _buildNavItem(context, ref, 3, Icons.music_note_rounded, 'Music'),
-                  _buildNavItem(context, ref, 4, Icons.shopping_bag_rounded, 'Shop'),
-                ],
-              ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.96),
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: AppColors.clayShadow,
+            border: Border.all(
+              color: AppColors.softTeal.withValues(alpha: 0.4),
+              width: 1.5,
             ),
-
-            // Elevated Center Button: Live Monitoring 📹
-            Positioned(
-              top: -12,
-              child: GestureDetector(
-                onTap: () => _handleTap(context, ref, 2),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 54,
-                      height: 54,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: AppColors.primaryGradient,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.royalBlue.withValues(alpha: 0.4),
-                            blurRadius: 14,
-                            offset: const Offset(0, 5),
-                          ),
-                          BoxShadow(
-                            color: Colors.white.withValues(alpha: 0.8),
-                            blurRadius: 5,
-                            spreadRadius: -2,
-                            offset: const Offset(-3, -3),
-                          ),
-                        ],
-                        border: Border.all(color: Colors.white, width: 2.5),
-                      ),
-                      child: const Icon(
-                        Icons.videocam_rounded,
-                        color: Colors.white,
-                        size: 26,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Live Monitor',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.bold,
-                        color: currentIndex == 2 ? AppColors.royalBlue : AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(context, ref, activeIndex, 0, Icons.home_rounded, 'Home'),
+              _buildNavItem(context, ref, activeIndex, 1, Icons.favorite_rounded, 'Health'),
+              _buildNavItem(context, ref, activeIndex, 2, Icons.videocam_rounded, 'Live Monitor'),
+              _buildNavItem(context, ref, activeIndex, 3, Icons.music_note_rounded, 'Music'),
+              _buildNavItem(context, ref, activeIndex, 4, Icons.shopping_bag_rounded, 'Shop'),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildNavItem(BuildContext context, WidgetRef ref, int index, IconData icon, String label) {
-    final isSelected = currentIndex == index;
+  Widget _buildNavItem(
+    BuildContext context,
+    WidgetRef ref,
+    int activeIndex,
+    int index,
+    IconData icon,
+    String label,
+  ) {
+    final isSelected = activeIndex == index;
 
-    return GestureDetector(
-      onTap: () => _handleTap(context, ref, index),
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        decoration: isSelected
-            ? BoxDecoration(
-                color: AppColors.royalBlue.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(18),
-              )
-            : null,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              color: isSelected ? AppColors.royalBlue : AppColors.navyDeep.withValues(alpha: 0.6),
-              size: 20,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: GoogleFonts.plusJakartaSans(
-                color: isSelected ? AppColors.royalBlue : AppColors.textSecondary,
-                fontSize: 10,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _handleTap(context, ref, index),
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+          transform: Matrix4.translationValues(0, isSelected ? -12 : 0, 0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOut,
+                width: isSelected ? 48 : 36,
+                height: isSelected ? 48 : 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: isSelected ? AppColors.primaryGradient : null,
+                  color: isSelected ? null : Colors.transparent,
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                            color: AppColors.royalBlue.withValues(alpha: 0.35),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                          BoxShadow(
+                            color: Colors.white.withValues(alpha: 0.8),
+                            blurRadius: 4,
+                            spreadRadius: -1,
+                            offset: const Offset(-2, -2),
+                          ),
+                        ]
+                      : null,
+                  border: isSelected
+                      ? Border.all(color: Colors.white, width: 2.2)
+                      : null,
+                ),
+                child: Center(
+                  child: Icon(
+                    icon,
+                    color: isSelected
+                        ? Colors.white
+                        : AppColors.navyDeep.withValues(alpha: 0.55),
+                    size: isSelected ? 24 : 20,
+                  ),
+                ),
               ),
-            ),
-          ],
+              SizedBox(height: isSelected ? 2 : 3),
+              AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOut,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: isSelected ? 10 : 9.5,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                  color: isSelected ? AppColors.royalBlue : AppColors.textSecondary,
+                ),
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

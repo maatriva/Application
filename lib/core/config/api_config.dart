@@ -29,7 +29,7 @@ class ApiConfig {
 
   /// Optional compile-time override: flutter run --dart-define=API_URL=http://192.168.1.50:3000
   static const String _envApiUrl = String.fromEnvironment('API_URL');
-  static const String _defaultLanIp = 'http://192.168.1.33:3000';
+  static const String _defaultLanIp = 'http://192.168.1.36:3000';
 
   static const String devWebBaseUrl = 'http://localhost:3000';
   static const String devAndroidEmulatorBaseUrl = 'http://192.168.1.33:3000';

@@ -6,6 +6,15 @@ const caregiversService = new CaregiversService();
 
 export class CaregiversController {
   /**
+   * GET /caregivers/server-time
+   * Provides a server reference time for display-only countdown synchronization.
+   * Authorization decisions remain server-side in the protected endpoints.
+   */
+  public static async serverTime(_req: AuthenticatedRequest, res: Response) {
+    res.json({ success: true, data: { serverTime: new Date().toISOString() } });
+  }
+
+  /**
    * POST /caregivers/invite
    */
   public static async invite(req: AuthenticatedRequest, res: Response) {
@@ -331,6 +340,25 @@ export class CaregiversController {
     } catch (e: any) {
       const status = e.statusCode || 500;
       res.status(status).json({ success: false, error: e.message || 'Error fetching caregiver access.' });
+    }
+  }
+
+  /**
+   * GET /caregivers/history
+   */
+  public static async getHistory(req: AuthenticatedRequest, res: Response) {
+    const babyId = req.query.babyId as string;
+
+    if (!babyId) {
+      return res.status(400).json({ error: 'babyId query parameter is required.' });
+    }
+
+    try {
+      const history = await caregiversService.getAccessHistory(babyId);
+      res.json({ success: true, data: history });
+    } catch (e: any) {
+      const status = e.statusCode || 500;
+      res.status(status).json({ success: false, error: e.message || 'Error fetching caregiver access history.' });
     }
   }
 }

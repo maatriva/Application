@@ -536,10 +536,10 @@ class AppDrawer extends ConsumerWidget {
                       label: 'Caregiver Access',
                       iconBgColor: const Color(0xFFE2F8F0),
                       iconColor: const Color(0xFF00B894),
-                      isActive: currentLocation == '/caregiver-access',
+                      isActive: currentLocation == AppRoutes.caregiverAccess || currentLocation == '/caregiver',
                       onTap: () {
                         Navigator.pop(context);
-                        context.push('/caregiver-access');
+                        context.push(AppRoutes.caregiverAccess);
                       },
                     ),
 

@@ -104,19 +104,60 @@ class AccessHistoryCard extends StatelessWidget {
                           color: AppColors.textSecondary,
                         ),
                       ),
+                      const SizedBox(height: 2),
+                      Text(
+                        item.durationText,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF94A3B8),
+                        ),
+                      ),
                     ],
                   ),
                 ),
 
-                // Chevron right
-                const Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  color: Color(0xFFD0C9DB),
-                  size: 14,
-                ),
+                // Status Badge Pill
+                _buildStatusBadge(item.status),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(String status) {
+    Color bg = const Color(0xFFE8F5E9);
+    Color fg = const Color(0xFF2E7D32);
+    String label = '✓ Completed';
+
+    if (status.toLowerCase() == 'revoked') {
+      bg = const Color(0xFFFFEBEE);
+      fg = const Color(0xFFC62828);
+      label = 'Revoked';
+    } else if (status.toLowerCase() == 'expired') {
+      bg = const Color(0xFFFFF3E0);
+      fg = const Color(0xFFE65100);
+      label = 'Expired';
+    } else if (status.toLowerCase() == 'active') {
+      bg = const Color(0xFFE8F5E9);
+      fg = const Color(0xFF2E7D32);
+      label = '🟢 Active';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: fg,
         ),
       ),
     );

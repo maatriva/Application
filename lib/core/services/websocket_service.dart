@@ -41,6 +41,8 @@ class WebSocketService with WidgetsBindingObserver {
       StreamController<Map<String, dynamic>>.broadcast();
   final StreamController<Map<String, dynamic>> _caregiverStatusUpdateController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<Map<String, dynamic>> _caregiverAccessAcceptedController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   WsConnectionState _currentState = WsConnectionState.disconnected;
   String? _selectedBabyId;
@@ -76,6 +78,8 @@ class WebSocketService with WidgetsBindingObserver {
       _caregiverExtendedController.stream;
   Stream<Map<String, dynamic>> get caregiverStatusUpdateStream =>
       _caregiverStatusUpdateController.stream;
+  Stream<Map<String, dynamic>> get caregiverAccessAcceptedStream =>
+      _caregiverAccessAcceptedController.stream;
   WsConnectionState get currentState => _currentState;
   String? get selectedBabyId => _selectedBabyId;
 
@@ -357,6 +361,12 @@ class WebSocketService with WidgetsBindingObserver {
       _socket!.on('caregiver:access_granted', handleGranted);
       _socket!.on('caregiver_access_granted', handleGranted);
 
+      void handleAccessAccepted(dynamic data) {
+        _log('Caregiver access accepted event received: $data');
+        if (data is Map) _caregiverAccessAcceptedController.add(Map<String, dynamic>.from(data));
+      }
+      _socket!.on('caregiver.access.accepted', handleAccessAccepted);
+
       void handlePermissionsUpdated(dynamic data) {
         _log('Caregiver Permissions Updated event received: $data');
         if (data is Map) {
@@ -365,6 +375,7 @@ class WebSocketService with WidgetsBindingObserver {
       }
       _socket!.on('caregiver:permissions_updated', handlePermissionsUpdated);
       _socket!.on('caregiver_permissions_updated', handlePermissionsUpdated);
+      _socket!.on('caregiver.permission.updated', handlePermissionsUpdated);
 
       void handleExtended(dynamic data) {
         _log('Caregiver Access Extended event received: $data');
@@ -374,6 +385,7 @@ class WebSocketService with WidgetsBindingObserver {
       }
       _socket!.on('caregiver:access_extended', handleExtended);
       _socket!.on('caregiver_access_extended', handleExtended);
+      _socket!.on('caregiver.access.extended', handleExtended);
 
       void handleStatusUpdate(dynamic data) {
         _log('Caregiver Status Update event received: $data');
@@ -550,5 +562,6 @@ class WebSocketService with WidgetsBindingObserver {
     _alertController.close();
     _stateController.close();
     _deviceStatusController.close();
+    _caregiverAccessAcceptedController.close();
   }
 }
