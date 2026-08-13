@@ -35,8 +35,7 @@ export class WebsocketServerManager {
     // 1. Authenticate all socket connections using JWT middleware
     this.io.use(async (socket, next) => {
       try {
-        console.log('[Socket.IO] socket.handshake.auth:', socket.handshake.auth);
-        console.log('[Socket.IO] socket.handshake.headers.authorization:', socket.handshake.headers.authorization);
+        console.log('[Socket.IO] Authenticating incoming connection...');
 
         let token = (socket.handshake.auth?.token || socket.handshake.query?.token) as string;
 

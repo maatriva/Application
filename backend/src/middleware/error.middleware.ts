@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { env } from '../config/env';
+import { sanitizeString } from '../utils/sanitizer.utils';
 
 export function errorHandler(
   err: any,
@@ -7,13 +8,14 @@ export function errorHandler(
   res: Response,
   next: NextFunction
 ) {
-  console.error('Unhandled Error:', err);
-
   const status = err.status || err.statusCode || 500;
-  const message = err.message || 'Internal Server Error';
+  const rawMessage = err.message || 'Internal Server Error';
+  const cleanMessage = sanitizeString(rawMessage);
+
+  console.error(`[ERROR] ${req.method} ${req.url} status=${status}: ${cleanMessage}`);
 
   res.status(status).json({
-    error: message,
-    ...(env.NODE_ENV === 'development' && { details: err.stack || err }),
+    error: cleanMessage,
+    ...(env.NODE_ENV === 'development' && { details: err.stack ? sanitizeString(err.stack) : cleanMessage }),
   });
 }

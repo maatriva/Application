@@ -9,13 +9,12 @@ ALTER TABLE device_assignments DISABLE TRIGGER tr_audit_device_assignments;
 ALTER TABLE caregivers DISABLE TRIGGER tr_audit_caregivers;
 ALTER TABLE subscriptions DISABLE TRIGGER tr_audit_subscriptions;
 
--- 1. Insert Users (Bcrypt hash of 'password123' / 'nanny123' / 'doctor123' / 'admin123')
+-- 1. Insert Users
 INSERT INTO users (id, email, password_hash, role, first_name, last_name) VALUES
 ('a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d', 'sarah@gmail.com', '$2a$10$T8Zq/7Wp4p1tK3C835X5x.9rZ2jD7U5YQ0uN0p5/3E/2uW3.P6GKG', 'parent', 'Sarah', 'Connor'),
 ('b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e', 'john@gmail.com', '$2a$10$T8Zq/7Wp4p1tK3C835X5x.9rZ2jD7U5YQ0uN0p5/3E/2uW3.P6GKG', 'parent', 'John', 'Connor'),
 ('c3d4e5f6-a7b8-9c0d-1e2f-3a4b5c6d7e8f', 'nanny@gmail.com', '$2a$10$tJ0rYyP5d1.vP/lEqE.RDO3qF.N51RmsH/q6W1XkE7D.V.l6z1Cae', 'caregiver', 'Mary', 'Poppins'),
-('d4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a', 'doctor@maatriva.com', '$2a$10$tJ0rYyP5d1.vP/lEqE.RDO3qF.N51RmsH/q6W1XkE7D.V.l6z1Cae', 'doctor', 'Dr. Julius', 'Hibbert'),
-('e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b', 'admin@maatriva.com', '$2a$10$tJ0rYyP5d1.vP/lEqE.RDO3qF.N51RmsH/q6W1XkE7D.V.l6z1Cae', 'admin', 'Super', 'Admin')
+('d4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a', 'doctor@maatriva.com', '$2a$10$tJ0rYyP5d1.vP/lEqE.RDO3qF.N51RmsH/q6W1XkE7D.V.l6z1Cae', 'doctor', 'Dr. Julius', 'Hibbert')
 ON CONFLICT (id) DO NOTHING;
 
 -- 2. Insert Babies

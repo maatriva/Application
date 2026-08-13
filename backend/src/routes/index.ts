@@ -15,6 +15,8 @@ import musicRoutes from '../modules/music/music.routes';
 import telemetryRoutes from '../modules/telemetry/telemetry.routes';
 import debugRoutes from '../modules/debug/debug.routes';
 
+import { env } from '../config/env';
+
 const router = Router();
 
 // Register module routes
@@ -33,6 +35,10 @@ router.use('/doctors', doctorsRoutes);
 router.use('/notifications', notificationsRoutes);
 router.use('/music', musicRoutes);
 router.use('/telemetry', telemetryRoutes);
-router.use('/debug', debugRoutes);
+
+// Debug routes are ONLY mounted when NOT in production AND DEBUG_MODE is explicitly enabled
+if (env.isDebugEnabled) {
+  router.use('/debug', debugRoutes);
+}
 
 export default router;

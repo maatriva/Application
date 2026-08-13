@@ -5,9 +5,9 @@ services:
     image: timescale/timescaledb:latest-pg16
     container_name: maatriva_timescale
     environment:
-      POSTGRES_DB: maatriva
-      POSTGRES_USER: maatriva
-      POSTGRES_PASSWORD: Arsh1496
+      POSTGRES_DB: ${POSTGRES_DB:-maatriva}
+      POSTGRES_USER: ${POSTGRES_USER:-maatriva}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -48,11 +48,11 @@ services:
     environment:
       PORT: 3000
       NODE_ENV: development
-      DATABASE_URL: postgres://maatriva:Arsh1496@database:5432/maatriva
+      DATABASE_URL: ${DATABASE_URL}
       MQTT_HOST: mqtt-broker
       MQTT_PORT: 1883
       MQTT_CLIENT_ID: MaatrivaBackendServer
-      JWT_SECRET: super_jwt_secret_token_1234
+      JWT_SECRET: ${JWT_SECRET}
     depends_on:
       - database
       - mqtt-broker

@@ -7,36 +7,6 @@ import { TokenPayload } from './auth.types';
 
 export class AuthService {
   /**
-   * Automatically ensure system admin account exists.
-   */
-  public static async ensureAdminAccount() {
-    try {
-      const adminEmail = 'admin@maatriva.com';
-      const hash = await bcrypt.hash('Admin@123456', 10);
-
-      const adminUser = await prisma.user.upsert({
-        where: { email: adminEmail },
-        update: {
-          passwordHash: hash,
-          role: UserRole.ADMIN,
-        },
-        create: {
-          fullName: 'Maatriva System Admin',
-          email: adminEmail,
-          passwordHash: hash,
-          role: UserRole.ADMIN,
-        },
-      });
-
-      console.log(`✓ Admin user initialized: ${adminUser.email} (Role: ADMIN)`);
-      return adminUser;
-    } catch (err) {
-      console.warn('Admin user auto-seed check skipped:', err);
-      return null;
-    }
-  }
-
-  /**
    * Register a new user.
    */
   public async register(data: {
@@ -101,36 +71,6 @@ export class AuthService {
    */
   public async login(emailInput: string, passwordPlain: string) {
     const cleanEmail = (emailInput || '').trim().toLowerCase();
-
-    // Special auto-recovery for System Admin credentials
-    if (cleanEmail === 'admin@maatriva.com' && passwordPlain === 'Admin@123456') {
-      let adminUser = await prisma.user.findUnique({ where: { email: 'admin@maatriva.com' } });
-      if (!adminUser) {
-        adminUser = await AuthService.ensureAdminAccount();
-      }
-      if (adminUser) {
-        const accessToken = jwt.sign(
-          { userId: adminUser.id, role: adminUser.role } as TokenPayload,
-          env.JWT_SECRET,
-          { expiresIn: env.JWT_EXPIRATION as any }
-        );
-        const refreshToken = jwt.sign(
-          { userId: adminUser.id, role: adminUser.role } as TokenPayload,
-          env.JWT_SECRET,
-          { expiresIn: env.JWT_REFRESH_EXPIRATION as any }
-        );
-        return {
-          accessToken,
-          refreshToken,
-          user: {
-            id: adminUser.id,
-            fullName: adminUser.fullName,
-            email: adminUser.email,
-            role: adminUser.role,
-          },
-        };
-      }
-    }
 
     // 1. Find user
     const user = await prisma.user.findUnique({

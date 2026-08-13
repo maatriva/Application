@@ -1,5 +1,18 @@
-node_modules
-# Keep environment variables out of version control
-.env
+# Dependencies & Build Output
+node_modules/
+dist/
 
+# Environment Variables
+.env
+.env.*
+!.env.example
+
+# Generated Prisma Client
 /generated/prisma
+
+# Runtime Audio Recordings
+uploads/recordings/*
+!uploads/recordings/.gitkeep
+
+# Logs & Temporary Files
+*.log

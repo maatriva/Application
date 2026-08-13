@@ -12,29 +12,13 @@ import apiRouter from './routes';
 
 import path from 'path';
 
+import { corsMiddleware } from './middleware/cors.middleware';
+
 async function startServer() {
   const app = express();
 
   // 1. CORS Middleware setup - Must be executed first for all routes & static assets
-  app.use((req, res, next) => {
-    const origin = req.headers.origin;
-    if (origin) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Vary', 'Origin');
-    } else {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-    }
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Access-Control-Allow-Request-Private-Network, *');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Private-Network', 'true');
-    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-
-    if (req.method === 'OPTIONS') {
-      return res.status(204).end();
-    }
-    next();
-  });
+  app.use(corsMiddleware);
 
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ limit: '100mb', extended: true }));
@@ -42,31 +26,23 @@ async function startServer() {
   console.log(`[Static] Serving /uploads from disk path: ${uploadsDirectory}`);
   app.use('/uploads', express.static(uploadsDirectory, {
     setHeaders: (res) => {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', '*');
       res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     }
   }));
 
-  // Request logger middleware
+  // Safe operational request logger middleware
   app.use((req, res, next) => {
     console.log(`[HTTP] ${req.method} ${req.url}`);
-    if (req.method !== 'GET' && req.body) {
-      console.log('Body:', JSON.stringify(req.body, null, 2));
-    }
     next();
   });
 
   const server = http.createServer(app);
 
-  // 1. Verify Prisma / PostgreSQL connection & Ensure Admin User & Sync Disk Uploads
+  // 1. Verify Prisma / PostgreSQL connection & Sync Disk Uploads
   try {
     await prisma.$queryRaw`SELECT 1`;
     console.log('✓ PostgreSQL connected');
     console.log('✓ Prisma connected');
-    const { AuthService } = await import('./modules/auth/auth.service');
-    await AuthService.ensureAdminAccount();
     const syncedCount = await MusicService.syncDiskUploads();
     console.log(`✓ Startup scan completed: ${syncedCount} missing songs synced into catalog database.`);
   } catch (e) {
