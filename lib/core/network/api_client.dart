@@ -212,10 +212,9 @@ class ApiClient {
     final currentBase = _dio.options.baseUrl;
     final candidates = <String>{
       ApiConfig.baseUrl,
-      'http://192.168.1.33:3000',
-      'http://127.0.0.1:3000',
-      'http://10.0.2.2:3000',
-      'http://localhost:3000',
+      'http://10.0.2.2:3000/api',
+      'http://127.0.0.1:3000/api',
+      'http://localhost:3000/api',
     }.where((s) => s.trim().isNotEmpty).toList();
 
     for (final candidate in candidates) {

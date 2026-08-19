@@ -149,7 +149,7 @@ class WellnessSection extends StatelessWidget {
     return ClayContainer(
       onTap: isRestricted
           ? null
-          : () => context.push('/telemetry-history?type=$sensorType'),
+          : () => context.push('/wellness-monitoring'),
       borderRadius: 22,
       padding: const EdgeInsets.all(12),
       shadows: AppColors.clayShadow,

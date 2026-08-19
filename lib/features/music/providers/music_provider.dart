@@ -216,7 +216,29 @@ class MusicNotifier extends StateNotifier<MusicState> {
           ),
         ) {
     _audio.setVolume(state.volume);
+    _listenToDurationStream();
     _loadStoredAndBackendSongs();
+  }
+
+  void _listenToDurationStream() {
+    _audio.durationStream.listen((realDuration) {
+      if (!mounted || realDuration == null || realDuration.inSeconds <= 0 || state.currentSong == null) {
+        return;
+      }
+      if (state.currentSong!.duration.inSeconds != realDuration.inSeconds) {
+        final updatedSong = state.currentSong!.copyWith(duration: realDuration);
+        final updatedSongs = state.songs.map((s) => s.id == updatedSong.id ? updatedSong : s).toList();
+        for (int i = 0; i < _globalAdminUploadedSongs.length; i++) {
+          if (_globalAdminUploadedSongs[i].id == updatedSong.id) {
+            _globalAdminUploadedSongs[i] = updatedSong;
+          }
+        }
+        state = state.copyWith(
+          currentSong: updatedSong,
+          songs: updatedSongs,
+        );
+      }
+    });
   }
 
   Future<void> _loadStoredAndBackendSongs() async {
@@ -254,7 +276,7 @@ class MusicNotifier extends StateNotifier<MusicState> {
 
       // 1. Fetch general public music catalog
       final res = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/api/music?limit=100'),
+        Uri.parse('${ApiConfig.baseUrl}/music?limit=100'),
         headers: headers,
       );
 
@@ -279,7 +301,7 @@ class MusicNotifier extends StateNotifier<MusicState> {
         debugPrint('[Music] GET /music/custom');
 
         final customRes = await http.get(
-          Uri.parse('${ApiConfig.baseUrl}/api/music/custom'),
+          Uri.parse('${ApiConfig.baseUrl}/music/custom'),
           headers: headers,
         );
         if (customRes.statusCode == 200) {
@@ -305,7 +327,7 @@ class MusicNotifier extends StateNotifier<MusicState> {
         debugPrint('[Music] Rendering songs');
       } else if (userRole == UserRole.caregiver) {
         final sharedRes = await http.get(
-          Uri.parse('${ApiConfig.baseUrl}/api/music/shared'),
+          Uri.parse('${ApiConfig.baseUrl}/music/shared'),
           headers: headers,
         );
         if (sharedRes.statusCode == 200) {
@@ -389,7 +411,7 @@ class MusicNotifier extends StateNotifier<MusicState> {
 
       debugPrint('[Music] POST /music/custom');
 
-      final uri = Uri.parse('${ApiConfig.baseUrl}/api/music/custom');
+      final uri = Uri.parse('${ApiConfig.baseUrl}/music/custom');
 
       http.Response response;
 
@@ -475,7 +497,7 @@ class MusicNotifier extends StateNotifier<MusicState> {
       final token = await secureStorage.getAccessToken();
       if (token != null && token.isNotEmpty) {
         final res = await http.delete(
-          Uri.parse('${ApiConfig.baseUrl}/api/music/$songId'),
+          Uri.parse('${ApiConfig.baseUrl}/music/$songId'),
           headers: {'Authorization': 'Bearer $token'},
         );
         debugPrint('[MusicProvider] DELETE /api/music/$songId response: ${res.statusCode}');
@@ -816,7 +838,7 @@ class MusicNotifier extends StateNotifier<MusicState> {
       final secureStorage = const SecureStorageService();
       final token = await secureStorage.getAccessToken();
       final res = await http.patch(
-        Uri.parse('${ApiConfig.baseUrl}/api/music/custom/$songId/share'),
+        Uri.parse('${ApiConfig.baseUrl}/music/custom/$songId/share'),
         headers: {
           'Content-Type': 'application/json',
           if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
@@ -861,7 +883,7 @@ class MusicNotifier extends StateNotifier<MusicState> {
       final secureStorage = const SecureStorageService();
       final token = await secureStorage.getAccessToken();
       final res = await http.patch(
-        Uri.parse('${ApiConfig.baseUrl}/api/music/custom/share-all'),
+        Uri.parse('${ApiConfig.baseUrl}/music/custom/share-all'),
         headers: {
           'Content-Type': 'application/json',
           if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',

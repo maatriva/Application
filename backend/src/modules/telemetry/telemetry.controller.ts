@@ -28,54 +28,36 @@ export class TelemetryController {
     const deviceId = data.deviceId;
 
     try {
-      // 1. Verify device exists (auto-create if missing)
-      let device = await prisma.device.findUnique({
+      // Production Security Check: Disable unauthenticated HTTP ingestion in production
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(403).json({
+          success: false,
+          message: 'HTTP telemetry ingestion is disabled in production environments. Telemetry must be published via secure MQTT.',
+        });
+      }
+
+      // 1. Verify device exists
+      const device = await prisma.device.findUnique({
         where: { deviceId },
       });
 
       if (!device) {
-        device = await prisma.device.create({
-          data: {
-            deviceId,
-            deviceName: `Smart Cradle (${deviceId})`,
-            type: 'Smart Cradle',
-            registrationKey: `REG-${deviceId}`,
-            firmwareVersion: '1.0.0',
-            protocol: 'Wi-Fi',
-            paired: false,
-            status: 'ONLINE',
-          },
+        return res.status(400).json({
+          success: false,
+          message: `Unregistered device: Device "${deviceId}" must be registered via the backend API before ingesting telemetry.`,
         });
       }
 
-      // 2. Verify device is paired (auto-pair to target or latest active baby profile if unassigned)
-      let assignment = await prisma.deviceAssignment.findFirst({
+      // 2. Verify device is paired with a baby profile
+      const assignment = await prisma.deviceAssignment.findFirst({
         where: { deviceId },
       });
 
       if (!assignment) {
-        const baby = await prisma.baby.findFirst({
-          where: { deletedAt: null },
-          orderBy: { createdAt: 'desc' },
+        return res.status(400).json({
+          success: false,
+          message: `Unpaired device: Device "${deviceId}" is not paired with any baby profile.`,
         });
-
-        if (baby) {
-          assignment = await prisma.deviceAssignment.create({
-            data: {
-              deviceId,
-              babyId: baby.id,
-            },
-          });
-          await prisma.device.update({
-            where: { deviceId },
-            data: { paired: true, status: 'PAIRED' },
-          });
-        } else {
-          return res.status(400).json({
-            success: false,
-            message: `Unpaired device: Device ${deviceId} is not paired with any baby profile.`,
-          });
-        }
       }
 
       const babyId = assignment.babyId;
@@ -287,6 +269,14 @@ export class TelemetryController {
       return res.status(401).json({
         success: false,
         message: 'Unauthorized: Authentication required.',
+      });
+    }
+
+    const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+    if (!babyId || !uuidRegex.test(babyId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid babyId parameter format. Must be a valid UUID.',
       });
     }
 

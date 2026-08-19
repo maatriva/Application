@@ -8,7 +8,8 @@
     "start": "node dist/src/app.js",
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
     "seed:admin": "ts-node src/scripts/seedAdmin.ts",
-    "test": "node dist/src/scripts/runTests.js"
+    "test": "node dist/src/scripts/runTests.js",
+    "test:security": "npm run build && node dist/src/scripts/runTests.js"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -17,6 +18,8 @@
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.6.2",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
     "mqtt": "^5.5.0",
     "multer": "^2.2.0",

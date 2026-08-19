@@ -12,6 +12,8 @@ import '../widgets/countdown_flip_clock.dart';
 import '../widgets/qr_code_card.dart';
 import '../widgets/access_history_card.dart';
 
+import '../widgets/unauthorized_caretaker_card.dart';
+
 /// Main Parent & Caregiver Access Control Screen supporting 5 distinct states:
 /// STATE 1: No Active Caregiver (Welcome graphic + "+ Generate Caregiver QR" button)
 /// STATE 2: QR Generated / Waiting for Caregiver scan
@@ -35,13 +37,11 @@ class _CaregiverAccessScreenState extends ConsumerState<CaregiverAccessScreen> {
   }
 
   static const Map<String, String> permTitles = {
-    'live_monitoring': 'Live Monitoring',
-    'health_data': 'Telemetry & Health Data',
-    'ai_assistant': 'AI Pediatrician',
-    'notifications': 'Notifications & Alerts',
-    'emergency_alerts': 'Alerts',
-    'camera_snapshot': 'Camera',
-    'music': 'Music',
+    'custom_music': 'Custom Parent Folder',
+    'health_data': 'Baby\'s Wellness & Sensor Readings',
+    'ai_assistant': 'AI Chatbot',
+    'emergency_alerts': 'Real-Time Alerts & Notifications',
+    'camera_snapshot': 'Live Video',
     'cradle_controls': 'Cradle Controls',
   };
 
@@ -163,6 +163,7 @@ class _CaregiverAccessScreenState extends ConsumerState<CaregiverAccessScreen> {
     final notifier = ref.read(caregiverAccessProvider.notifier);
     final authState = ref.watch(authNotifierProvider);
     final isCaregiver = authState.session?.role == UserRole.caregiver;
+    final isUnauthenticated = authState.status != AuthStatus.authenticated;
 
     final activeSession = state.activeSessions.isNotEmpty
         ? state.activeSessions.firstWhere(
@@ -195,15 +196,21 @@ class _CaregiverAccessScreenState extends ConsumerState<CaregiverAccessScreen> {
             fontSize: 20,
           ),
         ),
-        leading: Navigator.canPop(context)
-            ? IconButton(
-                icon: const Icon(
-                  Icons.arrow_back_ios_new_rounded,
-                  color: AppColors.textPrimary,
-                ),
-                onPressed: () => context.pop(),
-              )
-            : null,
+        leading: IconButton(
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: AppColors.textPrimary,
+          ),
+          onPressed: () {
+            if (isUnauthenticated) {
+              context.go('/login');
+            } else if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/');
+            }
+          },
+        ),
       ),
 
       body: SingleChildScrollView(
@@ -211,8 +218,20 @@ class _CaregiverAccessScreenState extends ConsumerState<CaregiverAccessScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // UNAUTHENTICATED CARETAKER GUARD
+            if (isUnauthenticated) ...[
+              const UnauthorizedCaretakerCard(),
+            ]
+            // EXPIRED / REVOKED CAREGIVER ROLE GUARD
+            else if (isCaregiver && !hasActiveCaregiver) ...[
+              const UnauthorizedCaretakerCard(
+                customTitle: 'Caregiver Access Expired or Revoked',
+                customMessage:
+                    'Your caregiver monitoring session is inactive, expired, or revoked by the parent. Please log in with a valid caretaker account to accept a new QR invitation.',
+              ),
+            ]
             // STATE 3: ACTIVE CAREGIVER EXISTS
-            if (hasActiveCaregiver) ...[
+            else if (hasActiveCaregiver) ...[
               _buildState3ActiveCaregiver(activeSession!, state.serverClockOffset),
             ]
             // STATE 2: PENDING QR GENERATED

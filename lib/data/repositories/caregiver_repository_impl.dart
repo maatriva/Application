@@ -83,11 +83,11 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
 
       // Parse legacy caregivers if no temporary permissions exist
       if (sessions.isEmpty) {
+        final now = DateTime.now();
         for (final json in caregiversList) {
           final c = json as Map<String, dynamic>;
           final role = c['accessLevel'] as String? ?? 'BABYSITTER';
-          final statusStr = c['status'] as String? ?? 'accepted';
-          final status = statusStr == 'disabled' ? SessionStatus.expired : SessionStatus.active;
+          final statusStr = (c['status'] as String? ?? 'accepted').toLowerCase();
 
           final String? expiresAtRaw = c['expiresAt'] as String? ?? c['expires_at'] as String? ?? c['expiry'] as String?;
           DateTime expiresAt;
@@ -98,6 +98,13 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
             final String? createdAtRaw = c['createdAt'] as String? ?? c['created_at'] as String?;
             final DateTime start = createdAtRaw != null ? DateTime.parse(createdAtRaw) : DateTime.now();
             expiresAt = start.add(Duration(minutes: mins));
+          }
+
+          SessionStatus status = SessionStatus.active;
+          if (statusStr == 'disabled' || statusStr == 'expired' || statusStr == 'revoked' || expiresAt.isBefore(now)) {
+            status = SessionStatus.expired;
+          } else if (expiresAt.difference(now).inMinutes <= 15) {
+            status = SessionStatus.expiring;
           }
 
           sessions.add(ActiveSession(
@@ -147,7 +154,18 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
         final dateLabel = '${grantedAt.day} ${_formatShortMonth(grantedAt.month)} ${grantedAt.year}';
 
         final statusStr = map['status'] as String? ?? 'EXPIRED';
-        final isRevoked = statusStr == 'REVOKED';
+        final isRevoked = statusStr.toUpperCase() == 'REVOKED';
+        final isTimeExpired = expiresAt.isBefore(DateTime.now());
+        final isExpired = isRevoked || statusStr.toUpperCase() == 'EXPIRED' || isTimeExpired;
+
+        String displayStatus = 'Expired';
+        if (isRevoked) {
+          displayStatus = 'Revoked';
+        } else if (!isExpired && statusStr.toUpperCase() == 'ACTIVE') {
+          displayStatus = 'Active';
+        } else {
+          displayStatus = 'Expired';
+        }
 
         return AccessHistory(
           id: map['id'] as String? ?? '',
@@ -156,8 +174,8 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
           date: dateLabel,
           timeRange: timeRange,
           durationText: map['durationText'] as String? ?? '1 Hour',
-          isExpired: isRevoked || statusStr == 'Expired',
-          status: statusStr,
+          isExpired: isExpired,
+          status: displayStatus,
         );
       }).toList().cast<AccessHistory>();
     } catch (_) {

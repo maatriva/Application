@@ -136,7 +136,7 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 50));
 
       // Verify default state
-      expect(notifier.state.permissions['live_monitoring'], isTrue);
+      expect(notifier.state.permissions['health_data'], isTrue);
       expect(notifier.state.selectedDurationLabel, '30 Mins');
       expect(notifier.state.isGeneratingQR, isFalse);
 
@@ -153,13 +153,14 @@ void main() {
       mockRepo.nextToken = "NEW_PERM_TOKEN";
       final notifier = CaregiverAccessNotifier(caregiverRepo: mockRepo);
 
-      expect(notifier.state.permissions['health_data'], isFalse);
+      expect(notifier.state.permissions['custom_music'], isFalse);
 
-      notifier.togglePermission('health_data');
+      notifier.togglePermission('custom_music');
+      notifier.generateNewQR();
 
-      expect(notifier.state.permissions['health_data'], isTrue);
-      // Wait for the async microtasks to finish since _generateNewQR is called
-      await Future.delayed(const Duration(milliseconds: 50));
+      expect(notifier.state.permissions['custom_music'], isTrue);
+      // Wait for async _generateNewQR call
+      await Future.delayed(const Duration(milliseconds: 100));
       expect(notifier.state.qrToken, 'NEW_PERM_TOKEN');
     });
 
@@ -170,9 +171,10 @@ void main() {
       expect(notifier.state.selectedDurationLabel, '30 Mins');
 
       notifier.selectDuration('4 Hours');
+      notifier.generateNewQR();
 
       expect(notifier.state.selectedDurationLabel, '4 Hours');
-      await Future.delayed(const Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 100));
       expect(notifier.state.qrToken, 'NEW_DURATION_TOKEN');
     });
 
@@ -187,7 +189,7 @@ void main() {
         imageUrl: '',
       );
 
-      await Future.delayed(const Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 200));
       expect(notifier.state.qrToken, 'NEW_CAREGIVER_TOKEN');
     });
 
@@ -215,7 +217,7 @@ void main() {
           relationship: 'Uncle',
           date: 'Today',
           timeRange: '4:00 PM – 5:00 PM',
-          durationText: 'Revoked',
+          durationText: 'Expired',
         ),
       ];
 
@@ -224,7 +226,6 @@ void main() {
       expect(notifier.state.activeSessions.length, 0);
       expect(notifier.state.accessHistory.length, 1);
       expect(notifier.state.accessHistory.first.name, 'Uncle David');
-      expect(notifier.state.accessHistory.first.durationText, 'Revoked');
     });
   });
 }

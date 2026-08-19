@@ -9,10 +9,15 @@ export class MqttClientManager {
   private client?: MqttClient;
   private alertEngine: AlertEngine;
   private telemetrySubscriber: TelemetrySubscriber;
+  private connectionStatus: 'connected' | 'disconnected' | 'reconnecting' = 'disconnected';
 
   constructor(alertEngine: AlertEngine) {
     this.alertEngine = alertEngine;
     this.telemetrySubscriber = new TelemetrySubscriber(alertEngine);
+  }
+
+  public getStatus(): 'connected' | 'disconnected' | 'reconnecting' {
+    return this.connectionStatus;
   }
 
   /**
@@ -31,6 +36,7 @@ export class MqttClientManager {
     });
 
     this.client.on('connect', async () => {
+      this.connectionStatus = 'connected';
       console.log('✓ MQTT connected');
 
       // Print all registered devices
@@ -70,18 +76,30 @@ export class MqttClientManager {
       }
     });
 
+    this.client.on('reconnect', () => {
+      this.connectionStatus = 'reconnecting';
+      console.log('MQTT Client reconnecting...');
+    });
+
     this.client.on('error', (err) => {
+      this.connectionStatus = 'disconnected';
       console.error('MQTT Client connection error:', err);
     });
 
     this.client.on('offline', () => {
+      this.connectionStatus = 'disconnected';
       console.warn('MQTT Client went offline.');
+    });
+
+    this.client.on('close', () => {
+      this.connectionStatus = 'disconnected';
     });
   }
 
   public disconnect(): void {
     if (this.client) {
       this.client.end();
+      this.connectionStatus = 'disconnected';
       console.log('MQTT Client disconnected.');
     }
   }

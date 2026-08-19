@@ -182,8 +182,8 @@ class _JoinSharedBabyScreenState extends ConsumerState<JoinSharedBabyScreen>
 
       final expiresAtStr = data['expiresAt'] as String?;
       if (expiresAtStr != null) {
-        final expiresAt = DateTime.tryParse(expiresAtStr);
-        if (expiresAt != null && DateTime.now().isAfter(expiresAt)) {
+        final expiresAt = DateTime.tryParse(expiresAtStr)?.toUtc();
+        if (expiresAt != null && DateTime.now().toUtc().isAfter(expiresAt)) {
           throw const FormatException('QR Code has expired. Please ask the parent for a new QR code.');
         }
       }
@@ -442,7 +442,7 @@ class _JoinSharedBabyScreenState extends ConsumerState<JoinSharedBabyScreen>
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Log In Now', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: const Text('Login First', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
             ],
           ),
@@ -571,7 +571,15 @@ class _JoinSharedBabyScreenState extends ConsumerState<JoinSharedBabyScreen>
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.textPrimary),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (!isAuthenticated) {
+              context.go('/login');
+            } else if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/');
+            }
+          },
         ),
         actions: [
           IconButton(
@@ -653,7 +661,7 @@ class _JoinSharedBabyScreenState extends ConsumerState<JoinSharedBabyScreen>
                       ElevatedButton.icon(
                         onPressed: () => context.go('/login'),
                         icon: const Icon(Icons.login_rounded, color: Colors.white, size: 18),
-                        label: const Text('Log In / Authorize Now', style: TextStyle(fontWeight: FontWeight.bold)),
+                        label: const Text('Login First', style: TextStyle(fontWeight: FontWeight.bold)),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,

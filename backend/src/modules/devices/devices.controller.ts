@@ -68,17 +68,28 @@ export class DevicesController {
   }
 
   public static async getLatest(req: AuthenticatedRequest, res: Response) {
+    const userId = req.user?.userId;
+    const userRole = req.user?.role;
+    if (!userId || !userRole) {
+      return res.status(401).json({ error: 'Unauthorized.' });
+    }
     const deviceId = req.params.id;
 
     try {
-      const latest = await devicesService.getLatestTelemetry(deviceId);
+      const latest = await devicesService.getLatestTelemetry(deviceId, userId, userRole);
       res.json(latest);
     } catch (e: any) {
-      res.status(500).json({ error: 'Internal fetch latest telemetry error', details: e.message });
+      const status = e.statusCode || 500;
+      res.status(status).json({ error: e.message || 'Internal fetch latest telemetry error' });
     }
   }
 
   public static async getHistory(req: AuthenticatedRequest, res: Response) {
+    const userId = req.user?.userId;
+    const userRole = req.user?.role;
+    if (!userId || !userRole) {
+      return res.status(401).json({ error: 'Unauthorized.' });
+    }
     const deviceId = req.params.id;
     const sensorType = req.query.type as string;
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
@@ -88,26 +99,38 @@ export class DevicesController {
     }
 
     try {
-      const history = await devicesService.getTelemetryHistory(deviceId, sensorType, limit);
+      const history = await devicesService.getTelemetryHistory(deviceId, sensorType, limit, userId, userRole);
       res.json(history);
     } catch (e: any) {
-      res.status(500).json({ error: 'Internal fetch telemetry history error', details: e.message });
+      const status = e.statusCode || 500;
+      res.status(status).json({ error: e.message || 'Internal fetch telemetry history error' });
     }
   }
 
   public static async getAlerts(req: AuthenticatedRequest, res: Response) {
+    const userId = req.user?.userId;
+    const userRole = req.user?.role;
+    if (!userId || !userRole) {
+      return res.status(401).json({ error: 'Unauthorized.' });
+    }
     const deviceId = req.params.id;
     const acknowledged = req.query.acknowledged === 'true';
 
     try {
-      const alerts = await devicesService.getDeviceAlerts(deviceId, acknowledged);
+      const alerts = await devicesService.getDeviceAlerts(deviceId, acknowledged, userId, userRole);
       res.json(alerts);
     } catch (e: any) {
-      res.status(500).json({ error: 'Internal fetch alerts error', details: e.message });
+      const status = e.statusCode || 500;
+      res.status(status).json({ error: e.message || 'Internal fetch alerts error' });
     }
   }
 
   public static async rename(req: AuthenticatedRequest, res: Response) {
+    const userId = req.user?.userId;
+    const userRole = req.user?.role;
+    if (!userId || !userRole) {
+      return res.status(401).json({ error: 'Unauthorized.' });
+    }
     const deviceId = req.params.id;
     const { deviceName } = req.body;
 
@@ -116,14 +139,20 @@ export class DevicesController {
     }
 
     try {
-      const result = await devicesService.renameDevice(deviceId, deviceName);
+      const result = await devicesService.renameDevice(deviceId, deviceName, userId, userRole);
       res.json(result);
     } catch (e: any) {
-      res.status(500).json({ error: 'Internal rename error', details: e.message });
+      const status = e.statusCode || 500;
+      res.status(status).json({ error: e.message || 'Internal rename error' });
     }
   }
 
   public static async reassign(req: AuthenticatedRequest, res: Response) {
+    const userId = req.user?.userId;
+    const userRole = req.user?.role;
+    if (!userId || !userRole) {
+      return res.status(401).json({ error: 'Unauthorized.' });
+    }
     const deviceId = req.params.id;
     const { babyId } = req.body;
 
@@ -132,21 +161,28 @@ export class DevicesController {
     }
 
     try {
-      const result = await devicesService.reassignBaby(deviceId, babyId);
+      const result = await devicesService.reassignBaby(deviceId, babyId, userId, userRole);
       res.json(result);
     } catch (e: any) {
-      res.status(500).json({ error: 'Internal reassignment error', details: e.message });
+      const status = e.statusCode || 500;
+      res.status(status).json({ error: e.message || 'Internal reassignment error' });
     }
   }
 
   public static async unpair(req: AuthenticatedRequest, res: Response) {
+    const userId = req.user?.userId;
+    const userRole = req.user?.role;
+    if (!userId || !userRole) {
+      return res.status(401).json({ error: 'Unauthorized.' });
+    }
     const deviceId = req.params.id;
 
     try {
-      const result = await devicesService.unpairDevice(deviceId);
+      const result = await devicesService.unpairDevice(deviceId, userId, userRole);
       res.json(result);
     } catch (e: any) {
-      res.status(500).json({ error: 'Internal unpairing error', details: e.message });
+      const status = e.statusCode || 500;
+      res.status(status).json({ error: e.message || 'Internal unpairing error' });
     }
   }
 }

@@ -12,14 +12,18 @@ class CaregiverStatusCard extends StatefulWidget {
   final bool isCaregiver;
   final DateTime? expiresAt;
   final String? activeCaregiverName;
+  final String? activeSessionId;
   final VoidCallback? onLogoutExpired;
+  final VoidCallback? onManageTap;
 
   const CaregiverStatusCard({
     super.key,
     this.isCaregiver = false,
     this.expiresAt,
     this.activeCaregiverName,
+    this.activeSessionId,
     this.onLogoutExpired,
+    this.onManageTap,
   });
 
   @override
@@ -148,9 +152,21 @@ class _CaregiverStatusCardState extends State<CaregiverStatusCard> {
 
     final caregiverName = widget.activeCaregiverName!;
 
+    void handleManageRedirect() {
+      if (widget.onManageTap != null) {
+        widget.onManageTap!();
+      } else {
+        final sessionId = widget.activeSessionId ?? '';
+        final targetRoute = sessionId.isNotEmpty
+            ? '${AppRoutes.caregiverManage}?id=$sessionId'
+            : AppRoutes.caregiverManage;
+        context.push(targetRoute);
+      }
+    }
+
     return ClayContainer(
       borderRadius: 22,
-      onTap: () => context.push(AppRoutes.caregiverAccess),
+      onTap: handleManageRedirect,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       shadows: AppColors.clayShadow,
       child: Row(
@@ -209,18 +225,21 @@ class _CaregiverStatusCardState extends State<CaregiverStatusCard> {
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.royalBlue.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Text(
-              'Manage',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: AppColors.royalBlue,
+          GestureDetector(
+            onTap: handleManageRedirect,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.royalBlue.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                'Manage',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.royalBlue,
+                ),
               ),
             ),
           ),

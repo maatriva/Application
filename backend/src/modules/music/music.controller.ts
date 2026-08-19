@@ -233,6 +233,11 @@ export class MusicController {
       const isRecording = req.body?.category === 'Parent Voice' || req.body?.category === 'Parent Recordings' || req.body?.sourceType === 'RECORDED';
       const prefix = isRecording ? '/uploads/recordings/' : '/uploads/music/';
 
+      if (storageUrl && (storageUrl.includes('..') || storageUrl.includes('\\'))) {
+        res.status(400).json({ success: false, error: 'Invalid file path traversal in fileUrl.' });
+        return;
+      }
+
       if (req.file) {
         const savedFilename = req.file.filename;
         console.log(`[Music] Saving File: ${savedFilename} (destination: ${prefix})`);

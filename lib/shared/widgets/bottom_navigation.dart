@@ -3,9 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
-import 'package:maatriva/core/services/providers.dart';
-import 'package:maatriva/features/authentication/presentation/providers/auth_provider.dart';
-import 'package:maatriva/shared/models/user_session.dart';
 
 /// Premium Floating Claymorphic Bottom Navigation Bar.
 /// Features 5 items:
@@ -17,7 +14,7 @@ import 'package:maatriva/shared/models/user_session.dart';
 ///
 /// Dynamic Active State: Whichever tab is active dynamically rises from the navigation bar
 /// with an elevated claymorphic container, gradient fill, and soft depth shadow.
-class BottomNavigation extends ConsumerWidget {
+class BottomNavigation extends ConsumerStatefulWidget {
   final int currentIndex;
   final ValueChanged<int>? onTap;
 
@@ -27,9 +24,28 @@ class BottomNavigation extends ConsumerWidget {
     this.onTap,
   });
 
+  @override
+  ConsumerState<BottomNavigation> createState() => _BottomNavigationState();
+}
+
+class _BottomNavigationState extends ConsumerState<BottomNavigation> {
+  int? _tappedIndex;
+
+  @override
+  void didUpdateWidget(covariant BottomNavigation oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.currentIndex != oldWidget.currentIndex) {
+      setState(() {
+        _tappedIndex = null;
+      });
+    }
+  }
+
   /// Resolves the active navigation index based on current route location and query params,
   /// preserving parent section highlighting during deep navigation.
   int _getEffectiveIndex(BuildContext context) {
+    if (_tappedIndex != null) return _tappedIndex!;
+
     try {
       final location = GoRouterState.of(context).matchedLocation;
 
@@ -61,56 +77,16 @@ class BottomNavigation extends ConsumerWidget {
     } catch (_) {}
 
     // Fallback to passed currentIndex if valid and >= 0, else default to 0
-    return currentIndex >= 0 ? currentIndex : 0;
+    return widget.currentIndex >= 0 ? widget.currentIndex : 0;
   }
 
-  void _handleTap(BuildContext context, WidgetRef ref, int index) {
-    final authState = ref.read(authNotifierProvider);
-    final isCaregiver = authState.session?.role == UserRole.caregiver;
-    final cacheService = ref.read(cacheServiceProvider);
-    final caregiverSession = cacheService.getCaregiverGrantedSession();
-    final perms = (caregiverSession?['permissions'] as Map<String, dynamic>?) ?? {};
+  void _handleTap(BuildContext context, int index) {
+    setState(() {
+      _tappedIndex = index;
+    });
 
-    bool isAllowed = true;
-    String featureName = '';
-
-    if (isCaregiver) {
-      switch (index) {
-        case 1: // Health
-          if (perms['health_data'] != true) {
-            isAllowed = false;
-            featureName = 'Health Data & Predictive Analytics';
-          }
-          break;
-        case 2: // Live Monitor
-          if (perms['camera_snapshot'] != true && perms['live_monitoring'] != true) {
-            isAllowed = false;
-            featureName = 'Live Camera Feed';
-          }
-          break;
-        case 3: // Music
-          if (perms['custom_music'] != true && perms['music'] != true) {
-            isAllowed = false;
-            featureName = 'Music Controls';
-          }
-          break;
-      }
-    }
-
-    if (!isAllowed) {
-      ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('🔒 Access Restricted: Your parent has not granted permission for $featureName.'),
-          backgroundColor: const Color(0xFFE65100),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
-    if (onTap != null) {
-      onTap!(index);
+    if (widget.onTap != null) {
+      widget.onTap!(index);
       return;
     }
 
@@ -134,7 +110,7 @@ class BottomNavigation extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final activeIndex = _getEffectiveIndex(context);
     final screenWidth = MediaQuery.of(context).size.width;
     final isNarrow = screenWidth < 360;
@@ -162,11 +138,11 @@ class BottomNavigation extends ConsumerWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildNavItem(context, ref, activeIndex, 0, Icons.home_rounded, 'Home'),
-              _buildNavItem(context, ref, activeIndex, 1, Icons.favorite_rounded, 'Health'),
-              _buildNavItem(context, ref, activeIndex, 2, Icons.videocam_rounded, 'Live Monitor'),
-              _buildNavItem(context, ref, activeIndex, 3, Icons.music_note_rounded, 'Music'),
-              _buildNavItem(context, ref, activeIndex, 4, Icons.shopping_bag_rounded, 'Shop'),
+              _buildNavItem(context, activeIndex, 0, Icons.home_rounded, 'Home'),
+              _buildNavItem(context, activeIndex, 1, Icons.favorite_rounded, 'Health'),
+              _buildNavItem(context, activeIndex, 2, Icons.videocam_rounded, 'Live Monitor'),
+              _buildNavItem(context, activeIndex, 3, Icons.music_note_rounded, 'Music'),
+              _buildNavItem(context, activeIndex, 4, Icons.shopping_bag_rounded, 'Shop'),
             ],
           ),
         ),
@@ -176,7 +152,6 @@ class BottomNavigation extends ConsumerWidget {
 
   Widget _buildNavItem(
     BuildContext context,
-    WidgetRef ref,
     int activeIndex,
     int index,
     IconData icon,
@@ -186,7 +161,7 @@ class BottomNavigation extends ConsumerWidget {
 
     return Expanded(
       child: GestureDetector(
-        onTap: () => _handleTap(context, ref, index),
+        onTap: () => _handleTap(context, index),
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 250),

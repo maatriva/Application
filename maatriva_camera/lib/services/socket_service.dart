@@ -38,7 +38,26 @@ class SocketService {
     debugPrint('[SocketService] Connection state: $newState');
   }
 
-  Future<String?> _getValidTokenOrRefresh(String url) async {
+  static String sanitizeSocketUrl(String rawUrl) {
+    String clean = rawUrl.trim();
+    clean = clean.replaceAll(RegExp(r'/+$'), '');
+    clean = clean.replaceAll(RegExp(r'/api$'), '');
+    clean = clean.replaceAll(RegExp(r'/+$'), '');
+    if (clean.startsWith('ws://')) {
+      clean = clean.replaceFirst('ws://', 'http://');
+    } else if (clean.startsWith('wss://')) {
+      clean = clean.replaceFirst('wss://', 'https://');
+    }
+    return clean;
+  }
+
+  static String sanitizeApiUrl(String rawUrl) {
+    final cleanSocketUrl = sanitizeSocketUrl(rawUrl);
+    return '$cleanSocketUrl/api';
+  }
+
+  Future<String?> _getValidTokenOrRefresh(String rawUrl) async {
+    final apiUrl = sanitizeApiUrl(rawUrl);
     final token = await _storage.read(key: 'camera_token');
     if (token == null) {
       debugPrint('[Auth] Access token missing');
@@ -94,7 +113,7 @@ class SocketService {
       }
 
       final response = await http.post(
-        Uri.parse('$url/auth/refresh'),
+        Uri.parse('$apiUrl/auth/refresh'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'refreshToken': refreshToken}),
       );
@@ -126,11 +145,12 @@ class SocketService {
   }
 
   /// Connects to the Socket.IO signaling server at the given URL with auth JWT token
-  Future<bool> connect(String url, String babyId) async {
+  Future<bool> connect(String rawUrl, String babyId) async {
     disconnect();
     _updateState(SocketConnectionState.connecting);
 
-    final token = await _getValidTokenOrRefresh(url);
+    final socketUrl = sanitizeSocketUrl(rawUrl);
+    final token = await _getValidTokenOrRefresh(rawUrl);
     if (token == null) {
       _updateState(SocketConnectionState.error);
       return false;
@@ -161,10 +181,10 @@ class SocketService {
     }
 
     final authPayload = {'token': token};
-    debugPrint('[Socket.IO] Socket.IO auth payload: $authPayload');
+    debugPrint('[Socket.IO] Socket.IO auth payload: $authPayload for url: $socketUrl');
 
     try {
-      _socket = IO.io(url, IO.OptionBuilder()
+      _socket = IO.io(socketUrl, IO.OptionBuilder()
           .setTransports(['websocket'])
           .setAuth(authPayload)
           .disableAutoConnect()
@@ -196,10 +216,10 @@ class SocketService {
         final errMsg = err.toString();
         if (errMsg.contains('Unauthorized') || errMsg.contains('Invalid token')) {
           debugPrint('[Auth] Socket connection rejected due to invalid token. Refreshing...');
-          final refreshedToken = await _getValidTokenOrRefresh(url);
+          final refreshedToken = await _getValidTokenOrRefresh(rawUrl);
           if (refreshedToken != null) {
             debugPrint('[Socket.IO] Connecting with refreshed JWT');
-            connect(url, babyId);
+            connect(rawUrl, babyId);
           } else {
             _updateState(SocketConnectionState.error);
           }

@@ -4,6 +4,7 @@ import { authenticateToken, optionalAuthenticateToken, requireRole } from '../..
 import { UserRole } from '@prisma/client';
 import { getMusicUploadsDirectory, getRecordingsUploadsDirectory } from '../../config/uploads.config';
 
+import { env } from '../../config/env';
 import multer from 'multer';
 import path from 'path';
 
@@ -21,9 +22,23 @@ const storage = multer.diskStorage({
   },
 });
 
+const allowedAudioExtensions = new Set(['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac', '.webm', '.3gp']);
+
 const upload = multer({
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: { fileSize: env.MAX_MUSIC_UPLOAD_MB * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const mime = (file.mimetype || '').toLowerCase();
+    const isAudioMime = mime.startsWith('audio/') || mime === 'application/octet-stream';
+    const isAllowedExt = allowedAudioExtensions.has(ext);
+
+    if (isAllowedExt && isAudioMime) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Invalid audio file type '${ext}'. Allowed types: MP3, WAV, M4A, AAC, OGG, FLAC, WEBM.`));
+    }
+  },
 });
 
 const router = Router();

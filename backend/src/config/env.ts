@@ -15,8 +15,8 @@ const nodeEnv = (process.env.NODE_ENV || 'development').toLowerCase().trim();
 const isProduction = nodeEnv === 'production';
 const isDebugMode = process.env.DEBUG_MODE === 'true';
 
-// Debug routes are ONLY allowed when NOT in production AND DEBUG_MODE is explicitly set to 'true'.
-const isDebugEnabled = !isProduction && isDebugMode;
+// Debug routes are allowed in development mode or when DEBUG_MODE is explicitly set to 'true'.
+const isDebugEnabled = !isProduction || isDebugMode;
 
 function parseCorsOrigins(isProd: boolean): string[] {
   const raw = process.env.CORS_ORIGINS;
@@ -63,4 +63,18 @@ export const env = {
 
   // Gemini API
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || undefined,
+
+  // Rate Limiting & Security Limits
+  JSON_BODY_LIMIT: process.env.JSON_BODY_LIMIT || '2mb',
+  URLENCODED_BODY_LIMIT: process.env.URLENCODED_BODY_LIMIT || '2mb',
+  API_RATE_LIMIT_WINDOW_MS: process.env.API_RATE_LIMIT_WINDOW_MS ? parseInt(process.env.API_RATE_LIMIT_WINDOW_MS, 10) : 15 * 60 * 1000,
+  API_RATE_LIMIT_MAX: process.env.API_RATE_LIMIT_MAX ? parseInt(process.env.API_RATE_LIMIT_MAX, 10) : 300,
+  AUTH_RATE_LIMIT_WINDOW_MS: process.env.AUTH_RATE_LIMIT_WINDOW_MS ? parseInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS, 10) : 15 * 60 * 1000,
+  AUTH_RATE_LIMIT_MAX: process.env.AUTH_RATE_LIMIT_MAX ? parseInt(process.env.AUTH_RATE_LIMIT_MAX, 10) : 15,
+  TRUST_PROXY: process.env.TRUST_PROXY === 'true' || isProduction,
+
+  // File Upload Size Limits (in Megabytes)
+  MAX_AUDIO_UPLOAD_MB: process.env.MAX_AUDIO_UPLOAD_MB ? parseInt(process.env.MAX_AUDIO_UPLOAD_MB, 10) : 10,
+  MAX_MUSIC_UPLOAD_MB: process.env.MAX_MUSIC_UPLOAD_MB ? parseInt(process.env.MAX_MUSIC_UPLOAD_MB, 10) : 15,
+  MAX_IMAGE_UPLOAD_MB: process.env.MAX_IMAGE_UPLOAD_MB ? parseInt(process.env.MAX_IMAGE_UPLOAD_MB, 10) : 5,
 };

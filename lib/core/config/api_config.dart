@@ -19,30 +19,51 @@ class ApiConfig {
     if (url == null || url.trim().isEmpty) {
       _customBaseUrl = null;
     } else {
-      String formatted = url.trim();
-      if (!formatted.startsWith('http://') && !formatted.startsWith('https://')) {
-        formatted = 'http://$formatted';
-      }
-      _customBaseUrl = formatted;
+      _customBaseUrl = sanitizeApiUrl(url);
     }
   }
 
-  /// Optional compile-time override: flutter run --dart-define=API_URL=http://192.168.1.50:3000
-  static const String _envApiUrl = String.fromEnvironment('API_URL');
-  static const String _defaultLanIp = 'http://192.168.1.36:3000';
+  /// Compile-time build configuration via --dart-define=API_BASE_URL=... (or --dart-define=API_URL=...)
+  static const String _envApiBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: String.fromEnvironment('API_URL'),
+  );
 
-  static const String devWebBaseUrl = 'http://localhost:3000';
-  static const String devAndroidEmulatorBaseUrl = 'http://192.168.1.33:3000';
-  static const String stagingBaseUrl = 'https://staging-api.maatriva.cloud';
-  static const String prodBaseUrl = 'https://api.maatriva.co.in';
+  static const String devWebBaseUrl = 'http://localhost:3000/api';
+  static const String devAndroidEmulatorBaseUrl = 'http://10.0.2.2:3000/api';
+  static const String stagingBaseUrl = 'https://staging-api.maatriva.cloud/api';
+  static const String prodBaseUrl = 'https://api.maatriva.co.in/api';
+
+  /// Sanitizes and validates any API base URL string.
+  /// Ensures valid HTTP/HTTPS scheme, strips trailing slashes, and guarantees a single /api path suffix.
+  static String sanitizeApiUrl(String input) {
+    String formatted = input.trim();
+    if (formatted.isEmpty) return '';
+
+    if (!formatted.startsWith('http://') && !formatted.startsWith('https://')) {
+      formatted = 'http://$formatted';
+    }
+
+    // Strip trailing slashes
+    formatted = formatted.replaceAll(RegExp(r'/+$'), '');
+
+    // Prevent double /api/api
+    if (formatted.endsWith('/api/api')) {
+      formatted = formatted.substring(0, formatted.length - 4);
+    } else if (!formatted.endsWith('/api')) {
+      formatted = '$formatted/api';
+    }
+
+    return formatted;
+  }
 
   /// Automatically selects the correct base URL based on platform and build mode.
   static String get baseUrl {
     if (_customBaseUrl != null && _customBaseUrl!.isNotEmpty) {
-      return _customBaseUrl!;
+      return sanitizeApiUrl(_customBaseUrl!);
     }
-    if (_envApiUrl.isNotEmpty) {
-      return _envApiUrl;
+    if (_envApiBaseUrl.isNotEmpty) {
+      return sanitizeApiUrl(_envApiBaseUrl);
     }
 
     switch (_environment) {
@@ -54,10 +75,8 @@ class ApiConfig {
         if (kIsWeb) {
           return devWebBaseUrl;
         }
-        if (defaultTargetPlatform == TargetPlatform.android ||
-            defaultTargetPlatform == TargetPlatform.iOS) {
-          // Defaults to physical host Wi-Fi IP so real devices on local network can connect
-          return _defaultLanIp;
+        if (defaultTargetPlatform == TargetPlatform.android) {
+          return devAndroidEmulatorBaseUrl;
         }
         return devWebBaseUrl;
     }
@@ -65,7 +84,7 @@ class ApiConfig {
 
   /// Automatically derives the WebSocket URL from the base HTTP URL.
   static String get wsBaseUrl {
-    final httpUrl = baseUrl;
+    final httpUrl = baseUrl.replaceAll(RegExp(r'/api$'), '');
     if (httpUrl.startsWith('https://')) {
       return httpUrl.replaceFirst('https://', 'wss://');
     } else if (httpUrl.startsWith('http://')) {
@@ -98,10 +117,11 @@ class ApiConfig {
       return raw;
     }
 
+    final serverBase = baseUrl.replaceAll(RegExp(r'/+$'), '').replaceAll(RegExp(r'/api$'), '');
+
     if (raw.startsWith('audio/')) {
       final filename = raw.substring(6);
-      final cleanBase = baseUrl.replaceAll(RegExp(r'/+$'), '');
-      return '$cleanBase/uploads/music/$filename';
+      return '$serverBase/uploads/music/$filename';
     }
 
     if (raw.startsWith('http:///') || raw.startsWith('https:///')) {
@@ -111,8 +131,7 @@ class ApiConfig {
     // 2. Relative paths (e.g. /uploads/music/file.mp3 or uploads/music/file.mp3)
     if (raw.startsWith('/') || raw.startsWith('uploads/') || raw.startsWith('api/')) {
       final cleanPath = raw.startsWith('/') ? raw : '/$raw';
-      final cleanBase = baseUrl.replaceAll(RegExp(r'/+$'), '');
-      return '$cleanBase$cleanPath';
+      return '$serverBase$cleanPath';
     }
 
     // 3. Absolute URLs or domain paths

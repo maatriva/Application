@@ -10,6 +10,9 @@ import '../../provider/caregiver_access_provider.dart';
 import '../widgets/countdown_flip_clock.dart';
 import '../widgets/flip_clock_duration_selector.dart';
 
+import '../../../authentication/presentation/providers/auth_provider.dart';
+import '../widgets/unauthorized_caretaker_card.dart';
+
 /// Dedicated Caretaker Management / Access Details Screen.
 /// Allows parents to inspect remaining time, extend access, modify permissions, and revoke access.
 class CaretakerManagementScreen extends ConsumerStatefulWidget {
@@ -30,39 +33,30 @@ class _CaretakerManagementScreenState
   Timer? _countdownTimer;
 
   static const Map<String, IconData> permIcons = {
-    'live_monitoring': Icons.videocam_outlined,
-    'health_data': Icons.favorite_border_rounded,
+    'custom_music': Icons.folder_shared_outlined,
+    'health_data': Icons.monitor_heart_outlined,
     'ai_assistant': Icons.smart_toy_outlined,
-    'notifications': Icons.notifications_outlined,
-    'emergency_alerts': Icons.warning_amber_rounded,
-    'camera_snapshot': Icons.photo_camera_outlined,
-    'custom_music': Icons.library_music_outlined,
-    'music': Icons.music_note_outlined,
+    'emergency_alerts': Icons.notifications_active_outlined,
+    'camera_snapshot': Icons.videocam_outlined,
     'cradle_controls': Icons.tune_outlined,
   };
 
   static const Map<String, String> permTitles = {
-    'live_monitoring': 'Live Monitoring',
-    'health_data': 'Telemetry & Health Data',
-    'ai_assistant': 'AI Pediatrician',
-    'notifications': 'Alerts & Notifications',
-    'emergency_alerts': 'Emergency Safety Alerts',
-    'camera_snapshot': 'Live Video Feed',
-    'custom_music': 'Music Control',
-    'music': 'Music Library',
+    'custom_music': 'Custom Parent Folder',
+    'health_data': 'Baby\'s Wellness & Sensor Readings',
+    'ai_assistant': 'AI Chatbot',
+    'emergency_alerts': 'Real-Time Alerts & Notifications',
+    'camera_snapshot': 'Live Video',
     'cradle_controls': 'Cradle Controls',
   };
 
   static const Map<String, String> permDescs = {
-    'live_monitoring': 'View live baby telemetry & vitals',
-    'health_data': 'Access sleep patterns & vitals logs',
-    'ai_assistant': 'Allow caregiver to consult AI pediatrician',
-    'notifications': 'Receive baby safety alerts & notifications',
-    'emergency_alerts': 'Critical emergency notifications',
-    'camera_snapshot': 'View the nursery camera video stream',
-    'custom_music': 'Control soothing music & lullabies',
-    'music': 'Control default music library',
-    'cradle_controls': 'Control supported cradle rocking & features',
+    'custom_music': 'Access parent custom audio recordings and lullabies folder',
+    'health_data': 'View live baby vitals & telemetry data (live data only, no history)',
+    'ai_assistant': 'Allow caregiver to consult AI Pediatrician chatbot',
+    'emergency_alerts': 'Receive real-time safety alerts and emergency notifications',
+    'camera_snapshot': 'View live nursery video camera feed',
+    'cradle_controls': 'Operate smart cradle rocking & soothing controls',
   };
 
   @override
@@ -98,34 +92,35 @@ class _CaretakerManagementScreenState
 
   String _formatRemainingTime(Duration remaining) {
     if (remaining.isNegative) {
-      return '00h 00m 00s';
+      return '00h : 00m : 00s';
     }
-    final hours = remaining.inHours;
-    final minutes = remaining.inMinutes % 60;
-    final seconds = remaining.inSeconds % 60;
-    return '${hours.toString().padLeft(2, '0')}h ${minutes.toString().padLeft(2, '0')}m ${seconds.toString().padLeft(2, '0')}s';
+    final hours = remaining.inHours.toString().padLeft(2, '0');
+    final mins = (remaining.inMinutes % 60).toString().padLeft(2, '0');
+    final secs = (remaining.inSeconds % 60).toString().padLeft(2, '0');
+    return '${hours}h : ${mins}m : ${secs}s';
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(caregiverAccessProvider);
     final notifier = ref.read(caregiverAccessProvider.notifier);
+    final authState = ref.watch(authNotifierProvider);
+    final isUnauthenticated = authState.status != AuthStatus.authenticated;
 
-    // Resolve current session or fallback
-    final sessionMatches = state.activeSessions.where((s) => s.id == widget.sessionId).toList();
-    final ActiveSession session = sessionMatches.isNotEmpty
-        ? sessionMatches.first
-        : (state.activeSessions.isNotEmpty
-            ? state.activeSessions.first
-            : ActiveSession(
-                id: widget.sessionId,
-                name: 'Caregiver',
-                relationship: 'Temporary Caregiver',
-                imageUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=120',
-                expiresAt: DateTime.now().add(const Duration(minutes: 30)),
-                status: SessionStatus.active,
-                permissions: state.permissions,
-              ));
+    final session = state.activeSessions.firstWhere(
+      (s) => s.id == widget.sessionId,
+      orElse: () => state.activeSessions.isNotEmpty
+          ? state.activeSessions.first
+          : ActiveSession(
+              id: widget.sessionId,
+              name: 'Caregiver',
+              relationship: 'Temporary Caregiver',
+              imageUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=120',
+              expiresAt: DateTime.now().add(const Duration(minutes: 30)),
+              status: SessionStatus.active,
+              permissions: state.permissions,
+            ),
+    );
 
     final now = DateTime.now();
     final remaining = session.expiresAt.difference(now);
@@ -194,7 +189,15 @@ class _CaretakerManagementScreenState
             Icons.arrow_back_ios_new_rounded,
             color: AppColors.navyDeep,
           ),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (isUnauthenticated) {
+              context.go('/login');
+            } else if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/');
+            }
+          },
         ),
       ),
       body: SafeArea(
@@ -203,12 +206,15 @@ class _CaretakerManagementScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // -------------------------------------------------------------
-              // 3. CARETAKER PROFILE CARD
-              // -------------------------------------------------------------
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
+              if (isUnauthenticated) ...[
+                const UnauthorizedCaretakerCard(),
+              ] else ...[
+                // -------------------------------------------------------------
+                // 3. CARETAKER PROFILE CARD
+                // -------------------------------------------------------------
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
@@ -652,6 +658,7 @@ class _CaretakerManagementScreenState
                 ),
               ),
               const SizedBox(height: 32),
+              ],
             ],
           ),
         ),

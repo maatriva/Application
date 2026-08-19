@@ -1,9 +1,14 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
 import { UserRole } from '@prisma/client';
 import { TokenPayload } from './auth.types';
+
+function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
 
 export class AuthService {
   /**
@@ -54,10 +59,21 @@ export class AuthService {
     );
 
     const refreshToken = jwt.sign(
-      { userId: user.id, role: user.role } as TokenPayload,
+      { userId: user.id, role: user.role, jti: crypto.randomUUID() } as any,
       env.JWT_SECRET,
       { expiresIn: env.JWT_REFRESH_EXPIRATION as any }
     );
+
+    // Create active server-side session (hashing refresh token)
+    const tokenHash = hashToken(refreshToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await prisma.session.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt,
+      },
+    });
 
     return {
       accessToken,
@@ -95,10 +111,21 @@ export class AuthService {
 
     // 4. Generate Refresh Token (7 days)
     const refreshToken = jwt.sign(
-      { userId: user.id, role: user.role } as TokenPayload,
+      { userId: user.id, role: user.role, jti: crypto.randomUUID() } as any,
       env.JWT_SECRET,
       { expiresIn: env.JWT_REFRESH_EXPIRATION as any }
     );
+
+    // 5. Create active server-side session (storing SHA-256 hash of refresh token)
+    const tokenHash = hashToken(refreshToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await prisma.session.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt,
+      },
+    });
 
     return {
       accessToken,
@@ -113,47 +140,100 @@ export class AuthService {
   }
 
   /**
-   * Generate new access token from refresh token.
+   * Generate new access token from refresh token with token rotation and session verification.
    */
   public async refresh(refreshToken: string) {
-    try {
-      // Verify refresh token signature
-      const decoded = jwt.verify(refreshToken, env.JWT_SECRET) as any;
-      
-      // Look up user to ensure they still exist
-      const user = await prisma.user.findUnique({
-        where: { id: decoded.userId },
-      });
-      if (!user) {
-        throw { statusCode: 403, message: 'User not found.' };
-      }
-
-      // Generate new access token
-      const accessToken = jwt.sign(
-        { userId: user.id, role: user.role } as TokenPayload,
-        env.JWT_SECRET,
-        { expiresIn: env.JWT_EXPIRATION as any }
-      );
-
-      return { accessToken };
-    } catch (e: any) {
-      if (e.statusCode) throw e;
-      throw { statusCode: 403, message: 'Invalid or expired refresh token.' };
+    if (!refreshToken) {
+      throw { statusCode: 401, message: 'Refresh token required.' };
     }
+
+    let decoded: TokenPayload;
+    try {
+      decoded = jwt.verify(refreshToken, env.JWT_SECRET) as TokenPayload;
+    } catch {
+      throw { statusCode: 401, message: 'Invalid or expired refresh token.' };
+    }
+
+    // 1. Hash incoming refresh token and check active server-side session
+    const tokenHash = hashToken(refreshToken);
+    const session = await prisma.session.findUnique({
+      where: { tokenHash },
+    });
+
+    if (
+      !session ||
+      session.revokedAt !== null ||
+      session.expiresAt <= new Date() ||
+      session.userId !== decoded.userId
+    ) {
+      throw { statusCode: 401, message: 'Invalid, expired, or revoked refresh token.' };
+    }
+
+    // 2. Look up user to ensure they still exist
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+    });
+    if (!user) {
+      throw { statusCode: 401, message: 'User not found.' };
+    }
+
+    // 3. Refresh token rotation: Revoke old session and issue a new session
+    await prisma.session.update({
+      where: { id: session.id },
+      data: { revokedAt: new Date() },
+    });
+
+    const newAccessToken = jwt.sign(
+      { userId: user.id, role: user.role } as TokenPayload,
+      env.JWT_SECRET,
+      { expiresIn: env.JWT_EXPIRATION as any }
+    );
+
+    const newRefreshToken = jwt.sign(
+      { userId: user.id, role: user.role, jti: crypto.randomUUID() } as any,
+      env.JWT_SECRET,
+      { expiresIn: env.JWT_REFRESH_EXPIRATION as any }
+    );
+
+    const newTokenHash = hashToken(newRefreshToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await prisma.session.create({
+      data: {
+        userId: user.id,
+        tokenHash: newTokenHash,
+        expiresAt,
+      },
+    });
+
+    return {
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+    };
   }
 
   /**
-   * Invalidate a session (Logout).
+   * Invalidate a specific device session (Logout).
    */
   public async logout(refreshToken: string) {
-    try {
-      const decoded: any = jwt.verify(refreshToken, env.JWT_SECRET);
-      console.log(`[AUTH SERVICE] Session invalidated for userId=${decoded.userId || 'unknown'}, role=${decoded.role || 'unknown'}`);
-      return { message: 'Logged out successfully.' };
-    } catch {
-      console.log(`[AUTH SERVICE] Session invalidated for provided refresh token.`);
-      return { message: 'Logged out successfully.' };
+    if (refreshToken && refreshToken.trim() !== '') {
+      const tokenHash = hashToken(refreshToken);
+      await prisma.session.updateMany({
+        where: { tokenHash, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
     }
+    return { message: 'Logged out successfully.' };
+  }
+
+  /**
+   * Revoke all active sessions for a user (e.g. security breach, password change).
+   */
+  public async revokeAllUserSessions(userId: string) {
+    await prisma.session.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    return { message: 'All user sessions revoked successfully.' };
   }
 
   /**

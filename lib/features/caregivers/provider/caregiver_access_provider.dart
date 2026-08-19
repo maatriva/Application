@@ -71,13 +71,12 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
         super(
           CaregiverAccessState(
             permissions: {
-              'live_monitoring': true,
-              'health_data': false,
-              'ai_assistant': false,
-              'notifications': true,
-              'emergency_alerts': true,
-              'camera_snapshot': false,
-              'custom_music': false,
+              'health_data': true,        // Live telemetry report (Default: ON)
+              'ai_assistant': true,       // AI chatbot (Default: ON)
+              'emergency_alerts': true,   // Real time alert and notification (Default: ON)
+              'custom_music': false,      // Custom parent folder (Default: OFF)
+              'camera_snapshot': false,   // Live video (Default: OFF)
+              'cradle_controls': false,   // Cradle controls (Default: OFF)
             },
             selectedDurationLabel: '30 Mins',
             activeSessions: [],
@@ -140,7 +139,7 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
 
   void _startTimer() {
     if (AppConfig.isTesting) return;
-    _countdownTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _updateSessionStatuses();
     });
   }
@@ -295,6 +294,8 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
     state = state.copyWith(
       activeSessions: updatedActive,
       accessHistory: updatedHistory,
+      qrToken: '',
+      isGeneratingQR: false,
     );
 
     // Force load fresh data

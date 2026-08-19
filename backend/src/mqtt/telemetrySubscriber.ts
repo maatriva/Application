@@ -37,49 +37,20 @@ export class TelemetrySubscriber {
         console.warn(`[TelemetrySubscriber] Device ID mismatch between topic and payload. Topic: "${cleanTopicDeviceId}", Payload: "${cleanPayloadDeviceId}". Rejecting packet.`);
         return;
       }
-      // 3. Database Lookup: Verify or auto-create the Device model using deviceId
+      // 3. Database Lookup: Verify the Device exists in registry
       let device = await prisma.device.findUnique({
         where: { deviceId: cleanTopicDeviceId },
       });
 
       if (!device) {
-        device = await prisma.device.create({
-          data: {
-            deviceId: cleanTopicDeviceId,
-            deviceName: `Smart Cradle (${cleanTopicDeviceId})`,
-            type: 'Smart Cradle',
-            registrationKey: `REG-${cleanTopicDeviceId}`,
-            firmwareVersion: '1.0.0',
-            protocol: 'MQTT',
-            paired: false,
-            status: 'ONLINE',
-          },
-        });
+        console.warn(`[TelemetrySubscriber] Ignored telemetry packet from unregistered device: "${cleanTopicDeviceId}". Device must be registered or paired via backend API first.`);
+        return;
       }
 
-      // 4. Find or auto-create linked baby assignment
-      let assignment = await prisma.deviceAssignment.findFirst({
+      // 4. Find linked baby assignment
+      const assignment = await prisma.deviceAssignment.findFirst({
         where: { deviceId: cleanTopicDeviceId },
       });
-
-      if (!assignment) {
-        const baby = await prisma.baby.findFirst({
-          where: { deletedAt: null },
-          orderBy: { createdAt: 'desc' },
-        });
-        if (baby) {
-          assignment = await prisma.deviceAssignment.create({
-            data: {
-              deviceId: cleanTopicDeviceId,
-              babyId: baby.id,
-            },
-          });
-          await prisma.device.update({
-            where: { deviceId: cleanTopicDeviceId },
-            data: { paired: true, status: 'PAIRED' },
-          });
-        }
-      }
 
       const babyId = assignment?.babyId || null;
 

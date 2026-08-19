@@ -22,6 +22,86 @@ const INITIAL_SEED_TRACKS: MusicTrackItem[] = [];
 
 let inMemoryCatalog: MusicTrackItem[] = [...INITIAL_SEED_TRACKS];
 
+export function getAudioDurationInSeconds(filePath: string): number {
+  try {
+    if (!fs.existsSync(filePath)) return 180;
+    const stat = fs.statSync(filePath);
+    const fileSize = stat.size;
+    if (fileSize <= 0) return 180;
+
+    const ext = path.extname(filePath).toLowerCase();
+
+    // 1. WAV header parsing
+    if (ext === '.wav') {
+      const fd = fs.openSync(filePath, 'r');
+      const buf = Buffer.alloc(44);
+      fs.readSync(fd, buf, 0, 44, 0);
+      fs.closeSync(fd);
+
+      if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WAVE') {
+        const byteRate = buf.readUInt32LE(28);
+        if (byteRate > 0) {
+          const durationSec = Math.round((fileSize - 44) / byteRate);
+          return Math.max(1, durationSec);
+        }
+      }
+    }
+
+    // 2. MP3 header & frame parsing
+    if (ext === '.mp3') {
+      const fd = fs.openSync(filePath, 'r');
+      const headerBufSize = Math.min(8192, fileSize);
+      const buf = Buffer.alloc(headerBufSize);
+      fs.readSync(fd, buf, 0, headerBufSize, 0);
+      fs.closeSync(fd);
+
+      let offset = 0;
+      if (buf.length >= 10 && buf.toString('ascii', 0, 3) === 'ID3') {
+        const id3Size = ((buf[6] & 0x7f) << 21) | ((buf[7] & 0x7f) << 14) | ((buf[8] & 0x7f) << 7) | (buf[9] & 0x7f);
+        offset = 10 + id3Size;
+      }
+
+      const bitratesMpeg1Layer3 = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
+      const bitratesMpeg2Layer3 = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
+
+      for (let i = offset; i < buf.length - 4; i++) {
+        if (buf[i] === 0xff && (buf[i + 1] & 0xe0) === 0xe0) {
+          const mpegVersionBit = (buf[i + 1] >> 3) & 0x03;
+          const bitrateIndex = (buf[i + 2] >> 4) & 0x0f;
+
+          let bitrateKbps = 128;
+          if (bitrateIndex > 0 && bitrateIndex < 15) {
+            bitrateKbps = (mpegVersionBit === 3)
+              ? (bitratesMpeg1Layer3[bitrateIndex] || 128)
+              : (bitratesMpeg2Layer3[bitrateIndex] || 128);
+          }
+
+          const audioDataBytes = Math.max(0, fileSize - offset);
+          const durationSec = Math.round((audioDataBytes * 8) / (bitrateKbps * 1000));
+          return Math.max(1, durationSec);
+        }
+      }
+
+      const audioBytes = Math.max(0, fileSize - offset);
+      return Math.max(1, Math.round(audioBytes / (20 * 1024)));
+    }
+
+    if (ext === '.m4a' || ext === '.aac') {
+      return Math.max(1, Math.round(fileSize / (16 * 1024)));
+    }
+    if (ext === '.ogg') {
+      return Math.max(1, Math.round(fileSize / (20 * 1024)));
+    }
+    if (ext === '.flac') {
+      return Math.max(1, Math.round(fileSize / (80 * 1024)));
+    }
+
+    return Math.max(1, Math.round(fileSize / (20 * 1024)));
+  } catch (err) {
+    return 180;
+  }
+}
+
 export class MusicService {
   static async syncDiskUploads(): Promise<number> {
     try {
@@ -46,6 +126,9 @@ export class MusicService {
           const ext = path.extname(file).toLowerCase();
           if (['.mp3', '.wav', '.aac', '.m4a', '.ogg', '.flac'].includes(ext)) {
             const storageUrl = `${target.prefix}${file}`;
+            const diskFilePath = path.join(target.dir, file);
+            const realDuration = getAudioDurationInSeconds(diskFilePath);
+
             const existing = await (prisma as any).musicTrack.findFirst({
               where: { storageUrl },
             });
@@ -82,14 +165,20 @@ export class MusicService {
                   category,
                   artist: category === 'Parent Voice' ? 'Parent Recording' : 'Maatriva Sound Studio',
                   storageUrl,
-                  duration: 210,
+                  duration: realDuration,
                   isActive: true,
                   isPremium: false,
                   language: 'English',
                 },
               });
               count++;
-              console.log(`✓ Auto-registered disk audio file: ${storageUrl}`);
+              console.log(`✓ Auto-registered disk audio file: ${storageUrl} (${realDuration}s)`);
+            } else if (existing.duration === 210 || existing.duration === 0) {
+              // Update legacy entries with real duration
+              await (prisma as any).musicTrack.update({
+                where: { id: existing.id },
+                data: { duration: realDuration },
+              });
             }
           }
         }
@@ -112,6 +201,8 @@ export class MusicService {
         const ext = path.extname(file).toLowerCase();
         if (['.mp3', '.wav', '.aac', '.m4a', '.ogg', '.flac'].includes(ext)) {
           const storageUrl = `/uploads/bgm/${file}`;
+          const diskFilePath = path.join(bgmDir, file);
+          const realDuration = getAudioDurationInSeconds(diskFilePath);
           const rawTitle = path.basename(file, ext).replace(/_/g, ' ').replace(/-/g, ' ');
           const title = rawTitle.charAt(0).toUpperCase() + rawTitle.slice(1);
           bgmTracks.push({
@@ -122,7 +213,7 @@ export class MusicService {
             storageUrl,
             audioPath: storageUrl,
             fileUrl: storageUrl,
-            duration: 210,
+            duration: realDuration,
             isActive: true,
             isPremium: false,
           } as any);

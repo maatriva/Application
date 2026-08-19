@@ -148,8 +148,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         if (existingGrantedSession != null) {
           final expiresAtStr = existingGrantedSession['expiresAt'] as String?;
           if (expiresAtStr != null) {
-            final expiresAt = DateTime.tryParse(expiresAtStr);
-            if (expiresAt != null && DateTime.now().isBefore(expiresAt)) {
+            final expiresAt = DateTime.tryParse(expiresAtStr)?.toUtc();
+            if (expiresAt != null && DateTime.now().toUtc().isBefore(expiresAt)) {
               await cache.cacheCaregiverGrantedSession(existingGrantedSession);
               debugPrint('[AUTH] Preserved valid caregiver granted session during login (expiresAt: $expiresAtStr)');
             }
@@ -295,8 +295,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (cachedSession != null) {
         final expiresAtStr = cachedSession['expiresAt'] as String?;
         if (expiresAtStr != null) {
-          final expiresAt = DateTime.tryParse(expiresAtStr);
-          if (expiresAt != null && DateTime.now().isBefore(expiresAt)) {
+          final expiresAt = DateTime.tryParse(expiresAtStr)?.toUtc();
+          if (expiresAt != null && DateTime.now().toUtc().isBefore(expiresAt)) {
             isCachedValid = true;
           }
         } else {
@@ -332,7 +332,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
             cachedSession?['expiresAt'] as String?;
         final parsedPerms = _parseServerPermissions(accessRes);
         final cachedPerms = cachedSession?['permissions'] as Map<String, dynamic>?;
-        final permsMap = parsedPerms.isNotEmpty ? parsedPerms : (cachedPerms ?? {'live_monitoring': true});
+        final permsMap = parsedPerms.isNotEmpty
+            ? parsedPerms
+            : (cachedPerms ?? {
+                'health_data': true,
+                'ai_assistant': true,
+                'emergency_alerts': true,
+                'custom_music': false,
+                'camera_snapshot': false,
+                'cradle_controls': false,
+              });
 
         final babyData = (accessRes?['data']?['baby'] as Map<String, dynamic>?) ??
             cachedSession?['baby'] as Map<String, dynamic>? ?? {

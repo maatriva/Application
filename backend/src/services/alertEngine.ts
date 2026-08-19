@@ -35,7 +35,7 @@ export class AlertEngine {
     return AlertEngine.instance;
   }
 
-  // Cooldown store: key = deviceId:alertType, value = timestamp of last notification sent
+  // Cooldown store: key = babyId:deviceId:alertType, value = timestamp of last notification sent
   private cooldowns: Map<string, number> = new Map();
   private readonly cooldownPeriodMs = 120000; // 2 minutes cooldown between duplicate notifications
 
@@ -53,22 +53,30 @@ export class AlertEngine {
    */
   public async evaluateTelemetry(packet: TelemetryPacket): Promise<void> {
     const value = typeof packet.value === 'number' ? packet.value : parseFloat(packet.value?.toString() || '0');
-    if (isNaN(value)) return;
+    if (isNaN(value) || !Number.isFinite(value)) return;
 
     try {
-      // 1. Resolve baby and their age in months
+      // 1. Resolve baby and their age in months from authoritative DeviceAssignment
       const assignment = await this.resolveBabyFromDevice(packet.deviceId);
-      const babyId = assignment ? assignment.babyId : null;
-      const ageMonths = assignment ? this.calculateAgeInMonths(assignment.birthDate) : 6; // default to infant limits if not found
+      
+      // Safety Rule: Unregistered/unpaired devices cannot trigger alerts for babies
+      if (!assignment || !assignment.babyId) {
+        return;
+      }
+
+      const babyId = assignment.babyId;
+      const ageMonths = this.calculateAgeInMonths(assignment.birthDate);
 
       let alert: AlertTrigger | null = null;
 
       // 2. Run rule evaluations
       switch (packet.type) {
         case 'heart_rate':
+        case 'HEART_RATE':
           alert = this.evaluateHeartRate(packet.deviceId, babyId, value, ageMonths);
           break;
         case 'breathing_rate':
+        case 'respiration_rate':
           alert = this.evaluateBreathingRate(packet.deviceId, babyId, value, ageMonths);
           break;
         case 'body_temperature':
@@ -98,7 +106,6 @@ export class AlertEngine {
   }
 
   private evaluateHeartRate(deviceId: string, babyId: string | null, hr: number, ageMonths: number): AlertTrigger | null {
-    // Newborn thresholds (<= 3 months)
     const isNewborn = ageMonths <= 3;
     const minSafe = isNewborn ? 100 : 90;
     const maxSafe = isNewborn ? 165 : 150;
@@ -327,19 +334,21 @@ export class AlertEngine {
   }
 
   private async handleTriggeredAlert(alert: AlertTrigger): Promise<void> {
-    const cooldownKey = `${alert.deviceId}:${alert.type}`;
+    if (!alert.babyId) return;
+
+    const cooldownKey = `${alert.babyId}:${alert.deviceId}:${alert.type}`;
     const now = Date.now();
     const lastTriggered = this.cooldowns.get(cooldownKey) || 0;
 
-    // Apply notification deduplication cooldowns: 45s for cry alert, 120s default for others
+    // Deduplication cooldown: 45s for cry alert, 120s default for others
     const cooldownPeriod = alert.type === 'CRY_DETECTED' ? 45000 : this.cooldownPeriodMs;
     if (now - lastTriggered < cooldownPeriod) {
-      return; // Skip spamming duplicate alarms
+      return; // Skip duplicate spam
     }
     this.cooldowns.set(cooldownKey, now);
 
     try {
-      // 1. Persist alert to alerts database table using Prisma
+      // Persist alert to database
       const dbAlert = await prisma.alert.create({
         data: {
           deviceId: alert.deviceId,
@@ -352,12 +361,11 @@ export class AlertEngine {
         },
       });
 
-      // 2. Invoke callback (for WebSocket real-time broadcast and FCM pushes)
+      // Broadcast real-time alert event
       if (this.onAlertTriggered) {
-        // Build a broadcast object containing both ID formats
         const broadcastAlert = {
           ...dbAlert,
-          alertId: dbAlert.id, // For compatibility with AlertPayload
+          alertId: dbAlert.id,
         };
         this.onAlertTriggered(broadcastAlert);
       }
@@ -366,7 +374,6 @@ export class AlertEngine {
     }
   }
 
-  // Database helper: Resolves target baby profile mapped to device
   private async resolveBabyFromDevice(deviceId: string): Promise<{ babyId: string; birthDate: Date } | null> {
     try {
       const assignment = await prisma.deviceAssignment.findFirst({
@@ -375,7 +382,7 @@ export class AlertEngine {
           baby: true,
         },
       });
-      if (!assignment) return null;
+      if (!assignment || !assignment.baby || assignment.baby.deletedAt !== null) return null;
       return {
         babyId: assignment.babyId,
         birthDate: assignment.baby.birthDate,

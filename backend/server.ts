@@ -20,16 +20,33 @@ const ai = new GoogleGenAI({
   },
 });
 
+import helmet from "helmet";
 import { corsMiddleware } from "./src/middleware/cors.middleware";
+import { generalApiLimiter } from "./src/middleware/rateLimiter.middleware";
+import { env } from "./src/config/env";
 
 async function startServer() {
   const app = express();
 
+  if (env.TRUST_PROXY) {
+    app.set('trust proxy', 1);
+  }
+
+  // Helmet Security Headers
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    })
+  );
+
   // CORS Middleware setup
   app.use(corsMiddleware);
 
-  app.use(express.json({ limit: '100mb' }));
-  app.use(express.urlencoded({ limit: '100mb', extended: true }));
+  // General API Rate Limiter
+  app.use(generalApiLimiter);
+
+  app.use(express.json({ limit: env.JSON_BODY_LIMIT }));
+  app.use(express.urlencoded({ limit: env.URLENCODED_BODY_LIMIT, extended: true }));
   const uploadsDirectory = getUploadsDirectory();
   app.use('/uploads', express.static(uploadsDirectory, {
     setHeaders: (res) => {
@@ -37,8 +54,8 @@ async function startServer() {
     }
   }));
 
-  // Mount API Router
-  app.use('/', apiRouter);
+  // Mount API Router (Canonical /api path)
+  app.use('/api', apiRouter);
 
   // Server-side Gemini API route for Smart Baby Monitor AI Insights
   app.post("/api/gemini/insight", async (req, res) => {

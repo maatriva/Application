@@ -49,13 +49,18 @@ export class CaregiversController {
    */
   public static async list(req: AuthenticatedRequest, res: Response) {
     const babyId = req.query.babyId as string;
+    const requesterId = req.user?.userId;
+
+    if (!requesterId) {
+      return res.status(401).json({ error: 'Unauthorized.' });
+    }
 
     if (!babyId) {
       return res.status(400).json({ error: 'babyId query parameter is required.' });
     }
 
     try {
-      const data = await caregiversService.listCaregivers(babyId);
+      const data = await caregiversService.listCaregivers(babyId, requesterId);
       res.json({ success: true, data });
     } catch (e: any) {
       const status = e.statusCode || 500;
@@ -246,16 +251,23 @@ export class CaregiversController {
    * Parent edits feature-level permissions for caregiver
    */
   public static async updatePermissions(req: AuthenticatedRequest, res: Response) {
-    const permissionId = req.params.id;
+    const permissionId = req.params.id || req.body.permissionId || req.body.sessionId || req.body.caregiverId || '';
     const parentId = req.user?.userId;
-    const { permissions } = req.body;
 
     if (!parentId) {
       return res.status(401).json({ error: 'Unauthorized.' });
     }
 
+    let permissions = req.body.permissions;
     if (!permissions || typeof permissions !== 'object') {
-      return res.status(400).json({ error: 'permissions JSON object is required.' });
+      permissions = {
+        health_data: req.body.health_data ?? req.body.canViewTelemetry ?? true,
+        ai_assistant: req.body.ai_assistant ?? req.body.canUseAi ?? true,
+        emergency_alerts: req.body.emergency_alerts ?? req.body.canReceiveAlerts ?? true,
+        custom_music: req.body.custom_music ?? req.body.canPlayMusic ?? false,
+        camera_snapshot: req.body.camera_snapshot ?? req.body.canViewCamera ?? false,
+        cradle_controls: req.body.cradle_controls ?? req.body.canControlCradle ?? false,
+      };
     }
 
     try {
@@ -272,7 +284,7 @@ export class CaregiversController {
    * Parent extends caregiver access duration (+15m, +30m, +1h, custom)
    */
   public static async extendAccess(req: AuthenticatedRequest, res: Response) {
-    const permissionId = req.params.id;
+    const permissionId = req.params.id || req.body.permissionId || req.body.sessionId || req.body.caregiverId;
     const parentId = req.user?.userId;
     const { extensionMinutes } = req.body;
 
@@ -348,13 +360,18 @@ export class CaregiversController {
    */
   public static async getHistory(req: AuthenticatedRequest, res: Response) {
     const babyId = req.query.babyId as string;
+    const requesterId = req.user?.userId;
+
+    if (!requesterId) {
+      return res.status(401).json({ error: 'Unauthorized.' });
+    }
 
     if (!babyId) {
       return res.status(400).json({ error: 'babyId query parameter is required.' });
     }
 
     try {
-      const history = await caregiversService.getAccessHistory(babyId);
+      const history = await caregiversService.getAccessHistory(babyId, requesterId);
       res.json({ success: true, data: history });
     } catch (e: any) {
       const status = e.statusCode || 500;

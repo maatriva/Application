@@ -240,7 +240,11 @@ class WebSocketService with WidgetsBindingObserver {
         _socket = null;
       }
 
-      String cleanUrl = targetUrl;
+      String cleanUrl = targetUrl.trim();
+      cleanUrl = cleanUrl.replaceAll(RegExp(r'/+$'), '');
+      cleanUrl = cleanUrl.replaceAll(RegExp(r'/api$'), '');
+      cleanUrl = cleanUrl.replaceAll(RegExp(r'/+$'), '');
+
       if (cleanUrl.startsWith('ws://')) {
         cleanUrl = cleanUrl.replaceFirst('ws://', 'http://');
       } else if (cleanUrl.startsWith('wss://')) {
@@ -248,7 +252,7 @@ class WebSocketService with WidgetsBindingObserver {
       }
 
       _socket = IO.io(cleanUrl, IO.OptionBuilder()
-          .setTransports(['websocket', 'polling'])
+          .setTransports(kIsWeb ? ['polling', 'websocket'] : ['websocket', 'polling'])
           .setAuth(authPayload)
           .disableAutoConnect()
           .enableReconnection()
@@ -366,6 +370,8 @@ class WebSocketService with WidgetsBindingObserver {
         if (data is Map) _caregiverAccessAcceptedController.add(Map<String, dynamic>.from(data));
       }
       _socket!.on('caregiver.access.accepted', handleAccessAccepted);
+      _socket!.on('caregiver_access_accepted', handleAccessAccepted);
+      _socket!.on('caregiver:access_accepted', handleAccessAccepted);
 
       void handlePermissionsUpdated(dynamic data) {
         _log('Caregiver Permissions Updated event received: $data');

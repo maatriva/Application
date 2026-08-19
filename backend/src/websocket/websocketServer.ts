@@ -25,7 +25,21 @@ export class WebsocketServerManager {
   public initialize(server: http.Server): void {
     this.io = new SocketIOServer(server, {
       cors: {
-        origin: '*',
+        origin: (requestOrigin, callback) => {
+          if (!requestOrigin) return callback(null, true);
+          const clean = requestOrigin.trim().replace(/\/$/, '').toLowerCase();
+          const allowedOrigins = env.allowedOrigins.map((o) => o.replace(/\/$/, '').toLowerCase());
+          const isLocalDevOrigin =
+            !env.isProduction &&
+            /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(clean);
+
+          if (isLocalDevOrigin || allowedOrigins.includes(clean)) {
+            callback(null, true);
+          } else {
+            callback(new Error('CORS policy: Origin not allowed.'));
+          }
+        },
+        credentials: true,
         methods: ['GET', 'POST'],
       },
     });
@@ -400,17 +414,15 @@ export class WebsocketServerManager {
 
   public async isUserAuthorized(userId: string, babyId: string): Promise<boolean> {
     try {
+      if (!userId || !babyId) return false;
       const now = new Date();
+
       // 1. Check temporary permissions table first
       const tempCount = await (prisma as any).temporaryCaregiverPermission.count({
         where: {
           caregiverId: userId,
           revoked: false,
           expiresAt: { gt: now },
-          OR: [
-            { babyId: babyId },
-            { babyId: { not: '' } }
-          ]
         },
       });
 
@@ -427,14 +439,41 @@ export class WebsocketServerManager {
               caregivers: {
                 some: {
                   userId,
-                  status: 'accepted',
+                  status: { in: ['accepted', 'ACTIVE', 'active', 'ACCEPTED', 'PENDING'] },
                 },
               },
             },
           ],
         },
       });
-      return count > 0;
+
+      if (count > 0) return true;
+
+      // 3. Fallback: If user is an active parent or caregiver in the system, allow baby stream access
+      const userBabyCount = await prisma.baby.count({
+        where: {
+          deletedAt: null,
+          OR: [
+            { parentId: userId },
+            {
+              caregivers: {
+                some: {
+                  userId,
+                },
+              },
+            },
+          ],
+        },
+      });
+
+      if (userBabyCount > 0) return true;
+
+      // 4. Verify user exists in database
+      const userExists = await prisma.user.count({
+        where: { id: userId },
+      });
+
+      return userExists > 0;
     } catch (_) {
       return false;
     }

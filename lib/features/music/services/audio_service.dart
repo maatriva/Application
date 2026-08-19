@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import '../../../core/config/api_config.dart';
+import '../../../core/storage/secure_storage_service.dart';
 import '../models/song.dart';
 
 /// Wraps the [AudioPlayer] from the audioplayers package so that the rest of
@@ -45,6 +46,21 @@ class AudioService {
   Stream<PlayerState> get playerStateStream => _player.onPlayerStateChanged;
   Stream<Duration?> get durationStream => _player.onDurationChanged;
   Stream<void> get onComplete => _player.onPlayerComplete;
+
+  Future<String> _appendAuthTokenIfNeeded(String url) async {
+    if (url.contains('/uploads/recordings/') && !url.contains('token=')) {
+      try {
+        final token = await const SecureStorageService().getAccessToken();
+        if (token != null && token.trim().isNotEmpty) {
+          final separator = url.contains('?') ? '&' : '?';
+          return '$url${separator}token=$token';
+        }
+      } catch (e) {
+        debugPrint('[AudioService] Failed to retrieve access token: $e');
+      }
+    }
+    return url;
+  }
 
   // ── Playback ─────────────────────────────────────────────────────────────
   /// Plays a song based on its [Song.sourceType] ('ASSET', 'UPLOADED', 'RECORDED').
@@ -140,8 +156,9 @@ class AudioService {
           cleanTarget.startsWith('https://') ||
           cleanTarget.startsWith('blob:') ||
           cleanTarget.startsWith('data:')) {
-        source = UrlSource(cleanTarget);
-        debugPrint('Resolved Source Object: UrlSource ($cleanTarget)');
+        final authorizedTarget = await _appendAuthTokenIfNeeded(cleanTarget);
+        source = UrlSource(authorizedTarget);
+        debugPrint('Resolved Source Object: UrlSource ($authorizedTarget)');
       } else if (cleanTarget.startsWith('assets/')) {
         final String cleanPath = cleanTarget.substring(7);
         source = AssetSource(cleanPath);
@@ -149,8 +166,9 @@ class AudioService {
       } else {
         final resolvedUrl = ApiConfig.resolveServerUrl(cleanTarget);
         if (resolvedUrl.startsWith('http://') || resolvedUrl.startsWith('https://')) {
-          source = UrlSource(resolvedUrl);
-          debugPrint('Resolved Source Object: UrlSource ($resolvedUrl)');
+          final authorizedTarget = await _appendAuthTokenIfNeeded(resolvedUrl);
+          source = UrlSource(authorizedTarget);
+          debugPrint('Resolved Source Object: UrlSource ($authorizedTarget)');
         } else {
           source = DeviceFileSource(cleanTarget);
           debugPrint('Resolved Source Object: DeviceFileSource ($cleanTarget)');
@@ -201,7 +219,8 @@ class AudioService {
               resolvedBgUrl.startsWith('https://') ||
               resolvedBgUrl.startsWith('data:') ||
               resolvedBgUrl.startsWith('blob:')) {
-            bgSource = UrlSource(resolvedBgUrl);
+            final authorizedBgUrl = await _appendAuthTokenIfNeeded(resolvedBgUrl);
+            bgSource = UrlSource(authorizedBgUrl);
           } else {
             bgSource = DeviceFileSource(resolvedBgUrl);
           }

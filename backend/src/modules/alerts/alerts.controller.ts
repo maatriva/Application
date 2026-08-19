@@ -4,36 +4,73 @@ import { AuthenticatedRequest } from '../auth/auth.types';
 
 export class AlertsController {
   /**
-   * Helper to fetch baby IDs associated with the current caregiver/parent.
+   * Helper to fetch baby IDs associated with the current caregiver/parent with strict authorization checks.
    */
   private static async getAuthorizedBabyIds(userId: string): Promise<string[]> {
-    const babies = await prisma.baby.findMany({
-      where: {
-        OR: [
-          { parentId: userId },
-          {
-            caregivers: {
-              some: {
-                userId,
-                status: 'accepted',
-              },
-            },
-          },
-        ],
-      },
+    const now = new Date();
+    const authorizedIds = new Set<string>();
+
+    // 1. Fetch babies owned by parent
+    const parentBabies = await prisma.baby.findMany({
+      where: { parentId: userId, deletedAt: null },
       select: { id: true },
     });
-    return babies.map((b) => b.id);
+    for (const b of parentBabies) {
+      authorizedIds.add(b.id);
+    }
+
+    // 2. Fetch active temporary permissions
+    const activeTempPerms = await (prisma as any).temporaryCaregiverPermission.findMany({
+      where: {
+        caregiverId: userId,
+        status: 'ACTIVE',
+        revoked: false,
+        expiresAt: { gt: now },
+      },
+      select: { babyId: true },
+    });
+    for (const tp of activeTempPerms) {
+      if (tp.babyId) authorizedIds.add(tp.babyId);
+    }
+
+    // 3. Fetch base caregiver records ONLY IF no temporary permission record exists for that baby
+    const baseCaregivers = await prisma.caregiver.findMany({
+      where: {
+        userId,
+        status: 'accepted',
+      },
+      select: { babyId: true },
+    });
+    for (const cg of baseCaregivers) {
+      if (cg.babyId) {
+        const hasTempRecord = await (prisma as any).temporaryCaregiverPermission.findFirst({
+          where: {
+            caregiverId: userId,
+            babyId: cg.babyId,
+          },
+        });
+        if (!hasTempRecord) {
+          authorizedIds.add(cg.babyId);
+        }
+      }
+    }
+
+    return Array.from(authorizedIds);
   }
 
   /**
    * GET /alerts
+   * Paginated alerts fetch for authorized babies
    */
   public static async getAlerts(req: AuthenticatedRequest, res: Response) {
     const userId = req.user?.userId;
     if (!userId) {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
+
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const limit = Math.min(100, parseInt(req.query.limit as string, 10) || 50);
+    const skip = (page - 1) * limit;
 
     try {
       const babyIds = await AlertsController.getAuthorizedBabyIds(userId);
@@ -42,6 +79,8 @@ export class AlertsController {
           babyId: { in: babyIds },
         },
         orderBy: { timestamp: 'desc' },
+        skip,
+        take: limit,
       });
 
       const mappedAlerts = alerts.map((a) => ({
@@ -53,6 +92,11 @@ export class AlertsController {
         success: true,
         message: 'Alerts retrieved successfully.',
         data: mappedAlerts,
+        pagination: {
+          page,
+          limit,
+          count: mappedAlerts.length,
+        },
       });
     } catch (e: any) {
       res.status(500).json({

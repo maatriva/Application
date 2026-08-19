@@ -13,7 +13,11 @@ export interface AuthenticatedRequest extends Request {
 
 export function authenticateToken(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  let token = authHeader && authHeader.split(' ')[1];
+
+  if (!token && req.query.token && typeof req.query.token === 'string') {
+    token = req.query.token;
+  }
 
   if (!token) {
     return res.status(401).json({ error: 'Access token required.' });
@@ -34,46 +38,99 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
       try {
         const now = new Date();
         const fullPath = (req.baseUrl + req.path).replace(/\/$/, '');
+        const normPath = fullPath.replace(/^\/api/, '');
         const method = req.method;
 
         // Paths needed for authentication, profile, and checking permission status
         const isSelfManagementPath =
-          fullPath === '/users/profile' ||
-          fullPath === '/auth/profile' ||
-          fullPath === '/caregivers/active-permissions' ||
-          fullPath === '/caregiver/active-permissions' ||
-          fullPath === '/caregivers/access' ||
-          fullPath === '/caregiver/access' ||
-          fullPath === '/caregiver/access/active' ||
-          fullPath === '/caregivers/access/active' ||
-          fullPath === '/caregivers/invitations' ||
-          fullPath === '/caregivers/accept' ||
-          fullPath === '/caregivers/invitation/accept' ||
-          fullPath === '/caregivers/invitation/reject';
+          normPath === '/users/profile' ||
+          normPath === '/auth/profile' ||
+          normPath === '/caregivers/active-permissions' ||
+          normPath === '/caregiver/active-permissions' ||
+          normPath === '/caregivers/access' ||
+          normPath === '/caregiver/access' ||
+          normPath === '/caregiver/access/active' ||
+          normPath === '/caregivers/access/active' ||
+          normPath === '/caregivers/invitations' ||
+          normPath === '/caregivers/accept' ||
+          normPath === '/caregivers/invitation/accept' ||
+          normPath === '/caregivers/access/accept' ||
+          normPath === '/caregivers/invitation/reject' ||
+          normPath === '/caregivers/server-time';
 
         if (!isSelfManagementPath) {
-          // Verify caregiver has an active, unexpired, non-revoked permission record in DB
+          // Extract babyId from query, body, path params, or URL path segments
+          const pathSegments = normPath.split('/');
+          let targetBabyId = (req.params.babyId || req.query.babyId || req.body.babyId) as string | undefined;
+          if (!targetBabyId && pathSegments[1] === 'babies' && pathSegments[2] && pathSegments[2] !== 'undefined') {
+            targetBabyId = pathSegments[2];
+          }
+
+          const whereClause: any = {
+            caregiverId: authReq.user.userId,
+            revoked: false,
+            expiresAt: { gt: now },
+            status: 'ACTIVE',
+          };
+          if (targetBabyId) {
+            whereClause.babyId = targetBabyId;
+          }
+
           const activeTempPerm = await (prisma as any).temporaryCaregiverPermission.findFirst({
+            where: whereClause,
+          });
+
+          // Check if caregiver has any temporary QR permission record for this baby
+          const hasTempRecord = await (prisma as any).temporaryCaregiverPermission.findFirst({
             where: {
               caregiverId: authReq.user.userId,
-              revoked: false,
-              expiresAt: { gt: now },
+              ...(targetBabyId && { babyId: targetBabyId }),
             },
           });
 
-          const activeCaregiver = await prisma.caregiver.findFirst({
-            where: {
-              userId: authReq.user.userId,
-              status: 'accepted',
-            },
-          });
+          let isAuthorized = false;
+          if (activeTempPerm) {
+            isAuthorized = true;
+          } else if (!hasTempRecord) {
+            // Permanent base caregiver mapping (e.g. SECONDARY_PARENT, CO_PARENT)
+            const activeCaregiver = await prisma.caregiver.findFirst({
+              where: {
+                userId: authReq.user.userId,
+                status: 'accepted',
+                accessLevel: { in: ['SECONDARY_PARENT', 'CO_PARENT', 'PERMANENT_CAREGIVER'] },
+                ...(targetBabyId && { babyId: targetBabyId }),
+              },
+            });
+            if (activeCaregiver) {
+              isAuthorized = true;
+            }
+          }
 
-          if (!activeTempPerm && !activeCaregiver) {
+          if (!isAuthorized) {
             console.warn(`[RESTRICTION] Blocked caregiver ${authReq.user.userId}: Permission expired or revoked.`);
             return res.status(403).json({
               error: 'Your caregiver monitoring access has expired or been revoked by the parent.',
               code: 'ACCESS_EXPIRED_OR_REVOKED',
             });
+          }
+
+          // Enforce specific action permission flags if temporary caregiver permission exists
+          if (activeTempPerm) {
+            if (normPath.startsWith('/cradle') && !activeTempPerm.canControlCradle) {
+              return res.status(403).json({ error: 'Access denied: Cradle control permission disabled by parent.', code: 'PERMISSION_DISABLED' });
+            }
+            if (normPath.startsWith('/music/recordings') && !activeTempPerm.canViewCustomLullabies && !activeTempPerm.canPlayMusic) {
+              return res.status(403).json({ error: 'Access denied: Custom parent folder permission disabled by parent.', code: 'PERMISSION_DISABLED' });
+            }
+            if (normPath.startsWith('/ai') && !activeTempPerm.canUseAI) {
+              return res.status(403).json({ error: 'Access denied: AI chatbot permission disabled by parent.', code: 'PERMISSION_DISABLED' });
+            }
+            if (normPath.startsWith('/telemetry/history') && !activeTempPerm.canViewTelemetry) {
+              return res.status(403).json({ error: 'Access denied: Historical telemetry reports disabled by parent.', code: 'PERMISSION_DISABLED' });
+            }
+            if (normPath.startsWith('/camera') && !activeTempPerm.canViewCamera) {
+              return res.status(403).json({ error: 'Access denied: Live video permission disabled by parent.', code: 'PERMISSION_DISABLED' });
+            }
           }
         }
 
@@ -87,16 +144,16 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
 
         if (isRestricted) {
           const isAllowed =
-            (method === 'GET' && /^\/devices\/[^\/]+\/latest$/.test(fullPath)) ||
-            (method === 'GET' && /^\/telemetry\/latest\/[^\/]+$/.test(fullPath)) ||
-            (method === 'GET' && /^\/telemetry\/history\/[^\/]+$/.test(fullPath)) ||
-            (method === 'GET' && /^\/devices\/[^\/]+\/alerts$/.test(fullPath)) ||
-            (method === 'POST' && (fullPath === '/caregivers/accept' || fullPath === '/caregivers/invitation/accept' || fullPath === '/caregivers/invitation/reject')) ||
-            (method === 'GET' && (fullPath === '/caregivers/invitations' || fullPath === '/caregivers' || fullPath === '/caregivers/active-permissions' || fullPath === '/caregivers/access' || fullPath === '/caregiver/access')) ||
-            (method === 'GET' && (fullPath === '/music' || fullPath === '/music/shared')) ||
-            (method === 'GET' && fullPath === '/babies') ||
-            (method === 'GET' && /^\/babies\/[^\/]+$/.test(fullPath)) ||
-            (method === 'GET' && (fullPath === '/users/profile' || fullPath === '/auth/profile'));
+            (method === 'GET' && /^\/devices\/[^\/]+\/latest$/.test(normPath)) ||
+            (method === 'GET' && /^\/telemetry\/latest\/[^\/]+$/.test(normPath)) ||
+            (method === 'GET' && /^\/telemetry\/history\/[^\/]+$/.test(normPath)) ||
+            (method === 'GET' && /^\/devices\/[^\/]+\/alerts$/.test(normPath)) ||
+            (method === 'POST' && (normPath === '/caregivers/accept' || normPath === '/caregivers/invitation/accept' || normPath === '/caregivers/access/accept' || normPath === '/caregivers/invitation/reject')) ||
+            (method === 'GET' && (normPath === '/caregivers/invitations' || normPath === '/caregivers' || normPath === '/caregivers/active-permissions' || normPath === '/caregivers/access' || normPath === '/caregiver/access' || normPath === '/caregivers/server-time')) ||
+            (method === 'GET' && (normPath === '/music' || normPath === '/music/shared')) ||
+            (method === 'GET' && normPath === '/babies') ||
+            (method === 'GET' && /^\/babies\/[^\/]+$/.test(normPath)) ||
+            (method === 'GET' && (normPath === '/users/profile' || normPath === '/auth/profile'));
 
           if (!isAllowed) {
             console.warn(`[RESTRICTION] Blocked caregiver request to ${method} ${fullPath}`);
@@ -118,7 +175,11 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
 
 export function optionalAuthenticateToken(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  let token = authHeader && authHeader.split(' ')[1];
+
+  if (!token && req.query.token && typeof req.query.token === 'string') {
+    token = req.query.token;
+  }
 
   if (!token) {
     return next();
@@ -148,4 +209,3 @@ export function requireRole(allowedRoles: UserRole[]) {
     next();
   };
 }
-

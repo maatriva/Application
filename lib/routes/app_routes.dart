@@ -120,6 +120,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           state.matchedLocation == AppRoutes.login ||
               state.matchedLocation == AppRoutes.register;
 
+      final isGuestAllowedRoute = isLoggingInOrRegistering ||
+          state.matchedLocation == AppRoutes.joinSharedBaby ||
+          state.matchedLocation == AppRoutes.caregiverAcceptInvite ||
+          state.matchedLocation == AppRoutes.caregiverAccess;
+
       // While verifying tokens on startup, hold user on splash
       if (auth.status == AuthStatus.initial ||
           (auth.status == AuthStatus.loading && state.matchedLocation == AppRoutes.splash)) {
@@ -128,7 +133,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
 
       // Guest redirection
       if (auth.status == AuthStatus.unauthenticated) {
-        if (isLoggingInOrRegistering) return null;
+        if (isGuestAllowedRoute) return null;
         return AppRoutes.login;
       }
 
@@ -199,15 +204,21 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: AppRoutes.home,
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final tabStr = state.uri.queryParameters['tab'];
           final tab = tabStr != null ? int.tryParse(tabStr) ?? 0 : 0;
-          return HomeScreen(initialTab: tab);
+          return NoTransitionPage(
+            key: state.pageKey,
+            child: HomeScreen(initialTab: tab),
+          );
         },
       ),
       GoRoute(
         path: AppRoutes.music,
-        builder: (context, state) => const MusicHomeScreen(),
+        pageBuilder: (context, state) => NoTransitionPage(
+          key: state.pageKey,
+          child: const MusicHomeScreen(),
+        ),
       ),
       GoRoute(
         path: AppRoutes.musicPlayer,
@@ -234,7 +245,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: AppRoutes.predictiveHealth,
-        builder: (context, state) => const PredictiveHealthScreen(),
+        pageBuilder: (context, state) => NoTransitionPage(
+          key: state.pageKey,
+          child: const PredictiveHealthScreen(),
+        ),
       ),
       GoRoute(
         path: AppRoutes.telemetryHistory,
@@ -293,7 +307,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: AppRoutes.shop,
-        builder: (context, state) => const ShopScreen(),
+        pageBuilder: (context, state) => NoTransitionPage(
+          key: state.pageKey,
+          child: const ShopScreen(),
+        ),
       ),
       GoRoute(
         path: AppRoutes.shopProductDetails,

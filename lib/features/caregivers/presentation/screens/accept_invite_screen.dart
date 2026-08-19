@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
 import '../../../../core/services/providers.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
+import '../../../authentication/presentation/providers/auth_provider.dart';
+import '../widgets/unauthorized_caretaker_card.dart';
 
 class AcceptInviteScreen extends ConsumerStatefulWidget {
   final String token;
@@ -101,7 +103,7 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen> {
       setState(() {
         _isLoading = false;
         _isSuccess = true;
-        _successMessage = 'You have accepted the caregiver invitation successfully!';
+        _successMessage = 'Caregiver access invitation accepted successfully!';
       });
     } catch (e) {
       setState(() {
@@ -149,6 +151,9 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authNotifierProvider);
+    final isUnauthenticated = authState.status != AuthStatus.authenticated;
+
     final babyName = _inviteDetails?['baby']?['name'] ?? 'Baby';
     final inviterName = _inviteDetails?['inviter']?['fullName'] ?? 'Caregiver';
     final role = _inviteDetails?['role'] ?? 'SECONDARY_PARENT';
@@ -159,6 +164,18 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.textPrimary),
+          onPressed: () {
+            if (isUnauthenticated) {
+              context.go('/login');
+            } else if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/');
+            }
+          },
+        ),
         title: Text(
           'Caregiver Invitation',
           style: GoogleFonts.plusJakartaSans(
@@ -170,7 +187,14 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen> {
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
-          child: Container(
+          child: isUnauthenticated
+              ? const UnauthorizedCaretakerCard(
+                  customTitle: 'Unauthorized Access - Login First',
+                  customMessage:
+                      'You must log in with a caretaker account before accepting or viewing caregiver invitations.',
+                  customButtonText: 'Login First',
+                )
+              : Container(
             padding: const EdgeInsets.all(28.0),
             decoration: BoxDecoration(
               color: Colors.white,

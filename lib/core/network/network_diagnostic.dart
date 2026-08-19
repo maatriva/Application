@@ -98,14 +98,24 @@ class NetworkDiagnostic {
         }
 
         final errString = err.error?.toString().toLowerCase() ?? '';
-        if (errString.contains('refused') || errString.contains('socketexception')) {
+        if (errString.contains('no route to host') || errString.contains('unreachable') || errString.contains('ehostunreach')) {
           return NetworkDiagnosticResult(
             type: DiagnosticResultType.connectionRefused,
-            title: 'Connection Refused',
-            message: 'Connection refused at $baseUrl. Ensure backend is running on port 3000.',
+            title: 'No Route to Host',
+            message: 'Cannot reach $baseUrl. 1) Verify phone/device and PC are on the SAME Wi-Fi (disable mobile 4G/5G data). 2) Run "ipconfig" on PC to check if your IP changed. 3) Ensure Windows Firewall allows Node.js on Port 3000.',
             targetUrl: fullUrl,
           );
-        } else if (errString.contains('host') || errString.contains('dns') || errString.contains('lookup')) {
+        } else if (errString.contains('refused') ||
+            errString.contains('socketexception') ||
+            errString.contains('os error') ||
+            errString.contains('errno')) {
+          return NetworkDiagnosticResult(
+            type: DiagnosticResultType.connectionRefused,
+            title: 'Connection Error (OS Error)',
+            message: 'Unable to reach backend at $baseUrl. If testing on a phone or camera, tap the Server IP button on the Login screen and enter your PC\'s Wi-Fi IP (e.g. http://192.168.x.x:3000). On Android Emulator, use http://10.0.2.2:3000/api.',
+            targetUrl: fullUrl,
+          );
+        } else if (errString.contains('dns') || errString.contains('lookup')) {
           return NetworkDiagnosticResult(
             type: DiagnosticResultType.dnsFailure,
             title: 'DNS Lookup Failed',
@@ -117,7 +127,7 @@ class NetworkDiagnostic {
         return NetworkDiagnosticResult(
           type: DiagnosticResultType.connectionRefused,
           title: 'Connection Failed',
-          message: 'Unable to connect to $baseUrl. Check network connectivity.',
+          message: 'Unable to connect to $baseUrl (OS Error). Verify backend is running and server IP is configured correctly.',
           targetUrl: fullUrl,
         );
 

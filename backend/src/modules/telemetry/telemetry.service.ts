@@ -100,7 +100,28 @@ export class TelemetryService {
       return baby;
     }
 
-    // 2. Caregiver check
+    // 2. Temporary Caregiver check (with time window & feature flags)
+    const now = new Date();
+    const activeTempPerm = await (prisma as any).temporaryCaregiverPermission.findFirst({
+      where: {
+        caregiverId: userId,
+        babyId,
+        revoked: false,
+        status: 'ACTIVE',
+        expiresAt: { gt: now },
+      },
+    });
+
+    if (activeTempPerm) {
+      if (!activeTempPerm.canViewTelemetry && action === 'VIEW_HISTORY') {
+        const err: any = new Error('Access denied: Telemetry history access disabled by parent.');
+        err.statusCode = 403;
+        throw err;
+      }
+      return baby;
+    }
+
+    // 3. Base Caregiver check
     const caregiver = await prisma.caregiver.findFirst({
       where: {
         babyId,
@@ -110,12 +131,12 @@ export class TelemetryService {
     });
 
     if (!caregiver) {
-      const err: any = new Error('Access denied to baby telemetry.');
+      const err: any = new Error('Access denied: You do not have active permission to view telemetry for this baby.');
       err.statusCode = 403;
       throw err;
     }
 
-    // 3. Enforce Role restrictions
+    // 4. Enforce Role restrictions
     const role = caregiver.accessLevel.toUpperCase(); // SECONDARY_PARENT, GRANDPARENT, BABYSITTER
 
     if (action === 'VIEW_HISTORY' && role === 'BABYSITTER') {

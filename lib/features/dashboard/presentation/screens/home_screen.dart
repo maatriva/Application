@@ -172,16 +172,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final authState = ref.watch(authNotifierProvider);
     final baby = ref.watch(dashboardProvider.select((s) => s.baby));
     final isCaregiver = authState.session?.role == UserRole.caregiver;
-    final isLiveMonitorOnly = isCaregiver || baby?.accessLevel == 'LIVE_MONITOR_ONLY';
+
+    final cacheService = ref.watch(cacheServiceProvider);
+    final caregiverSession = cacheService.getCaregiverGrantedSession();
+    final perms = (caregiverSession?['permissions'] as Map<String, dynamic>?) ?? {};
+    final bool permsHealth = !isCaregiver || (perms['health_data'] == true);
+    final bool permsAi = !isCaregiver || (perms['ai_assistant'] == true);
+
+    final isLiveMonitorOnly = (isCaregiver && !permsHealth) || baby?.accessLevel == 'LIVE_MONITOR_ONLY';
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: _currentNavIndex == 0 ? const DashboardHeader() : null,
       drawer: const AppDrawer(),
       body: _buildBody(isLiveMonitorOnly, isCaregiver),
-      floatingActionButton: isLiveMonitorOnly
-          ? null
-          : Container(
+      floatingActionButton: (!isCaregiver || permsAi)
+          ? Container(
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 boxShadow: [
@@ -203,7 +209,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   size: 28,
                 ),
               ),
-            ),
+            )
+          : null,
       bottomNavigationBar: BottomNavigation(
         currentIndex: _currentNavIndex,
         onTap: (index) {
@@ -211,24 +218,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             setState(() {
               _currentNavIndex = 0;
             });
+            context.go('/?tab=0');
           } else if (index == 1) {
-            if (isLiveMonitorOnly) {
-              _showRestrictedAccessDialog(context, 'Health Analytics');
-              return;
-            }
-            context.push('/predictive-health');
+            context.go('/predictive-health');
           } else if (index == 2) {
             setState(() {
               _currentNavIndex = 2;
             });
+            context.go('/?tab=1');
           } else if (index == 3) {
-            context.push('/music');
+            setState(() {
+              _currentNavIndex = 3;
+            });
+            context.go('/music');
           } else if (index == 4) {
-            if (isLiveMonitorOnly) {
-              _showRestrictedAccessDialog(context, 'Nursery Shop');
-              return;
-            }
-            context.push('/shop');
+            setState(() {
+              _currentNavIndex = 4;
+            });
+            context.go('/shop');
           }
         },
       ),
@@ -388,10 +395,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 }
 
                 final caregiverState = ref.watch(caregiverAccessProvider);
+                final now = DateTime.now().add(caregiverState.serverClockOffset);
                 final activeSessions = caregiverState.activeSessions
-                    .where((s) => s.status == SessionStatus.active)
+                    .where((s) =>
+                        s.status != SessionStatus.expired &&
+                        s.expiresAt.isAfter(now))
                     .toList();
                 final activeCaregiverName = activeSessions.isNotEmpty ? activeSessions.first.name : null;
+                final activeSessionId = activeSessions.isNotEmpty ? activeSessions.first.id : null;
 
                 if (!isCaregiver && (activeCaregiverName == null || activeCaregiverName.trim().isEmpty)) {
                   return const SizedBox.shrink();
@@ -403,6 +414,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     isCaregiver: isCaregiver,
                     expiresAt: expiresAt,
                     activeCaregiverName: activeCaregiverName,
+                    activeSessionId: activeSessionId,
                     onLogoutExpired: () {
                       ref.read(authNotifierProvider.notifier).logout();
                     },

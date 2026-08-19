@@ -32,6 +32,7 @@ model User {
   invitations        Invitation[]          @relation("UserInvitations")
   parentPermissions    TemporaryCaregiverPermission[] @relation("ParentTemporaryPermissions")
   caregiverPermissions TemporaryCaregiverPermission[] @relation("CaregiverTemporaryPermissions")
+  sessions             Session[]
 
   @@map("users")
 }
@@ -343,6 +344,23 @@ model TemporaryCaregiverPermission {
 
   @@index([caregiverId, babyId, status, revoked, expiresAt])
   @@index([invitationToken])
+  @@index([invitationTokenHash])
   @@map("temporary_caregiver_permissions")
+}
+
+model Session {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("sessions")
 }
 

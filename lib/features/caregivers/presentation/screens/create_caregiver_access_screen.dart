@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
+import '../../../authentication/presentation/providers/auth_provider.dart';
 import '../../provider/caregiver_access_provider.dart';
 import '../widgets/flip_clock_duration_selector.dart';
 import '../widgets/qr_code_card.dart';
+import '../widgets/unauthorized_caretaker_card.dart';
 
 /// 4-Step Parent Wizard for creating secure, temporary caregiver access.
 /// Step 1: Duration (3-Column Flip Clock + Presets)
@@ -27,47 +29,39 @@ class _CreateCaregiverAccessScreenState
   int _selectedMinutes = 30;
 
   Map<String, bool> _permissions = {
-    'live_monitoring': true,
-    'health_data': true,
-    'ai_assistant': false,
-    'notifications': true,
-    'emergency_alerts': true,
-    'camera_snapshot': false,
-    'music': false,
-    'cradle_controls': false,
+    'custom_music': false,      // Custom parent folder
+    'health_data': true,        // Live telemetry report (Default: ON)
+    'ai_assistant': true,       // AI chatbot (Default: ON)
+    'emergency_alerts': true,   // Real time alert and notification (Default: ON)
+    'camera_snapshot': false,   // Live video
+    'cradle_controls': false,   // Cradle controls
   };
 
   static const Map<String, IconData> permIcons = {
-    'live_monitoring': Icons.videocam_outlined,
-    'health_data': Icons.favorite_border_rounded,
+    'custom_music': Icons.folder_shared_outlined,
+    'health_data': Icons.monitor_heart_outlined,
     'ai_assistant': Icons.smart_toy_outlined,
-    'notifications': Icons.notifications_outlined,
-    'emergency_alerts': Icons.warning_amber_rounded,
-    'camera_snapshot': Icons.photo_camera_outlined,
-    'music': Icons.music_note_outlined,
+    'emergency_alerts': Icons.notifications_active_outlined,
+    'camera_snapshot': Icons.videocam_outlined,
     'cradle_controls': Icons.tune_outlined,
   };
 
   static const Map<String, String> permTitles = {
-    'live_monitoring': 'Live Monitoring',
-    'health_data': 'Telemetry & Health Data',
-    'ai_assistant': 'AI Assistant / Pediatrician',
-    'notifications': 'Notifications & Alerts',
-    'emergency_alerts': 'Emergency Alerts',
-    'camera_snapshot': 'Camera Snapshots',
-    'music': 'Music & Lullabies',
+    'custom_music': 'Custom Parent Folder',
+    'health_data': 'Baby\'s Wellness & Sensor Readings',
+    'ai_assistant': 'AI Chatbot',
+    'emergency_alerts': 'Real-Time Alerts & Notifications',
+    'camera_snapshot': 'Live Video',
     'cradle_controls': 'Cradle Controls',
   };
 
   static const Map<String, String> permDescs = {
-    'live_monitoring': 'Real-time video & audio monitoring feed',
-    'health_data': 'Sleep patterns, vitals and historical health data',
-    'ai_assistant': 'Allow caregiver to consult Maatriva AI assistant',
-    'notifications': 'Receive push notifications for baby events',
-    'emergency_alerts': 'Critical safety alerts & emergency notices',
-    'camera_snapshot': 'Allow viewing captured camera images',
-    'music': 'Control soothing music and lullabies',
-    'cradle_controls': 'Control smart cradle rocking & soothing',
+    'custom_music': 'Access parent custom audio recordings and lullabies folder',
+    'health_data': 'View live baby vitals & telemetry data (live data only, no history)',
+    'ai_assistant': 'Allow caregiver to consult AI Pediatrician chatbot',
+    'emergency_alerts': 'Receive real-time safety alerts and emergency notifications',
+    'camera_snapshot': 'View live nursery video camera feed',
+    'cradle_controls': 'Operate smart cradle rocking & soothing controls',
   };
 
   void _generateQR() async {
@@ -102,12 +96,16 @@ class _CreateCaregiverAccessScreenState
             color: AppColors.textPrimary,
           ),
           onPressed: () {
-            if (_currentStep > 1 && _currentStep < 4) {
+            if (ref.read(authNotifierProvider).status != AuthStatus.authenticated) {
+              context.go('/login');
+            } else if (_currentStep > 1 && _currentStep < 4) {
               setState(() {
                 _currentStep--;
               });
-            } else {
+            } else if (context.canPop()) {
               context.pop();
+            } else {
+              context.go('/');
             }
           },
         ),
@@ -122,19 +120,21 @@ class _CreateCaregiverAccessScreenState
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Step Progress Indicator
-            _buildStepIndicator(),
-            const SizedBox(height: 24),
+        child: ref.watch(authNotifierProvider).status != AuthStatus.authenticated
+            ? const UnauthorizedCaretakerCard()
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Step Progress Indicator
+                  _buildStepIndicator(),
+                  const SizedBox(height: 24),
 
-            if (_currentStep == 1) _buildStep1Duration(),
-            if (_currentStep == 2) _buildStep2Permissions(),
-            if (_currentStep == 3) _buildStep3Review(),
-            if (_currentStep == 4) _buildStep4QR(state),
-          ],
-        ),
+                  if (_currentStep == 1) _buildStep1Duration(),
+                  if (_currentStep == 2) _buildStep2Permissions(),
+                  if (_currentStep == 3) _buildStep3Review(),
+                  if (_currentStep == 4) _buildStep4QR(state),
+                ],
+              ),
       ),
     );
   }

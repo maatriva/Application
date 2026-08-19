@@ -440,19 +440,22 @@ class AppDrawer extends ConsumerWidget {
                     ),
 
                   // 4. Online Music Soother
-                  if (!isCaregiver || permsMusic)
-                    _buildDrawerCard(
-                      context,
-                      icon: Icons.music_note_rounded,
-                      label: 'Online Music Soother',
-                      iconBgColor: const Color(0xFFE8E1FF),
-                      iconColor: const Color(0xFF6C5CE7),
-                      isActive: currentLocation == '/music',
-                      onTap: () {
+                  _buildDrawerCard(
+                    context,
+                    icon: Icons.music_note_rounded,
+                    label: 'Online Music Soother',
+                    iconBgColor: const Color(0xFFE8E1FF),
+                    iconColor: const Color(0xFF6C5CE7),
+                    isActive: currentLocation == '/music',
+                    onTap: () {
+                      if (isCaregiver && !permsMusic) {
+                        _showRestrictedAccessDialog(context, 'Online Music Soother');
+                      } else {
                         Navigator.pop(context);
                         context.go('/music');
-                      },
-                    ),
+                      }
+                    },
+                  ),
 
                   // Admin Upload Option (if admin)
                   if (isAdmin)

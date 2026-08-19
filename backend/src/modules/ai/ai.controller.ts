@@ -1,11 +1,13 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { AiService } from './ai.service';
 import { prisma } from '../../config/database';
+import { AuthenticatedRequest } from '../auth/auth.types';
+import { Logger } from '../../utils/logger';
 
 const aiService = new AiService();
 
 export class AiController {
-  public static async getInsight(req: Request, res: Response) {
+  public static async getInsight(req: AuthenticatedRequest, res: Response) {
     try {
       const { babyStatus, temperature, heartRate, sleepHours, cryCount } = req.body;
       const insight = await aiService.generateDailyInsight({
@@ -17,15 +19,14 @@ export class AiController {
       });
       res.json({ insight });
     } catch (error: any) {
-      console.error('Gemini Insight Generation Error:', error);
+      Logger.error('Gemini Insight Generation Error:', { error });
       res.status(500).json({
         error: 'Could not generate AI insights.',
-        details: error.message || error,
       });
     }
   }
 
-  public static async getReport(req: Request, res: Response) {
+  public static async getReport(req: AuthenticatedRequest, res: Response) {
     try {
       const { babyId } = req.params;
       const type = (req.query.type as string) || 'daily';
@@ -36,21 +37,42 @@ export class AiController {
         });
       }
 
-      const userId = (req as any).user?.userId;
+      const userId = req.user?.userId;
       if (!userId) {
         return res.status(401).json({ error: 'Unauthorized.' });
       }
 
-      // Verify parent ownership of the baby
-      const baby = await prisma.baby.findFirst({
+      const now = new Date();
+      // Verify parent ownership or active caregiver permission
+      const authorizedBaby = await prisma.baby.findFirst({
         where: {
           id: babyId,
-          parentId: userId,
           deletedAt: null,
+          OR: [
+            { parentId: userId },
+            {
+              temporaryCaregiverPermissions: {
+                some: {
+                  caregiverId: userId,
+                  status: 'ACTIVE',
+                  revoked: false,
+                  expiresAt: { gt: now },
+                },
+              },
+            },
+            {
+              caregivers: {
+                some: {
+                  userId,
+                  status: 'accepted',
+                },
+              },
+            },
+          ],
         },
       });
 
-      if (!baby) {
+      if (!authorizedBaby) {
         return res.status(403).json({
           error: 'Access denied or baby profile not found.',
         });
@@ -59,10 +81,9 @@ export class AiController {
       const report = await aiService.getReport(babyId, type as 'daily' | 'weekly' | 'monthly');
       res.json(report);
     } catch (error: any) {
-      console.error('AI Report Generation Error:', error);
+      Logger.error('AI Report Generation Error:', { error });
       res.status(500).json({
         error: 'Could not generate AI report.',
-        details: error.message || error,
       });
     }
   }

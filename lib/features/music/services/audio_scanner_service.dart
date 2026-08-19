@@ -15,7 +15,7 @@ class AudioScannerService {
 
     // 1. Fetch dedicated BGM tracks from backend/uploads/bgm/ folder
     try {
-      final bgmUrl = Uri.parse('${ApiConfig.baseUrl}/api/music/bgm');
+      final bgmUrl = Uri.parse('${ApiConfig.baseUrl}/music/bgm');
       final response = await http.get(bgmUrl).timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -42,13 +42,13 @@ class AudioScannerService {
         }
       }
     } catch (e) {
-      debugPrint('[AudioScannerService] Could not fetch dedicated /api/music/bgm: $e');
+      debugPrint('[AudioScannerService] Could not fetch dedicated /music/bgm: $e');
     }
 
     // 2. Fallback to general catalog if /uploads/bgm/ is empty
     if (tracks.isEmpty) {
       try {
-        final backendUrl = Uri.parse('${ApiConfig.baseUrl}/api/music?limit=100');
+        final backendUrl = Uri.parse('${ApiConfig.baseUrl}/music?limit=100');
         final response = await http.get(backendUrl).timeout(const Duration(seconds: 5));
         if (response.statusCode == 200) {
           final data = json.decode(response.body);

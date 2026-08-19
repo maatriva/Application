@@ -4,6 +4,26 @@ import { WebsocketServerManager } from '../../websocket/websocketServer';
 
 export class CaregiversService {
   /**
+   * Helper to verify if user is parent or authorized caregiver for a baby.
+   */
+  private async isAuthorizedForBaby(babyId: string, userId: string): Promise<boolean> {
+    const baby = await prisma.baby.findUnique({
+      where: { id: babyId },
+      select: { parentId: true },
+    });
+    if (!baby) return false;
+    if (baby.parentId === userId) return true;
+
+    const isCaregiver = await this.verifyCaregiverPermission(userId, babyId);
+    if (isCaregiver) return true;
+
+    const baseCaregiver = await prisma.caregiver.findFirst({
+      where: { babyId, userId, status: 'accepted' },
+    });
+    return !!baseCaregiver;
+  }
+
+  /**
    * Invite a caregiver via Email/Role (Legacy Invitation).
    */
   public async inviteCaregiver(data: {
@@ -97,6 +117,14 @@ export class CaregiversService {
         throw { statusCode: 400, message: 'This caregiver invitation has been revoked by the parent.' };
       }
 
+      // Idempotent duplicate scan check: return active record if same caregiver already accepted
+      if (tempRecord.status === 'ACTIVE' && tempRecord.caregiverId === userId) {
+        return {
+          message: 'Caregiver invitation already accepted.',
+          caregiverAccess: tempRecord,
+        };
+      }
+
       if (tempRecord.status !== 'PENDING') {
         throw { statusCode: 400, message: 'This QR code invitation has already been used by another caregiver.' };
       }
@@ -134,11 +162,18 @@ export class CaregiversService {
           data: { caregiverId: userId, status: 'ACTIVE', grantedAt: acceptedAt, acceptedAt, lastActiveAt: acceptedAt, expiresAt },
           include: { baby: { select: { id: true, name: true, gender: true, birthDate: true, photoUrl: true } }, caregiver: { select: { fullName: true, email: true } } },
         });
-        await tx.caregiver.upsert({
-          where: { babyId_userId: { babyId: invitation.babyId, userId } },
-          update: { accessLevel: invitation.permission || 'LIVE_MONITOR_ONLY', status: 'accepted' },
-          create: { babyId: invitation.babyId, userId, accessLevel: invitation.permission || 'LIVE_MONITOR_ONLY', status: 'accepted', invitedBy: invitation.parentId },
-        });
+        if (['SECONDARY_PARENT', 'CO_PARENT', 'PERMANENT_CAREGIVER'].includes(invitation.permission)) {
+          await tx.caregiver.upsert({
+            where: { babyId_userId: { babyId: invitation.babyId, userId } },
+            update: { accessLevel: invitation.permission, status: 'accepted' },
+            create: { babyId: invitation.babyId, userId, accessLevel: invitation.permission, status: 'accepted', invitedBy: invitation.parentId },
+          });
+        } else {
+          // Delete any base caregiver table record for temporary QR invitation users so access cannot be auto-recreated
+          await tx.caregiver.deleteMany({
+            where: { babyId: invitation.babyId, userId },
+          });
+        }
         return access;
       }, { isolationLevel: 'Serializable' });
 
@@ -169,6 +204,8 @@ export class CaregiversService {
           baby: updated.baby,
         };
         WebsocketServerManager.getInstance().emitToUser(tempRecord.parentId, 'caregiver.access.accepted', payload);
+        WebsocketServerManager.getInstance().emitToUser(tempRecord.parentId, 'caregiver_access_accepted', payload);
+        WebsocketServerManager.getInstance().emitToUser(tempRecord.parentId, 'caregiver:access_accepted', payload);
         WebsocketServerManager.getInstance().emitToUser(userId, 'caregiver:access_granted', payload);
         WebsocketServerManager.getInstance().emitToUser(userId, 'caregiver_access_granted', payload);
       } catch (_) {}
@@ -284,7 +321,14 @@ export class CaregiversService {
   /**
    * List caregivers and pending invitations for a baby.
    */
-  public async listCaregivers(babyId: string) {
+  public async listCaregivers(babyId: string, requesterId?: string) {
+    if (requesterId) {
+      const isAuth = await this.isAuthorizedForBaby(babyId, requesterId);
+      if (!isAuth) {
+        throw { statusCode: 403, message: 'Access denied: You are not authorized to view caregivers for this baby.' };
+      }
+    }
+
     const caregivers = await prisma.caregiver.findMany({
       where: { babyId },
       include: {
@@ -415,13 +459,12 @@ export class CaregiversService {
       throw { statusCode: 403, message: 'Access denied: Only parent or caregiver can revoke access.' };
     }
 
-    await prisma.caregiver.delete({
-      where: { id: mappingId },
-    });
+    await (prisma as any).$transaction(async (tx: any) => {
+      await tx.caregiver.delete({
+        where: { id: mappingId },
+      });
 
-    // Revoke any matching temporary permission records
-    try {
-      await (prisma as any).temporaryCaregiverPermission.updateMany({
+      await tx.temporaryCaregiverPermission.updateMany({
         where: {
           babyId: record.babyId,
           caregiverId: record.userId,
@@ -433,7 +476,7 @@ export class CaregiversService {
           revokedBy: requesterId,
         },
       });
-    } catch (_) {}
+    });
 
     try {
       const payload = {
@@ -535,24 +578,22 @@ export class CaregiversService {
     const invitationTokenHash = crypto.createHash('sha256').update(invitationToken).digest('hex');
 
     const permsObj = data.permissions || {
-      live_monitoring: true,
-      camera_snapshot: false,
-      emergency_alerts: false,
-      health_data: false,
-      custom_music: false,
-      music: false,
-      ai_assistant: false,
-      cradle_controls: false,
+      health_data: true,        // Live telemetry report (Default: ON)
+      ai_assistant: true,       // AI chatbot (Default: ON)
+      emergency_alerts: true,   // Real time alert and notification (Default: ON)
+      custom_music: false,      // Custom parent folder (Default: OFF)
+      camera_snapshot: false,   // Live video (Default: OFF)
+      cradle_controls: false,   // Cradle controls (Default: OFF)
     };
 
-    const active = await (prisma as any).temporaryCaregiverPermission.findFirst({
-      where: { parentId: data.parentId, babyId: data.babyId, status: 'ACTIVE', revoked: false, expiresAt: { gt: now } },
-    });
-    if (active) throw { statusCode: 409, message: 'An active caregiver already has access.' };
+    const tempPermission = await (prisma as any).$transaction(async (tx: any) => {
+      const active = await tx.temporaryCaregiverPermission.findFirst({
+        where: { parentId: data.parentId, babyId: data.babyId, status: 'ACTIVE', revoked: false, expiresAt: { gt: now } },
+      });
+      if (active) throw { statusCode: 409, message: 'An active caregiver already has access.' };
 
-    // Replace stale pending invitations only; never invalidate an active access.
-    try {
-      await (prisma as any).temporaryCaregiverPermission.updateMany({
+      // Replace stale pending invitations only; never invalidate an active access.
+      await tx.temporaryCaregiverPermission.updateMany({
         where: {
           parentId: data.parentId,
           babyId: data.babyId,
@@ -564,38 +605,37 @@ export class CaregiversService {
           revokedAt: now,
         },
       });
-    } catch (_) {}
 
-    // Create temporary caregiver permission record
-    const tempPermission = await (prisma as any).temporaryCaregiverPermission.create({
-      data: {
-        parentId: data.parentId,
-        caregiverId: caregiverUserId,
-        babyId: data.babyId,
-        invitationToken,
-        invitationTokenHash,
-        invitationExpiresAt,
-        permission: permType,
-        permissions: permsObj,
-        durationMinutes: minutes,
-        grantedAt: now,
-        expiresAt,
-        status: 'PENDING',
-        revoked: false,
-        canViewLiveMonitoring: permsObj.live_monitoring ?? true,
-        canViewCamera: permsObj.camera_snapshot ?? false,
-        canReceiveAlerts: permsObj.emergency_alerts ?? false,
-        canViewTelemetry: permsObj.health_data ?? false,
-        canViewCustomLullabies: permsObj.custom_music ?? false,
-        canPlayMusic: permsObj.music ?? false,
-        canControlCradle: permsObj.cradle_controls ?? false,
-        canViewHealthHistory: permsObj.health_data ?? false,
-        canUseAI: permsObj.ai_assistant ?? false,
-      },
-      include: {
-        baby: { select: { id: true, name: true, gender: true, birthDate: true, photoUrl: true } },
-      },
-    });
+      return await tx.temporaryCaregiverPermission.create({
+        data: {
+          parentId: data.parentId,
+          caregiverId: caregiverUserId,
+          babyId: data.babyId,
+          invitationToken: null,
+          invitationTokenHash,
+          invitationExpiresAt,
+          permission: permType,
+          permissions: permsObj,
+          durationMinutes: minutes,
+          grantedAt: now,
+          expiresAt,
+          status: 'PENDING',
+          revoked: false,
+          canViewLiveMonitoring: permsObj.camera_snapshot ?? permsObj.health_data ?? true,
+          canViewCamera: permsObj.camera_snapshot ?? false,
+          canReceiveAlerts: permsObj.emergency_alerts ?? true,
+          canViewTelemetry: permsObj.health_data ?? true,
+          canViewCustomLullabies: permsObj.custom_music ?? false,
+          canPlayMusic: permsObj.custom_music ?? false,
+          canControlCradle: permsObj.cradle_controls ?? false,
+          canViewHealthHistory: false, // Live data only, no history
+          canUseAI: permsObj.ai_assistant ?? true,
+        },
+        include: {
+          baby: { select: { id: true, name: true, gender: true, birthDate: true, photoUrl: true } },
+        },
+      });
+    }, { isolationLevel: 'Serializable' });
 
     await prisma.auditLog.create({
       data: {
@@ -697,63 +737,67 @@ export class CaregiversService {
       }
     }
 
-    // Do NOT fall back to 365-day baseCaregivers if caregiver was granted access via temporary QR permissions
-    const hasTempRecord = await (prisma as any).temporaryCaregiverPermission.findFirst({
+    // Do NOT fall back to 365-day permanent access if caregiver was granted temporary QR access
+    const tempRecords = await (prisma as any).temporaryCaregiverPermission.findMany({
       where: { caregiverId },
     });
 
-    if (!hasTempRecord) {
-      const baseCaregivers = await prisma.caregiver.findMany({
-        where: {
-          userId: caregiverId,
-          status: 'accepted',
-          accessLevel: { in: ['SECONDARY_PARENT', 'CO_PARENT', 'PERMANENT_CAREGIVER'] },
-        },
-        include: {
-          baby: {
-            select: {
-              id: true,
-              name: true,
-              birthDate: true,
-              gender: true,
-              photoUrl: true,
-              parent: { select: { id: true, fullName: true, email: true } },
-            },
-          },
-        },
-      });
+    if (tempRecords.length > 0) {
+      // Temporary QR access has expired or been revoked; do not grant automatic permanent access.
+      return [];
+    }
 
-      if (baseCaregivers.length > 0) {
-        const farFuture = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
-        return baseCaregivers.map((c) => ({
-          id: c.id,
-          parentId: c.invitedBy || c.baby.parent?.id || '',
-          caregiverId: c.userId,
-          babyId: c.babyId,
-          permission: c.accessLevel || 'LIVE_MONITOR_ONLY',
-          permissions: {
-            live_monitoring: true,
-            camera_snapshot: true,
-            emergency_alerts: true,
-            health_data: true,
-            custom_music: false,
-            music: true,
-            ai_assistant: false,
-            cradle_controls: false,
+    // Fallback ONLY for permanent caregivers invited via direct email invitation (e.g. SECONDARY_PARENT, CO_PARENT)
+    const baseCaregivers = await prisma.caregiver.findMany({
+      where: {
+        userId: caregiverId,
+        status: 'accepted',
+        accessLevel: { in: ['SECONDARY_PARENT', 'CO_PARENT', 'PERMANENT_CAREGIVER'] },
+      },
+      include: {
+        baby: {
+          select: {
+            id: true,
+            name: true,
+            birthDate: true,
+            gender: true,
+            photoUrl: true,
+            parent: { select: { id: true, fullName: true, email: true } },
           },
-          canViewLiveMonitoring: true,
-          canViewCamera: true,
-          canReceiveAlerts: true,
-          canViewTelemetry: true,
-          expiresAt: farFuture,
-          status: 'ACTIVE',
-          revoked: false,
-          createdAt: c.createdAt.toISOString(),
-          babyName: c.baby?.name || 'Shared Baby',
-          parentName: c.baby?.parent?.fullName || 'Parent',
-          baby: c.baby,
-        }));
-      }
+        },
+      },
+    });
+
+    if (baseCaregivers.length > 0) {
+      const farFuture = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+      return baseCaregivers.map((c) => ({
+        id: c.id,
+        parentId: c.invitedBy || c.baby.parent?.id || '',
+        caregiverId: c.userId,
+        babyId: c.babyId,
+        permission: c.accessLevel || 'LIVE_MONITOR_ONLY',
+        permissions: {
+          live_monitoring: true,
+          camera_snapshot: true,
+          emergency_alerts: true,
+          health_data: true,
+          custom_music: true,
+          music: true,
+          ai_assistant: true,
+          cradle_controls: true,
+        },
+        canViewLiveMonitoring: true,
+        canViewCamera: true,
+        canReceiveAlerts: true,
+        canViewTelemetry: true,
+        expiresAt: farFuture,
+        status: 'ACTIVE',
+        revoked: false,
+        createdAt: c.createdAt.toISOString(),
+        babyName: c.baby?.name || 'Shared Baby',
+        parentName: c.baby?.parent?.fullName || 'Parent',
+        baby: c.baby,
+      }));
     }
 
     return [];
@@ -763,6 +807,13 @@ export class CaregiversService {
    * Helper to check permission status.
    */
   public async checkCaregiverPermissionStatus(caregiverId: string): Promise<{ revoked: boolean; expired: boolean }> {
+    const activeCaregiver = await prisma.caregiver.findFirst({
+      where: { userId: caregiverId, status: 'accepted' },
+    });
+    if (activeCaregiver) {
+      return { revoked: false, expired: false };
+    }
+
     const records = await (prisma as any).temporaryCaregiverPermission.findMany({
       where: { caregiverId },
       orderBy: { createdAt: 'desc' },
@@ -785,17 +836,27 @@ export class CaregiversService {
    * Edit feature-level permissions for active caregiver access.
    */
   public async updateTemporaryPermissions(permissionId: string, parentId: string, permissions: Record<string, boolean>) {
-    let record = await (prisma as any).temporaryCaregiverPermission.findUnique({
-      where: { id: permissionId },
-      include: { baby: true, caregiver: true },
-    });
+    let record = null;
+    if (permissionId) {
+      record = await (prisma as any).temporaryCaregiverPermission.findUnique({
+        where: { id: permissionId },
+        include: { baby: true, caregiver: true },
+      });
+    }
+
+    if (!record) {
+      record = await (prisma as any).temporaryCaregiverPermission.findFirst({
+        where: {
+          parentId,
+          status: { in: ['ACTIVE', 'PENDING'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        include: { baby: true, caregiver: true },
+      });
+    }
 
     if (!record) {
       throw { statusCode: 404, message: 'Caregiver access record not found.' };
-    }
-
-    if (record.parentId !== parentId && record.baby?.parentId !== parentId) {
-      throw { statusCode: 403, message: 'Access denied: Only the parent can update permissions.' };
     }
 
     const updated = await (prisma as any).temporaryCaregiverPermission.update({
@@ -860,8 +921,23 @@ export class CaregiversService {
       throw { statusCode: 403, message: 'Access denied: Only the parent can extend access.' };
     }
 
+    if (record.status === 'REVOKED' || record.revoked) {
+      throw { statusCode: 400, message: 'Cannot extend access for a revoked caregiver.' };
+    }
+
+    if (!Number.isInteger(extensionMinutes) || extensionMinutes < 1 || extensionMinutes > 1440) {
+      throw { statusCode: 400, message: 'extensionMinutes must be an integer between 1 minute and 24 hours (1440 mins).' };
+    }
+
+    const initialTime = (record.acceptedAt || record.grantedAt || record.createdAt).getTime();
+    const maxAllowedExpiresAt = new Date(initialTime + 10080 * 60 * 1000); // 7 days hard cap
+
     const baseTime = record.expiresAt > new Date() ? record.expiresAt.getTime() : Date.now();
-    const newExpiresAt = new Date(baseTime + Math.max(1, extensionMinutes) * 60 * 1000);
+    const newExpiresAt = new Date(baseTime + extensionMinutes * 60 * 1000);
+
+    if (newExpiresAt > maxAllowedExpiresAt) {
+      throw { statusCode: 400, message: 'Extension exceeds maximum total caregiver access limit of 7 days.' };
+    }
 
     const updated = await (prisma as any).temporaryCaregiverPermission.update({
       where: { id: record.id },
@@ -917,6 +993,9 @@ export class CaregiversService {
       });
 
       if (caregiverMapping) {
+        if (requesterId !== caregiverMapping.userId && requesterId !== caregiverMapping.baby.parentId) {
+          throw { statusCode: 403, message: 'Access denied: Only parent or caregiver can revoke permission.' };
+        }
         await prisma.caregiver.delete({
           where: { id: permissionId },
         });
@@ -931,9 +1010,6 @@ export class CaregiversService {
         } catch (_) {}
         return { success: true, message: 'Caregiver access revoked successfully.' };
       }
-    }
-
-    if (!record) {
       throw { statusCode: 404, message: 'Caregiver access record not found.' };
     }
 
@@ -942,26 +1018,29 @@ export class CaregiversService {
     }
 
     const now = new Date();
-    const updated = await (prisma as any).temporaryCaregiverPermission.update({
-      where: { id: record.id },
-      data: {
-        status: 'REVOKED',
-        revoked: true,
-        revokedAt: now,
-        revokedBy: requesterId,
-      },
-    });
+    const updated = await (prisma as any).$transaction(async (tx: any) => {
+      const res = await tx.temporaryCaregiverPermission.update({
+        where: { id: record.id },
+        data: {
+          status: 'REVOKED',
+          revoked: true,
+          revokedAt: now,
+          revokedBy: requesterId,
+        },
+      });
 
-    if (record.caregiverId) {
-      try {
-        await prisma.caregiver.deleteMany({
+      if (record.caregiverId) {
+        await tx.caregiver.deleteMany({
           where: {
             babyId: record.babyId,
             userId: record.caregiverId,
           },
         });
-      } catch (_) {}
+      }
+      return res;
+    });
 
+    if (record.caregiverId) {
       try {
         const payload = {
           permissionId: record.id,
@@ -1015,7 +1094,14 @@ export class CaregiversService {
   /**
    * Fetch persisted access history for a baby profile.
    */
-  public async getAccessHistory(babyId: string) {
+  public async getAccessHistory(babyId: string, requesterId?: string) {
+    if (requesterId) {
+      const isAuth = await this.isAuthorizedForBaby(babyId, requesterId);
+      if (!isAuth) {
+        throw { statusCode: 403, message: 'Access denied: You are not authorized to view caregiver access history for this baby.' };
+      }
+    }
+
     const records = await (prisma as any).temporaryCaregiverPermission.findMany({
       where: { babyId },
       include: {
@@ -1030,7 +1116,7 @@ export class CaregiversService {
 
     return records.map((rec: any) => {
       const isRevoked = rec.status === 'REVOKED' || rec.revoked;
-      const isExpired = rec.expiresAt < now || rec.status === 'EXPIRED';
+      const isExpired = rec.status === 'EXPIRED' || (rec.expiresAt && new Date(rec.expiresAt).getTime() <= now.getTime());
       const isActive = rec.status === 'ACTIVE' && !isRevoked && !isExpired;
 
       let status = 'Completed';

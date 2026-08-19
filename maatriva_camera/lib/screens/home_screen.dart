@@ -118,9 +118,11 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
+      final apiUrl = SocketService.sanitizeApiUrl(url);
+
       // 1. Authenticate with Backend
       final loginResponse = await http.post(
-        Uri.parse('$url/auth/login'),
+        Uri.parse('$apiUrl/auth/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email, 'password': password}),
       );
@@ -157,8 +159,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _fetchBabiesList(String url, String token) async {
     try {
+      final apiUrl = SocketService.sanitizeApiUrl(url);
       final babiesResponse = await http.get(
-        Uri.parse('$url/babies'),
+        Uri.parse('$apiUrl/babies'),
         headers: {'Authorization': 'Bearer $token'},
       );
 
