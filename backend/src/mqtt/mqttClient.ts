@@ -24,7 +24,7 @@ export class MqttClientManager {
    * Initializes connections and subscribes to telemetry.
    */
   public connect(): void {
-    const url = `mqtt://${env.MQTT_HOST}:${env.MQTT_PORT}`;
+    const url = `mqtts://${env.MQTT_HOST}:${env.MQTT_PORT}`;
     console.log(`Connecting to MQTT Broker at ${url}...`);
 
     this.client = mqtt.connect(url, {
