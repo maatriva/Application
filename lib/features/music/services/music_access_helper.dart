@@ -19,14 +19,12 @@ class MusicAccessHelper {
     if (!isCaregiver) return true;
 
     // Check central permissions set on Caregiver Access page
-    final cacheService = ref.read(cacheServiceProvider);
-    final sessionData = cacheService.getCaregiverGrantedSession();
-    final permissions = sessionData?['permissions'] as Map<String, dynamic>?;
+    final permissions = ref.read(caregiverPermissionsProvider);
 
     if (permissions != null) {
-      final customMusicAllowed = permissions['custom_music'] == true || permissions['music'] == true;
+      final customMusicAllowed = permissions['custom_parent_folder'] == true || permissions['custom_music'] == true || permissions['music'] == true;
       if (!song.isCustomParentSong || song.visibility == 'PUBLIC_LIBRARY') {
-        return permissions['music'] ?? true;
+        return true;
       }
       return customMusicAllowed;
     }

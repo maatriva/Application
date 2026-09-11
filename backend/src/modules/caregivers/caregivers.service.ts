@@ -452,6 +452,12 @@ export class CaregiversService {
     });
 
     if (!record) {
+      const tempRecord = await (prisma as any).temporaryCaregiverPermission.findUnique({
+        where: { id: mappingId },
+      });
+      if (tempRecord) {
+        return await this.revokeTemporaryPermission(mappingId, requesterId);
+      }
       throw { statusCode: 404, message: 'Caregiver mapping not found.' };
     }
 
@@ -885,17 +891,38 @@ export class CaregiversService {
       },
     });
 
+    // The persisted database value, not the request body, is authoritative.
+    const persistedPermissions = (updated.permissions || {}) as Record<string, boolean>;
+    console.debug(`[CaregiversService] Permission update persisted for access ${updated.id}`);
+
+    // Determine target caregiver user ID safely
+    let targetCaregiverId = updated.caregiverId || record.caregiverId || (record.caregiver ? record.caregiver.id : null);
+    if (!targetCaregiverId && updated.babyId) {
+      const activeCaregiverRow = await prisma.caregiver.findFirst({
+        where: { babyId: updated.babyId, status: 'accepted' },
+        select: { userId: true },
+      });
+      if (activeCaregiverRow) {
+        targetCaregiverId = activeCaregiverRow.userId;
+      }
+    }
+
     // Notify caregiver immediately via Socket.IO
-    if (record.caregiverId) {
+    if (targetCaregiverId) {
       try {
         const payload = {
-          permissionId: record.id,
-          babyId: record.babyId,
-          permissions,
+          type: 'CAREGIVER_PERMISSIONS_UPDATED',
+          caregiverAccessId: updated.id,
+          permissionId: updated.id,
+          caregiverId: targetCaregiverId,
+          babyId: updated.babyId,
+          permissions: persistedPermissions,
+          updatedAt: updated.updatedAt.toISOString(),
         };
-        WebsocketServerManager.getInstance().emitToUser(record.caregiverId, 'caregiver_permissions_updated', payload);
-        WebsocketServerManager.getInstance().emitToUser(record.caregiverId, 'caregiver:permissions_updated', payload);
-        WebsocketServerManager.getInstance().emitToUser(record.parentId, 'caregiver.permission.updated', payload);
+        WebsocketServerManager.getInstance().emitToUser(targetCaregiverId, 'caregiver_permissions_updated', payload);
+        WebsocketServerManager.getInstance().emitToUser(targetCaregiverId, 'caregiver:permissions_updated', payload);
+        WebsocketServerManager.getInstance().emitToUser(updated.parentId, 'caregiver.permission.updated', payload);
+        console.debug(`[CaregiversService] Permission update event emitted for target caregiver ${targetCaregiverId}, access ${updated.id}`);
       } catch (wsErr) {
         console.error('[CaregiversService] Error emitting permissions updated event:', wsErr);
       }

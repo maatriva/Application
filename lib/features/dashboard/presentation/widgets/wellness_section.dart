@@ -10,11 +10,15 @@ import 'package:maatriva/shared/widgets/clay_container.dart';
 class WellnessSection extends StatelessWidget {
   final Map<String, VitalsTelemetry>? telemetry;
   final bool isRestricted;
+  final bool showViewAll;
+  final VoidCallback? onViewAllTap;
 
   const WellnessSection({
     super.key,
     this.telemetry,
     this.isRestricted = false,
+    this.showViewAll = true,
+    this.onViewAllTap,
   });
 
   @override
@@ -47,31 +51,34 @@ class WellnessSection extends StatelessWidget {
                 color: AppColors.navyDeep,
               ),
             ),
-            GestureDetector(
-              onTap: () {
-                if (!isRestricted) {
-                  context.push('/wellness-monitoring');
-                }
-              },
-              child: Row(
-                children: [
-                  Text(
-                    'View All',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
+            if (showViewAll)
+              GestureDetector(
+                onTap: () {
+                  if (onViewAllTap != null) {
+                    onViewAllTap!();
+                  } else if (!isRestricted) {
+                    context.go('/predictive-health');
+                  }
+                },
+                child: Row(
+                  children: [
+                    Text(
+                      'View All',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.royalBlue,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 15,
                       color: AppColors.royalBlue,
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  const Icon(
-                    Icons.arrow_forward_rounded,
-                    size: 15,
-                    color: AppColors.royalBlue,
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
           ],
         ),
         const SizedBox(height: 12),

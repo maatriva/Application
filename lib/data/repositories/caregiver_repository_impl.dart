@@ -1,5 +1,6 @@
 import 'dart:convert';
 import '../../core/config/api_config.dart';
+import '../../core/errors/api_exception.dart';
 import '../../core/network/api_client.dart';
 import '../../core/storage/cache_service.dart';
 import '../../domain/repositories/caregiver_repository.dart';
@@ -176,6 +177,7 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
           durationText: map['durationText'] as String? ?? '1 Hour',
           isExpired: isExpired,
           status: displayStatus,
+          timestamp: grantedAt,
         );
       }).toList().cast<AccessHistory>();
     } catch (_) {
@@ -202,7 +204,26 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
       final babyMap = _cacheService.getCachedSelectedBaby();
       babyId = babyMap?['id'] as String?;
     }
-    if (babyId == null) throw Exception('No baby profile found. Please go to the dashboard first to load your baby profile.');
+    if (babyId == null) {
+      try {
+        final res = await _apiClient.get('/babies', requireAuth: true);
+        List rawList = [];
+        if (res is List) {
+          rawList = res;
+        } else if (res is Map && res['data'] is List) {
+          rawList = res['data'] as List;
+        }
+        if (rawList.isNotEmpty && rawList.first is Map) {
+          final firstBaby = Map<String, dynamic>.from(rawList.first as Map);
+          babyId = firstBaby['id'] as String?;
+          if (babyId != null) {
+            await _cacheService.cacheSelectedBaby(firstBaby);
+            await _cacheService.cacheSelectedBabyId(babyId);
+          }
+        }
+      } catch (_) {}
+    }
+    if (babyId == null) throw Exception('No baby profile found. Please create a baby profile first.');
 
     int expiresInMinutes = duration.inMinutes;
     if (expiresInMinutes <= 0) expiresInMinutes = 30;
@@ -244,7 +265,15 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
 
   @override
   Future<void> revokeAccess(String sessionId) async {
-    await _apiClient.delete('/caregivers/$sessionId', requireAuth: true);
+    try {
+      await _apiClient.delete('/caregivers/$sessionId', requireAuth: true);
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        await _apiClient.delete('/caregivers/temporary-permission/$sessionId', requireAuth: true);
+      } else {
+        rethrow;
+      }
+    }
   }
 
   @override
@@ -324,45 +353,25 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
 
   @override
   Future<Map<String, dynamic>> updatePermissions(String permissionId, Map<String, bool> permissions) async {
-    final babyId = _cacheService.getCachedSelectedBabyId();
     final payload = {
-      if (babyId != null) 'babyId': babyId,
-      'caregiverId': permissionId,
-      'sessionId': permissionId,
       'permissionId': permissionId,
       'permissions': permissions,
-      'permission': permissions.entries.where((e) => e.value).map((e) => e.key).join(','),
-      'canViewLiveMonitoring': permissions['live_monitoring'] ?? true,
-      'canViewTelemetry': permissions['health_data'] ?? false,
-      'canViewCamera': permissions['camera_snapshot'] ?? false,
-      'canReceiveAlerts': permissions['emergency_alerts'] ?? permissions['notifications'] ?? false,
-      'canUseAi': permissions['ai_assistant'] ?? false,
-      'canPlayMusic': permissions['custom_music'] ?? permissions['music'] ?? false,
-      'canControlCradle': permissions['cradle_controls'] ?? false,
     };
 
-    final candidateRoutes = [
-      '/caregivers/permissions',
-      '/caregivers/temporary-permissions/$permissionId/permissions',
-      '/caregivers/temporary-permission/$permissionId/permissions',
-      '/caregivers/$permissionId/permissions',
-      '/caregivers/temporary-permissions/$permissionId',
-      '/caregivers/$permissionId',
-    ];
+    final primaryRoute = '/caregivers/temporary-permission/$permissionId/permissions';
+    final fallbackRoute = '/caregivers/temporary-permissions/$permissionId/permissions';
 
     dynamic response;
-    for (final route in candidateRoutes) {
-      try {
-        response = await _apiClient.patch(route, body: payload, requireAuth: true);
-        if (response != null) break;
-      } catch (_) {
-        try {
-          response = await _apiClient.put(route, body: payload, requireAuth: true);
-          if (response != null) break;
-        } catch (_) {}
+    try {
+      response = await _apiClient.patch(primaryRoute, body: payload, requireAuth: true);
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        // Fall back only for true 404 route not found
+        response = await _apiClient.patch(fallbackRoute, body: payload, requireAuth: true);
+      } else {
+        rethrow;
       }
     }
-
 
     if (response is Map<String, dynamic>) {
       if (response.containsKey('data') && response['data'] is Map<String, dynamic>) {
@@ -370,7 +379,8 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
       }
       return response;
     }
-    return {'success': true};
+
+    throw const ApiException(statusCode: 500, message: 'Invalid response format from server.');
   }
 
   @override
@@ -431,44 +441,48 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
       if (res.isNotEmpty) return res;
     }
 
-    final Map<String, bool> res = {};
+    final Map<String, bool> res = {
+      'live_video': true,
+      'health': true,
+      'ai_monitoring': true,
+      'ai_chatbot': true,
+      'custom_parent_folder': true,
+      'shop': true,
+      'real_time_alerts': true,
+    };
+
     if (json.containsKey('canViewLiveMonitoring') || json.containsKey('canViewCamera') || json.containsKey('canViewTelemetry')) {
-      res['live_monitoring'] = json['canViewLiveMonitoring'] ?? true;
-      res['camera_snapshot'] = json['canViewCamera'] ?? false;
-      res['health_data'] = json['canViewTelemetry'] ?? false;
-      res['emergency_alerts'] = json['canReceiveAlerts'] ?? false;
-      res['notifications'] = json['canReceiveAlerts'] ?? false;
-      res['ai_assistant'] = json['canUseAi'] ?? false;
-      res['custom_music'] = json['canPlayMusic'] ?? false;
-      res['cradle_controls'] = json['canControlCradle'] ?? false;
+      if (json.containsKey('canViewCamera')) res['live_video'] = json['canViewCamera'] == true;
+      if (json.containsKey('canViewTelemetry')) res['health'] = json['canViewTelemetry'] == true;
+      if (json.containsKey('canViewAiMonitoring')) res['ai_monitoring'] = json['canViewAiMonitoring'] == true;
+      if (json.containsKey('canUseAi')) res['ai_chatbot'] = json['canUseAi'] == true;
+      if (json.containsKey('canPlayMusic')) res['custom_parent_folder'] = json['canPlayMusic'] == true;
+      if (json.containsKey('canViewShop')) res['shop'] = json['canViewShop'] == true;
+      if (json.containsKey('canReceiveAlerts')) res['real_time_alerts'] = json['canReceiveAlerts'] == true;
     }
 
     final permStr = json['permission'] as String?;
     if (permStr != null && permStr.isNotEmpty) {
       final tokens = permStr.split(',').map((s) => s.trim().toLowerCase()).toSet();
-      if (tokens.contains('live_monitoring')) res['live_monitoring'] = true;
-      if (tokens.contains('camera_snapshot') || tokens.contains('camera')) res['camera_snapshot'] = true;
-      if (tokens.contains('health_data') || tokens.contains('telemetry')) res['health_data'] = true;
-      if (tokens.contains('emergency_alerts') || tokens.contains('notifications') || tokens.contains('alerts')) {
-        res['emergency_alerts'] = true;
-        res['notifications'] = true;
-      }
-      if (tokens.contains('ai_assistant') || tokens.contains('ai')) res['ai_assistant'] = true;
-      if (tokens.contains('custom_music') || tokens.contains('music')) res['custom_music'] = true;
-      if (tokens.contains('cradle_controls') || tokens.contains('cradle')) res['cradle_controls'] = true;
+      if (tokens.contains('live_video') || tokens.contains('camera_snapshot') || tokens.contains('camera')) res['live_video'] = true;
+      if (tokens.contains('health') || tokens.contains('health_data') || tokens.contains('telemetry')) res['health'] = true;
+      if (tokens.contains('ai_monitoring') || tokens.contains('ai')) res['ai_monitoring'] = true;
+      if (tokens.contains('ai_chatbot') || tokens.contains('ai_assistant')) res['ai_chatbot'] = true;
+      if (tokens.contains('custom_parent_folder') || tokens.contains('custom_music') || tokens.contains('music')) res['custom_parent_folder'] = true;
+      if (tokens.contains('shop') || tokens.contains('shop_access')) res['shop'] = true;
+      if (tokens.contains('real_time_alerts') || tokens.contains('emergency_alerts') || tokens.contains('notifications') || tokens.contains('alerts')) res['real_time_alerts'] = true;
     }
 
-    return res.isNotEmpty
-        ? res
-        : {
-            'live_monitoring': true,
-            'health_data': false,
-            'ai_assistant': false,
-            'notifications': true,
-            'emergency_alerts': true,
-            'camera_snapshot': false,
-            'custom_music': false,
-          };
+    // Backward compatibility aliases
+    res['camera_snapshot'] = res['live_video'] == true;
+    res['health_data'] = res['health'] == true;
+    res['health_reports'] = res['health'] == true;
+    res['ai_assistant'] = res['ai_chatbot'] == true;
+    res['custom_music'] = res['custom_parent_folder'] == true;
+    res['emergency_alerts'] = res['real_time_alerts'] == true;
+    res['notifications'] = res['real_time_alerts'] == true;
+
+    return res;
   }
 
   String _mapRoleToRelationship(String role) {

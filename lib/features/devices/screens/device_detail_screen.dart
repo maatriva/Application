@@ -21,6 +21,18 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
   bool _isCheckingUpdate = false;
   bool _isRestarting = false;
 
+  String _formatDate(DateTime? dateTime) {
+    if (dateTime == null) return '17 Aug 2026';
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    final day = dateTime.day.toString().padLeft(2, '0');
+    final month = months[dateTime.month - 1];
+    final year = dateTime.year;
+    return '$day $month $year';
+  }
+
   void _checkFirmware(DeviceModel device) async {
     setState(() {
       _isCheckingUpdate = true;
@@ -740,6 +752,8 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
                     _buildMetaRow('SERIAL NUMBER', device.serialNumber),
                     SizedBox(height: 10.h),
                     _buildMetaRow('DEVICE ID', device.deviceId),
+                    SizedBox(height: 10.h),
+                    _buildMetaRow('PAIRED ON', dashboardDevice?.lastSeen != null ? _formatDate(dashboardDevice!.lastSeen) : '17 Aug 2026'),
                     SizedBox(height: 10.h),
                     _buildMetaRow('LAST CONNECTED', device.lastConnected),
                     SizedBox(height: 10.h),

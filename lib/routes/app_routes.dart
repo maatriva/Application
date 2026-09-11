@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../core/services/providers.dart';
 
 import '../features/dashboard/presentation/screens/home_screen.dart';
 import '../features/ai_assistant/presentation/screens/ai_assistant_screen.dart';
+import '../features/ai_monitoring/presentation/screens/ai_monitoring_screen.dart';
+import '../features/ai_monitoring/presentation/screens/ai_subscription_screen.dart';
+import '../features/ai_monitoring/providers/ai_subscription_provider.dart';
 import '../features/reports/presentation/screens/health_reports_screen.dart';
 import '../features/reports/presentation/screens/predictive_health_screen.dart';
 import '../features/dashboard/presentation/screens/telemetry_history_screen.dart';
@@ -49,6 +53,7 @@ import '../features/authentication/presentation/screens/login_screen.dart';
 import '../features/authentication/presentation/screens/register_screen.dart';
 import '../features/authentication/presentation/screens/splash_screen.dart';
 import '../shared/models/user_session.dart';
+import '../features/devices/providers/device_provider.dart';
 
 /// Centralized route registry paths definition
 class AppRoutes {
@@ -63,6 +68,11 @@ class AppRoutes {
   static const String musicPlaylist = '/music/playlist';
   static const String onboarding = '/onboarding';
   static const String aiAssistant = '/ai-assistant';
+  static const String aiMonitoring = '/ai-monitoring';
+  static const String aiSubscription = '/ai-subscription';
+  static const String aiPurchase = '/ai-purchase';
+  static const String aiMonitor = '/ai-monitor';
+  static const String ai = '/ai';
   static const String healthReports = '/health-reports';
   static const String predictiveHealth = '/predictive-health';
   static const String telemetryHistory = '/telemetry-history';
@@ -109,7 +119,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     refreshNotifier.notify();
   });
 
+  ref.listen(deviceProvider, (_, __) {
+    refreshNotifier.notify();
+  });
+
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: AppRoutes.splash,
     refreshListenable: refreshNotifier,
     redirect: (context, state) {
@@ -148,18 +163,23 @@ final goRouterProvider = Provider<GoRouter>((ref) {
 
         final isCaregiver = auth.session?.role == UserRole.caregiver;
 
-        // Caregiver role route restrictions: block health, shop, ai, and caregiver management screens
+        // Caregiver role route restrictions: redirect subscription purchase and parent management screens
         if (isCaregiver) {
           final loc = state.matchedLocation;
-          final isRestrictedRoute = loc == AppRoutes.healthReports ||
-              loc == AppRoutes.predictiveHealth ||
-              loc == AppRoutes.aiAssistant ||
-              loc == AppRoutes.caregiverAccess ||
-              loc == AppRoutes.parentDetails ||
-              loc.startsWith('/shop');
 
-          if (isRestrictedRoute) {
+          // Caretakers cannot manage caregivers or edit parent details
+          final isParentOnlyRoute = loc == AppRoutes.caregiverAccess ||
+              loc == AppRoutes.createCaregiverAccess ||
+              loc == AppRoutes.caregiverManage ||
+              loc == AppRoutes.parentDetails;
+
+          if (isParentOnlyRoute) {
             return AppRoutes.home;
+          }
+
+          // Caretakers must never land on subscription purchase screens
+          if (loc == AppRoutes.aiSubscription || loc == AppRoutes.aiPurchase) {
+            return AppRoutes.aiMonitoring;
           }
         }
 
@@ -168,21 +188,54 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             return AppRoutes.onboarding;
           }
           return null;
-        } else {
-          // Role-based login redirection verification
-          if (isLoggingInOrRegistering ||
-              state.matchedLocation == AppRoutes.splash ||
-              isGoingToOnboarding) {
-            if (isCaregiver) {
-              final hasActivePerm = auth.session?.hasActiveCaregiverPermission ?? false;
-              if (hasActivePerm) {
-                return AppRoutes.home;
-              }
-              return AppRoutes.joinSharedBaby;
-            }
-            // Parent account: open baby dashboard directly
-            return AppRoutes.home;
+        }
+
+        // MANDATORY SMART CRADLE CONNECTION GUARD (Parent accounts only)
+        if (!isCaregiver) {
+          final deviceState = ref.read(deviceProvider);
+          
+          // Wait if devices are actively scanning and no cached devices are present yet
+          if (deviceState.isScanning && deviceState.devices.isEmpty) {
+            return null;
           }
+
+          final hasPairedCradle = deviceState.devices.isNotEmpty;
+
+          final isAllowedWithoutDevice = state.matchedLocation == AppRoutes.devicePairing ||
+              state.matchedLocation == AppRoutes.onboarding ||
+              state.matchedLocation == AppRoutes.profileEdit ||
+              state.matchedLocation == AppRoutes.helpCenter ||
+              state.matchedLocation == AppRoutes.login ||
+              state.matchedLocation == AppRoutes.splash;
+
+          if (!hasPairedCradle && !isAllowedWithoutDevice) {
+            debugPrint('[RouterRedirect] Parent has 0 paired cradles. Redirecting from ${state.matchedLocation} to ${AppRoutes.devicePairing}.');
+            return AppRoutes.devicePairing;
+          }
+        }
+
+        // Role-based login redirection verification
+        if (isLoggingInOrRegistering ||
+            state.matchedLocation == AppRoutes.splash ||
+            isGoingToOnboarding) {
+          if (isCaregiver) {
+            final hasActivePerm = auth.session?.hasActiveCaregiverPermission ?? false;
+            if (hasActivePerm) {
+              return AppRoutes.home;
+            }
+            return AppRoutes.joinSharedBaby;
+          }
+          
+          final deviceState = ref.read(deviceProvider);
+          if (deviceState.isScanning && deviceState.devices.isEmpty) {
+            return null;
+          }
+
+          if (deviceState.devices.isEmpty) {
+            return AppRoutes.devicePairing;
+          }
+          // Parent account with paired cradle device: open baby dashboard directly
+          return AppRoutes.home;
         }
         return null;
       }
@@ -238,6 +291,46 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.aiAssistant,
         builder: (context, state) => const AiAssistantScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.aiMonitoring,
+        pageBuilder: (context, state) => NoTransitionPage(
+          key: state.pageKey,
+          child: const AiMonitoringScreen(),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.aiSubscription,
+        redirect: (context, state) {
+          final auth = ref.read(authNotifierProvider);
+          if (auth.session?.role == UserRole.caregiver) {
+            return AppRoutes.aiMonitoring;
+          }
+          return null;
+        },
+        pageBuilder: (context, state) => NoTransitionPage(
+          key: state.pageKey,
+          child: const AiSubscriptionScreen(),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.aiPurchase,
+        redirect: (context, state) => AppRoutes.aiSubscription,
+      ),
+      GoRoute(
+        path: AppRoutes.aiMonitor,
+        redirect: (context, state) => AppRoutes.aiMonitoring,
+      ),
+      GoRoute(
+        path: AppRoutes.ai,
+        redirect: (context, state) {
+          final auth = ref.read(authNotifierProvider);
+          if (auth.session?.role == UserRole.caregiver) {
+            return AppRoutes.aiMonitoring;
+          }
+          final subState = ref.read(aiSubscriptionProvider);
+          return subState.isSubscribed ? AppRoutes.aiMonitoring : AppRoutes.aiSubscription;
+        },
       ),
       GoRoute(
         path: AppRoutes.healthReports,
@@ -382,5 +475,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const NotificationsScreen(),
       ),
     ],
+    errorBuilder: (context, state) {
+      final loc = state.uri.path;
+      if (loc.startsWith('/ai')) {
+        final subState = ref.read(aiSubscriptionProvider);
+        return subState.isSubscribed ? const AiMonitoringScreen() : const AiSubscriptionScreen();
+      }
+      return const HomeScreen();
+    },
   );
 });

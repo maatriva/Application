@@ -4,6 +4,7 @@ import '../../../../core/services/providers.dart';
 import '../../../../domain/repositories/device_repository.dart';
 import '../../../../shared/models/client_device_info.dart';
 import '../../../../shared/models/device_model.dart';
+import '../../../../core/storage/cache_service.dart';
 import '../models/activity_model.dart';
 
 // Class to hold both devices and activity state
@@ -38,11 +39,56 @@ class DeviceState {
 
 class DeviceNotifier extends StateNotifier<DeviceState> {
   final DeviceRepository _deviceRepo;
+  final CacheService _cacheService;
 
-  DeviceNotifier({required DeviceRepository deviceRepo})
-      : _deviceRepo = deviceRepo,
-        super(DeviceState(devices: [], activities: [])) {
+  DeviceNotifier({
+    required DeviceRepository deviceRepo,
+    required CacheService cacheService,
+  })  : _deviceRepo = deviceRepo,
+        _cacheService = cacheService,
+        super(_createInitialState(cacheService)) {
     loadDevices();
+  }
+
+  static DeviceState _createInitialState(CacheService cacheService) {
+    final cached = cacheService.getCachedDevices();
+    final initialDevices = cached.map((d) {
+      final info = ClientDeviceInfo.fromJson(d);
+      String description = 'Core IoT peripheral sensor';
+      if (info.type == 'Smart Cradle') {
+        description = 'Primary infant containment & sensory suite with automatic rocking.';
+      } else if (info.type == 'ESP32 Controller') {
+        description = 'Core low-latency telemetry processing unit aggregating sensor clusters.';
+      } else if (info.type == 'Camera') {
+        description = 'Wide-angle 4K infrared night-vision stream with micro-movement analysis.';
+      }
+
+      return DeviceModel(
+        id: info.deviceId,
+        name: info.deviceName,
+        type: info.type,
+        status: info.status == 'online' || info.status == 'ONLINE' || info.status == 'Connected' || info.status == 'PAIRED' ? 'Connected' : 'Offline',
+        lastSynced: 'Just now',
+        firmwareVersion: info.firmwareVersion,
+        latestFirmwareVersion: info.firmwareVersion,
+        deviceId: info.deviceId,
+        serialNumber: 'SN-DEV-${info.deviceId.hashCode.abs()}',
+        lastConnected: 'Today, Just now',
+        batteryStatus: info.battery ?? -1,
+        wifiSignal: 90,
+        signalQuality: 'Excellent',
+        description: description,
+        hdReady: info.type == 'Camera',
+        connectedNetwork: 'Maatriva_Nursery_5G',
+        babyId: info.babyId,
+      );
+    }).toList();
+
+    return DeviceState(
+      devices: initialDevices,
+      activities: [],
+      isScanning: true,
+    );
   }
 
   // Load Devices from repository
@@ -465,5 +511,6 @@ class DeviceNotifier extends StateNotifier<DeviceState> {
 
 final deviceProvider = StateNotifierProvider<DeviceNotifier, DeviceState>((ref) {
   final deviceRepo = ref.watch(deviceRepositoryProvider);
-  return DeviceNotifier(deviceRepo: deviceRepo);
+  final cacheService = ref.watch(cacheServiceProvider);
+  return DeviceNotifier(deviceRepo: deviceRepo, cacheService: cacheService);
 });

@@ -214,9 +214,9 @@ class _JoinSharedBabyScreenState extends ConsumerState<JoinSharedBabyScreen>
       }
 
       final candidateServers = <String>{
+        ApiConfig.baseUrl,
         if (ApiConfig.customBaseUrl != null && ApiConfig.customBaseUrl!.isNotEmpty) ApiConfig.customBaseUrl!,
         resolvedServer,
-        ApiConfig.baseUrl,
         if (defaultTargetPlatform == TargetPlatform.android) 'http://10.0.2.2:3000',
         'http://localhost:3000',
         ApiConfig.prodBaseUrl,

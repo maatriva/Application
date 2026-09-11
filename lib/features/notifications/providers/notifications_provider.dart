@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../shared/models/models.dart';
-import '../data/mock_notifications.dart';
 import '../../../../core/services/websocket_service.dart';
 import '../../../../core/services/providers.dart';
 
@@ -13,7 +12,7 @@ class NotificationsState {
   final String searchQuery;
   final bool isLoading;
 
-  NotificationsState({
+  const NotificationsState({
     required this.notifications,
     required this.selectedCategory,
     required this.searchQuery,
@@ -72,8 +71,8 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
   NotificationsNotifier({required WebSocketService wsService})
     : _wsService = wsService,
       super(
-        NotificationsState(
-          notifications: List.from(initialMockNotifications),
+        const NotificationsState(
+          notifications: [],
           selectedCategory: 'All',
           searchQuery: '',
           isLoading: false,
@@ -264,7 +263,7 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
   }
 
   void resetNotifications() {
-    state = state.copyWith(notifications: List.from(initialMockNotifications));
+    state = state.copyWith(notifications: []);
   }
 
   @override

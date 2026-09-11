@@ -201,9 +201,9 @@
     },
     {
       "name": "flutter",
-      "rootUri": "file:///C:/flutter/packages/flutter",
+      "rootUri": "file:///C:/src/flutter/packages/flutter",
       "packageUri": "lib/",
-      "languageVersion": "3.10"
+      "languageVersion": "3.11"
     },
     {
       "name": "flutter_lints",
@@ -279,15 +279,15 @@
     },
     {
       "name": "flutter_test",
-      "rootUri": "file:///C:/flutter/packages/flutter_test",
+      "rootUri": "file:///C:/src/flutter/packages/flutter_test",
       "packageUri": "lib/",
-      "languageVersion": "3.10"
+      "languageVersion": "3.11"
     },
     {
       "name": "flutter_web_plugins",
-      "rootUri": "file:///C:/flutter/packages/flutter_web_plugins",
+      "rootUri": "file:///C:/src/flutter/packages/flutter_web_plugins",
       "packageUri": "lib/",
-      "languageVersion": "3.10"
+      "languageVersion": "3.11"
     },
     {
       "name": "flutter_webrtc",
@@ -381,9 +381,9 @@
     },
     {
       "name": "matcher",
-      "rootUri": "file:///C:/Users/arman/AppData/Local/Pub/Cache/hosted/pub.dev/matcher-0.12.19",
+      "rootUri": "file:///C:/Users/arman/AppData/Local/Pub/Cache/hosted/pub.dev/matcher-0.12.20",
       "packageUri": "lib/",
-      "languageVersion": "3.7"
+      "languageVersion": "3.10"
     },
     {
       "name": "material_color_utilities",
@@ -393,7 +393,7 @@
     },
     {
       "name": "meta",
-      "rootUri": "file:///C:/Users/arman/AppData/Local/Pub/Cache/hosted/pub.dev/meta-1.18.0",
+      "rootUri": "file:///C:/Users/arman/AppData/Local/Pub/Cache/hosted/pub.dev/meta-1.19.0",
       "packageUri": "lib/",
       "languageVersion": "3.5"
     },
@@ -591,9 +591,9 @@
     },
     {
       "name": "sky_engine",
-      "rootUri": "file:///C:/flutter/bin/cache/pkg/sky_engine",
+      "rootUri": "file:///C:/src/flutter/bin/cache/pkg/sky_engine",
       "packageUri": "lib/",
-      "languageVersion": "3.10"
+      "languageVersion": "3.11"
     },
     {
       "name": "socket_io_client",
@@ -651,9 +651,9 @@
     },
     {
       "name": "test_api",
-      "rootUri": "file:///C:/Users/arman/AppData/Local/Pub/Cache/hosted/pub.dev/test_api-0.7.11",
+      "rootUri": "file:///C:/Users/arman/AppData/Local/Pub/Cache/hosted/pub.dev/test_api-0.7.12",
       "packageUri": "lib/",
-      "languageVersion": "3.7"
+      "languageVersion": "3.10"
     },
     {
       "name": "timezone",
@@ -675,9 +675,9 @@
     },
     {
       "name": "vector_math",
-      "rootUri": "file:///C:/Users/arman/AppData/Local/Pub/Cache/hosted/pub.dev/vector_math-2.2.0",
+      "rootUri": "file:///C:/Users/arman/AppData/Local/Pub/Cache/hosted/pub.dev/vector_math-2.4.2",
       "packageUri": "lib/",
-      "languageVersion": "3.1"
+      "languageVersion": "3.10"
     },
     {
       "name": "vm_service",
@@ -741,8 +741,8 @@
     }
   ],
   "generator": "pub",
-  "generatorVersion": "3.12.2",
-  "flutterRoot": "file:///C:/flutter",
-  "flutterVersion": "3.44.6",
+  "generatorVersion": "3.13.3",
+  "flutterRoot": "file:///C:/src/flutter",
+  "flutterVersion": "3.47.3",
   "pubCache": "file:///C:/Users/arman/AppData/Local/Pub/Cache"
 }

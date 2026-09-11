@@ -30,9 +30,9 @@ class ApiConfig {
   );
 
   static const String devWebBaseUrl = 'http://localhost:3000/api';
-  static const String devAndroidEmulatorBaseUrl = 'http://10.0.2.2:3000/api';
+  static const String devAndroidEmulatorBaseUrl = 'http://192.168.1.40:3000/api';
   static const String stagingBaseUrl = 'https://staging-api.maatriva.cloud/api';
-  static const String prodBaseUrl = 'https://api.maatriva.co.in/api';
+  static const String prodBaseUrl = 'https://maatriva-api.onrender.com/api';
 
   /// Sanitizes and validates any API base URL string.
   /// Ensures valid HTTP/HTTPS scheme, strips trailing slashes, and guarantees a single /api path suffix.
@@ -55,6 +55,25 @@ class ApiConfig {
     }
 
     return formatted;
+  }
+
+  /// Returns true if the API Base URL is explicitly configured via runtime override or --dart-define.
+  static bool get hasExplicitOverride =>
+      (_customBaseUrl != null && _customBaseUrl!.isNotEmpty) || _envApiBaseUrl.isNotEmpty;
+
+  /// Debug helper that logs the active Base URL and configuration source without credentials.
+  static void logActiveBaseUrl() {
+    if (kDebugMode) {
+      final String source;
+      if (_customBaseUrl != null && _customBaseUrl!.isNotEmpty) {
+        source = 'In-App Custom Setting';
+      } else if (_envApiBaseUrl.isNotEmpty) {
+        source = 'Compile-Time Environment (--dart-define)';
+      } else {
+        source = 'Default Environment (${_environment.name})';
+      }
+      debugPrint('[ApiConfig] Active API Base URL ($source): $baseUrl');
+    }
   }
 
   /// Automatically selects the correct base URL based on platform and build mode.

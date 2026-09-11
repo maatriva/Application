@@ -68,60 +68,80 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
   static const String _onboardingKey = 'maatriva_onboarding_completed';
 
   Future<void> checkOnboardingStatus() async {
-    final globalDone = _prefs.getBool(_onboardingKey) ?? false;
     final userEmail = _userEmail;
-    final userDone = userEmail != null && userEmail.isNotEmpty
-        ? (_prefs.getBool('${_onboardingKey}_$userEmail') ?? false)
-        : false;
-
-    if (globalDone || userDone) {
-      state = state.copyWith(currentStep: OnboardingStep.completed, isLoading: false);
-      return;
-    }
 
     if (userEmail == null || userEmail.isEmpty) {
       state = state.copyWith(currentStep: OnboardingStep.welcome, isLoading: false);
       return;
     }
 
+    if (_userRole == UserRole.caregiver) {
+      if (userEmail.isNotEmpty) {
+        await _prefs.setBool('caregiver_setup_completed_$userEmail', true);
+        await _prefs.setBool('${_onboardingKey}_$userEmail', true);
+      }
+      await _prefs.setBool(_welcomeKey, true);
+      state = state.copyWith(currentStep: OnboardingStep.completed, isLoading: false);
+      return;
+    }
+
+    final userDone = _prefs.getBool('${_onboardingKey}_$userEmail') ?? false;
+
+    if (userDone) {
+      state = state.copyWith(currentStep: OnboardingStep.completed, isLoading: false);
+      return;
+    }
+
     state = state.copyWith(isLoading: true);
     try {
-      if (_userRole == UserRole.caregiver) {
-        if (userEmail.isNotEmpty) {
-          await _prefs.setBool('caregiver_setup_completed_$userEmail', true);
-          await _prefs.setBool('${_onboardingKey}_$userEmail', true);
-        }
-        await _prefs.setBool(_welcomeKey, true);
-        state = state.copyWith(currentStep: OnboardingStep.completed, isLoading: false);
-        return;
-      }
+
+      final isWelcomeDone = (_prefs.getBool(_welcomeKey) ?? false) || (userEmail != null && (_prefs.getBool('${_welcomeKey}_$userEmail') ?? false));
 
       try {
-        final babies = await _babyRepo.getBabies();
-        if (babies.isNotEmpty) {
-          debugPrint('[Onboarding] Parent has ${babies.length} existing baby/babies in backend database. Marking onboarding completed.');
-          if (userEmail.isNotEmpty) {
-            await _prefs.setBool('${_onboardingKey}_$userEmail', true);
-          }
+        final profile = await _profileRepo.getProfile();
+        final hasProfileName = profile.parentName.isNotEmpty && profile.parentName != 'No Name Set';
 
-          await _prefs.setBool(_welcomeKey, true);
-          state = state.copyWith(currentStep: OnboardingStep.completed, isLoading: false);
+        if (!isWelcomeDone) {
+          debugPrint('[Onboarding] Welcome slides not completed yet for $userEmail. Showing Welcome step.');
+          state = state.copyWith(currentStep: OnboardingStep.welcome, isLoading: false);
           return;
-        } else {
-          debugPrint('[Onboarding] Parent genuinely has 0 babies in backend database. Showing Register Baby step.');
+        }
+
+        if (!hasProfileName) {
+          debugPrint('[Onboarding] Parent profile incomplete for $userEmail. Showing Profile Setup step.');
+          state = state.copyWith(currentStep: OnboardingStep.profileSetup, isLoading: false);
+          return;
+        }
+
+        final babies = await _babyRepo.getBabies();
+        if (babies.isEmpty) {
+          debugPrint('[Onboarding] Parent has 0 babies in database for $userEmail. Showing Baby Registration step.');
           state = state.copyWith(currentStep: OnboardingStep.babyRegister, isLoading: false);
           return;
         }
-      } catch (e) {
-        debugPrint('[Onboarding] Error checking database babies list: $e');
+
+        final devices = await _deviceRepo.getDevices();
+        if (devices.isEmpty) {
+          debugPrint('[Onboarding] Parent has baby registered but 0 paired devices for $userEmail. Showing Device Pairing step.');
+          state = state.copyWith(currentStep: OnboardingStep.devicePairing, isLoading: false);
+          return;
+        }
+
+        debugPrint('[Onboarding] Parent $userEmail has completed welcome, profile, baby, and ${devices.length} paired device(s). Onboarding completed.');
+        await _prefs.setBool('${_onboardingKey}_$userEmail', true);
+        await _prefs.setBool('${_welcomeKey}_$userEmail', true);
+        await _prefs.setBool(_welcomeKey, true);
         state = state.copyWith(currentStep: OnboardingStep.completed, isLoading: false);
+        return;
+      } catch (e) {
+        debugPrint('[Onboarding] Error checking database profile/babies/devices: $e');
+        state = state.copyWith(currentStep: OnboardingStep.profileSetup, isLoading: false);
       }
     } catch (e) {
       debugPrint('OnboardingNotifier checkStatus error: $e');
-      state = state.copyWith(currentStep: OnboardingStep.completed, isLoading: false);
+      state = state.copyWith(currentStep: OnboardingStep.profileSetup, isLoading: false);
     }
   }
-
 
   Future<void> completeCaregiverSetup({
     required String name,
@@ -150,20 +170,20 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
     final userEmail = _userEmail;
     await _prefs.setBool(_welcomeKey, true);
     if (userEmail != null && userEmail.isNotEmpty) {
-      await _prefs.setBool('${_onboardingKey}_$userEmail', true);
+      await _prefs.setBool('${_welcomeKey}_$userEmail', true);
     }
-    await _prefs.setBool(_onboardingKey, true);
-    state = state.copyWith(currentStep: OnboardingStep.completed, isLoading: false);
+    state = state.copyWith(currentStep: OnboardingStep.profileSetup, isLoading: false);
   }
 
   Future<void> completeOnboarding() async {
     final userEmail = _userEmail;
     await _prefs.setBool(_welcomeKey, true);
+    await _prefs.setBool(_onboardingKey, true);
     if (userEmail != null && userEmail.isNotEmpty) {
       await _prefs.setBool('${_onboardingKey}_$userEmail', true);
+      await _prefs.setBool('${_welcomeKey}_$userEmail', true);
       await _prefs.setBool('caregiver_setup_completed_$userEmail', true);
     }
-    await _prefs.setBool(_onboardingKey, true);
     state = state.copyWith(currentStep: OnboardingStep.completed, isLoading: false);
   }
 
@@ -172,10 +192,7 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
   }
 
   Future<void> skipDevicePairing() async {
-    if (_userEmail != null) {
-      await _prefs.setBool('${_onboardingKey}_$_userEmail', true);
-    }
-    state = state.copyWith(currentStep: OnboardingStep.completed);
+    await checkOnboardingStatus();
   }
 
   void resetOnboarding() async {

@@ -4,7 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
+import 'package:maatriva/core/services/providers.dart';
+import 'package:maatriva/features/authentication/presentation/providers/auth_provider.dart';
+import 'package:maatriva/shared/models/user_session.dart';
 import 'package:maatriva/shared/widgets/bottom_navigation.dart';
+import 'package:maatriva/shared/widgets/caretaker_access_restricted_widget.dart';
+import '../../../ai_monitoring/providers/ai_subscription_provider.dart';
+import '../../services/sensor_analysis_service.dart';
 import '../providers/sensor_report_provider.dart';
 
 class SensorReportScreen extends ConsumerWidget {
@@ -80,8 +86,25 @@ class SensorReportScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final authSession = ref.watch(authNotifierProvider).session;
+    final isCaregiver = authSession?.role == UserRole.caregiver;
+    final perms = ref.watch(caregiverPermissionsProvider);
+    final bool permsHealth = !isCaregiver ||
+        (perms['health'] == true ||
+            perms['health_data'] == true ||
+            perms['health_reports'] == true);
+
+    if (!permsHealth) {
+      return CaretakerAccessRestrictedWidget.restricted(
+        sectionName: 'Health',
+        tabIndex: 1,
+      );
+    }
+
     final state = ref.watch(sensorReportFamilyProvider(sensor));
     final notifier = ref.read(sensorReportFamilyProvider(sensor).notifier);
+    final subState = ref.watch(aiSubscriptionProvider);
+    final isSubscribed = subState.isSubscribed;
 
     final title = _getSensorTitle();
     final isContinuous = ['heart_rate', 'breathing_rate', 'room_temperature', 'humidity'].contains(sensor);
@@ -118,6 +141,12 @@ class SensorReportScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // =======================================================
+                      // SECTION 1: SENSOR INFORMATION & TREND GRAPH
+                      // =======================================================
+                      _buildSectionTag('SECTION 1 • SENSOR INFORMATION'),
+                      const SizedBox(height: 10),
+
                       // Header Card (Live Value + Status)
                       _buildHeaderCard(state.data, isContinuous),
 
@@ -145,11 +174,344 @@ class SensorReportScreen extends ConsumerWidget {
                         // Event Timeline for Non-Continuous Sensors
                         _buildEventTimelineSection(state.data),
                       ],
+
+                      const SizedBox(height: 32),
+
+                      // Section Divider
+                      Row(
+                        children: [
+                          const Expanded(child: Divider(thickness: 1, color: AppColors.divider)),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Icon(Icons.arrow_downward_rounded, size: 16, color: AppColors.textMuted.withValues(alpha: 0.6)),
+                          ),
+                          const Expanded(child: Divider(thickness: 1, color: AppColors.divider)),
+                        ],
+                      ),
+
+                      const SizedBox(height: 28),
+
+                      // =======================================================
+                      // SECTION 2: AI HEALTH ANALYSIS
+                      // =======================================================
+                      _buildSectionTag('SECTION 2 • AI HEALTH ANALYSIS'),
+                      const SizedBox(height: 10),
+
+                      _buildAiHealthAnalysisSection(context, ref, state, notifier, isSubscribed),
                     ],
                   ),
                 ),
 
       bottomNavigationBar: const BottomNavigation(currentIndex: -1),
+    );
+  }
+
+  Widget _buildSectionTag(String label) {
+    return Text(
+      label,
+      style: GoogleFonts.plusJakartaSans(
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+        color: AppColors.royalBlue,
+        letterSpacing: 1.2,
+      ),
+    );
+  }
+
+  Widget _buildAiHealthAnalysisSection(
+    BuildContext context,
+    WidgetRef ref,
+    SensorReportState state,
+    SensorReportNotifier notifier,
+    bool isSubscribed,
+  ) {
+    final authSession = ref.watch(authNotifierProvider).session;
+    final isCaregiver = authSession?.role == UserRole.caregiver;
+    final perms = ref.watch(caregiverPermissionsProvider);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: AppColors.clayShadow,
+        border: Border.all(
+          color: AppColors.royalBlue.withValues(alpha: 0.18),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section Title
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.royalBlue.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 20,
+                  color: AppColors.royalBlue,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'AI Health Analysis',
+                style: GoogleFonts.outfit(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.navyDeep,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Insights based on your selected time range (${SensorAnalysisService.getPeriodReadableText(state.period)})',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Action Button: Get Health Analysis (MUST BE ABOVE ANALYSIS RESULT)
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: state.isAnalyzing
+                  ? null
+                  : () {
+                      if (isSubscribed || (isCaregiver && (perms['ai_assistant'] == true || perms['ai'] == true))) {
+                        notifier.generateAnalysis(true);
+                      } else if (!isCaregiver) {
+                        context.push('/ai-subscription');
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('AI Health Analysis requires parent AI permission.'),
+                            backgroundColor: Colors.orangeAccent,
+                          ),
+                        );
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 2,
+                shadowColor: AppColors.primary.withValues(alpha: 0.3),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.auto_awesome_rounded, size: 18, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Get Health Analysis',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Dynamic Loading State
+          if (state.isAnalyzing) ...[
+            const SizedBox(height: 20),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.backgroundLight,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.primary),
+                  ),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Text(
+                      'Analyzing ${SensorAnalysisService.getPeriodReadableText(state.period)} of ${_getSensorTitle().toLowerCase()} data...',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Analysis Result Card (Shown BELOW the Get Health Analysis button)
+          if (state.analysis != null && !state.isAnalyzing) ...[
+            const SizedBox(height: 20),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: AppColors.backgroundLight,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.divider),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Health Analysis',
+                        style: GoogleFonts.outfit(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryLight,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          state.analysis!.periodLabel,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  if (!state.analysis!.hasSufficientData) ...[
+                    Text(
+                      'Not enough data',
+                      style: GoogleFonts.outfit(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      state.analysis!.insight,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                        height: 1.4,
+                      ),
+                    ),
+                  ] else ...[
+                    if (state.analysis!.average != null) ...[
+                      _buildAnalysisMetricRow('Average', state.analysis!.average!),
+                      const SizedBox(height: 8),
+                    ],
+                    if (state.analysis!.range != null) ...[
+                      _buildAnalysisMetricRow('Range', state.analysis!.range!),
+                      const SizedBox(height: 8),
+                    ],
+                    _buildAnalysisStatusRow('Status', state.analysis!.status),
+                    const SizedBox(height: 14),
+                    const Divider(height: 1, color: AppColors.divider),
+                    const SizedBox(height: 12),
+                    Text(
+                      state.analysis!.insight,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textPrimary,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnalysisMetricRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 13,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textPrimary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAnalysisStatusRow(String label, String status) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 13,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        Row(
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: const BoxDecoration(
+                color: Color(0xFF047857),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              status,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF047857),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -198,7 +560,7 @@ class SensorReportScreen extends ConsumerWidget {
                     Text(
                       isContinuous ? '$currentValue $unit' : currentStatus,
                       style: GoogleFonts.outfit(
-                        fontSize: 22,
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
                         color: AppColors.textPrimary,
                       ),

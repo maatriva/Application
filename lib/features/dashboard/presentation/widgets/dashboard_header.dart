@@ -4,6 +4,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
 import '../../../notifications/providers/notifications_provider.dart';
+import '../../../ai_monitoring/providers/ai_subscription_provider.dart';
+import '../../../authentication/presentation/providers/auth_provider.dart';
+import '../../../../shared/models/user_session.dart';
+import '../providers/dashboard_provider.dart';
 
 /// Clean welcoming app header with soft rounded claymorphic buttons,
 /// notification bell with badge, and profile shortcut button.
@@ -13,6 +17,11 @@ class DashboardHeader extends ConsumerWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final unreadCount = ref.watch(notificationsProvider.select((s) => s.unreadCount));
+    final authSession = ref.watch(authNotifierProvider).session;
+    final baby = ref.watch(dashboardProvider.select((s) => s.baby));
+    final isCaregiver = authSession?.role == UserRole.caregiver || baby?.accessLevel == 'LIVE_MONITOR_ONLY';
+    final isSubscribed = ref.watch(aiSubscriptionProvider).isSubscribed;
+    final isParentSubscribed = !isCaregiver && isSubscribed;
 
     return Container(
       color: AppColors.background,
@@ -62,6 +71,43 @@ class DashboardHeader extends ConsumerWidget implements PreferredSizeWidget {
                       letterSpacing: 1.5,
                     ),
                   ),
+                  if (isParentSubscribed) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFD4AF37), Color(0xFFB8860B)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFD4AF37).withValues(alpha: 0.35),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 10),
+                          const SizedBox(width: 3),
+                          Text(
+                            'AI+',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:maatriva/core/errors/caregiver_error_mapper.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -109,13 +110,13 @@ class QRCodeCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            qrError!,
+                            CaregiverErrorMapper.map(qrError!),
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontSize: 9,
                               color: AppColors.textSecondary,
                             ),
-                            maxLines: 3,
+                            maxLines: 4,
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 8),

@@ -113,7 +113,11 @@ class RefreshTokenInterceptor extends Interceptor {
           }
         } catch (_) {
           await _secureStorage.clearSession();
+          ApiClient.onSessionExpired?.call();
         }
+      } else {
+        await _secureStorage.clearSession();
+        ApiClient.onSessionExpired?.call();
       }
     }
     return super.onError(err, handler);
@@ -152,8 +156,12 @@ class LoggingInterceptor extends Interceptor {
   }
 }
 
+typedef SessionExpiredCallback = void Function();
+
 /// Secure network provider linking HTTP queries to Cloud Backend using Dio.
 class ApiClient {
+  static SessionExpiredCallback? onSessionExpired;
+
   final Dio _dio;
   final SecureStorageService _secureStorage;
   bool _backendInitialized = false;
@@ -185,6 +193,8 @@ class ApiClient {
       RefreshTokenInterceptor(_dio, _secureStorage),
       if (kDebugMode) LoggingInterceptor(),
     ]);
+
+    ApiConfig.logActiveBaseUrl();
   }
 
   Future<void> ensureBackendReady() async {
@@ -193,50 +203,72 @@ class ApiClient {
       return;
     }
 
+    final currentBase = _dio.options.baseUrl;
+
+    // 1. Fast primary health check with 2s timeout
     try {
-      final response = await _dio.get(
-        '/health',
-        options: Options(extra: {'requireAuth': false}),
-      );
+      final healthDio = Dio(BaseOptions(
+        baseUrl: currentBase,
+        connectTimeout: const Duration(milliseconds: 2000),
+        receiveTimeout: const Duration(milliseconds: 2000),
+      ));
+      final response = await healthDio.get('/health');
       if (response.statusCode == 200) {
         _backendInitialized = true;
         return;
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('[Network] Primary backend health check failed at ${_dio.options.baseUrl}: $e');
+        debugPrint('[Network] Primary backend health check failed at $currentBase: $e');
       }
     }
 
-    // Auto-discover working endpoint among local development candidates (USB debugging / Emulator / LAN)
-    final currentBase = _dio.options.baseUrl;
-    final candidates = <String>{
-      ApiConfig.baseUrl,
-      'http://10.0.2.2:3000/api',
-      'http://127.0.0.1:3000/api',
-      'http://localhost:3000/api',
-    }.where((s) => s.trim().isNotEmpty).toList();
+    // 2. Skip dev fallbacks if in prod/staging OR if URL was explicitly configured by user/environment
+    if (ApiConfig.environment != AppEnv.dev || ApiConfig.hasExplicitOverride) {
+      if (kDebugMode) {
+        debugPrint(
+          '[Network] ⚠️ Unable to connect to backend at $currentBase.\n'
+          'If testing on a physical device, launch with:\n'
+          '  flutter run --dart-define=API_BASE_URL=http://<YOUR-PC-IP>:3000/api\n'
+          'or use the "Server IP" configuration on the Login Screen.',
+        );
+      }
+      _backendInitialized = true;
+      return;
+    }
 
-    for (final candidate in candidates) {
-      if (candidate == currentBase) continue;
+    // 3. Selective dev fallback candidate based on target platform
+    final String fallbackCandidate = defaultTargetPlatform == TargetPlatform.android
+        ? ApiConfig.devAndroidEmulatorBaseUrl
+        : ApiConfig.devWebBaseUrl;
+
+    if (fallbackCandidate != currentBase) {
       try {
         if (kDebugMode) {
-          debugPrint('[Network] Attempting fallback health check at $candidate...');
+          debugPrint('[Network] Attempting dev fallback health check at $fallbackCandidate...');
         }
         final testDio = Dio(BaseOptions(
-          baseUrl: candidate,
-          connectTimeout: const Duration(milliseconds: 1500),
-          receiveTimeout: const Duration(milliseconds: 1500),
+          baseUrl: fallbackCandidate,
+          connectTimeout: const Duration(milliseconds: 1000),
+          receiveTimeout: const Duration(milliseconds: 1000),
         ));
         final res = await testDio.get('/health');
         if (res.statusCode == 200) {
-          debugPrint('[Network] ✓ Discovered reachable backend server at $candidate!');
-          setBaseUrl(candidate);
-          ApiConfig.setCustomBaseUrl(candidate);
+          debugPrint('[Network] ✓ Discovered reachable backend server at $fallbackCandidate!');
+          setBaseUrl(fallbackCandidate);
           _backendInitialized = true;
           return;
         }
       } catch (_) {}
+    }
+
+    if (kDebugMode) {
+      debugPrint(
+        '[Network] ⚠️ Backend unreachable at $currentBase.\n'
+        'If running on a physical Android device:\n'
+        '- Launch with: flutter run --dart-define=API_BASE_URL=http://<YOUR-PC-IP>:3000/api\n'
+        '- Or tap "Server IP" on the Login screen and enter your PC\'s Wi-Fi IP address.',
+      );
     }
 
     _backendInitialized = true; // Mark initialized to avoid blocking auth calls permanently

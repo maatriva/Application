@@ -458,29 +458,6 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                 ),
               ),
             ),
-            // Reset simulation button for testing
-            if (!hasActiveFilter) ...[
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: () {
-                  notifier.resetNotifications();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Simulated notifications reset!'),
-                      duration: Duration(seconds: 1),
-                    ),
-                  );
-                },
-                child: Text(
-                  'Restore Mock Notifications',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: AppColors.primary.withOpacity(0.6),
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ],
           ],
         ),
       ),

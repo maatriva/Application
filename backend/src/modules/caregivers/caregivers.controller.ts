@@ -322,16 +322,26 @@ export class CaregiversController {
       if (active) {
         console.log('[Caregiver] Active permission found');
         console.log(`[Caregiver] Permission expires at ${active.expiresAt}`);
+        const activePerms = (active.permissions || {}) as Record<string, boolean>;
         return res.json({
           success: true,
           hasAccess: true,
           babyId: active.babyId,
           expiresAt: active.expiresAt,
           permissions: {
-            liveMonitoring: active.permissions?.live_monitoring ?? true,
-            camera: active.permissions?.camera_snapshot ?? true,
-            alerts: active.permissions?.emergency_alerts ?? true,
-            customLullabies: active.permissions?.custom_music ?? false,
+            live_monitoring: activePerms.live_monitoring ?? active.canViewLiveMonitoring ?? true,
+            camera_snapshot: activePerms.camera_snapshot ?? active.canViewCamera ?? false,
+            emergency_alerts: activePerms.emergency_alerts ?? active.canReceiveAlerts ?? false,
+            notifications: activePerms.notifications ?? active.canReceiveAlerts ?? false,
+            health_data: activePerms.health_data ?? active.canViewTelemetry ?? false,
+            ai_assistant: activePerms.ai_assistant ?? active.canUseAI ?? false,
+            custom_music: activePerms.custom_music ?? active.canPlayMusic ?? false,
+            cradle_controls: activePerms.cradle_controls ?? active.canControlCradle ?? false,
+            liveMonitoring: activePerms.live_monitoring ?? active.canViewLiveMonitoring ?? true,
+            camera: activePerms.camera_snapshot ?? active.canViewCamera ?? false,
+            alerts: activePerms.emergency_alerts ?? active.canReceiveAlerts ?? false,
+            customLullabies: activePerms.custom_music ?? active.canPlayMusic ?? false,
+            ...activePerms,
           },
           data: active,
         });

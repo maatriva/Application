@@ -138,6 +138,7 @@ class AccessHistory extends Equatable {
   final String durationText;
   final bool isExpired;
   final String status;
+  final DateTime? timestamp;
 
   const AccessHistory({
     required this.id,
@@ -148,9 +149,19 @@ class AccessHistory extends Equatable {
     required this.durationText,
     this.isExpired = true,
     this.status = 'Completed',
+    this.timestamp,
   });
 
   factory AccessHistory.fromJson(Map<String, dynamic> json) {
+    DateTime? ts;
+    if (json['timestamp'] != null) {
+      ts = DateTime.tryParse(json['timestamp'] as String);
+    } else if (json['grantedAt'] != null) {
+      ts = DateTime.tryParse(json['grantedAt'] as String);
+    } else if (json['createdAt'] != null) {
+      ts = DateTime.tryParse(json['createdAt'] as String);
+    }
+
     return AccessHistory(
       id: json['id'] as String? ?? '',
       name: json['name'] as String? ?? '',
@@ -160,6 +171,7 @@ class AccessHistory extends Equatable {
       durationText: json['durationText'] as String? ?? '',
       isExpired: json['isExpired'] as bool? ?? true,
       status: json['status'] as String? ?? 'Completed',
+      timestamp: ts,
     );
   }
 
@@ -173,6 +185,7 @@ class AccessHistory extends Equatable {
       'durationText': durationText,
       'isExpired': isExpired,
       'status': status,
+      'timestamp': timestamp?.toIso8601String(),
     };
   }
 
@@ -185,6 +198,7 @@ class AccessHistory extends Equatable {
     String? durationText,
     bool? isExpired,
     String? status,
+    DateTime? timestamp,
   }) {
     return AccessHistory(
       id: id ?? this.id,
@@ -195,10 +209,11 @@ class AccessHistory extends Equatable {
       durationText: durationText ?? this.durationText,
       isExpired: isExpired ?? this.isExpired,
       status: status ?? this.status,
+      timestamp: timestamp ?? this.timestamp,
     );
   }
 
   @override
-  List<Object?> get props => [id, name, relationship, date, timeRange, durationText, isExpired, status];
+  List<Object?> get props => [id, name, relationship, date, timeRange, durationText, isExpired, status, timestamp];
 }
 

@@ -3,12 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
+import 'package:maatriva/core/services/providers.dart';
+import 'package:maatriva/features/ai_monitoring/providers/ai_subscription_provider.dart';
+import 'package:maatriva/features/authentication/presentation/providers/auth_provider.dart';
+import 'package:maatriva/shared/models/user_session.dart';
 
 /// Premium Floating Claymorphic Bottom Navigation Bar.
 /// Features 5 items:
-/// 0. Home (🏠) -> /?tab=0
+/// 0. Home (🏠) -> /
 /// 1. Health (❤️) -> /predictive-health
-/// 2. Live Monitor (📹) -> /?tab=1
+/// 2. AI (🤖) -> /ai-monitoring or /ai-subscription (Center Position)
 /// 3. Music (🎵) -> /music
 /// 4. Shop (🛍️) -> /shop
 ///
@@ -51,8 +55,6 @@ class _BottomNavigationState extends ConsumerState<BottomNavigation> {
 
       // Root / Home path check
       if (location == '/' || location.isEmpty) {
-        final tabStr = GoRouterState.of(context).uri.queryParameters['tab'];
-        if (tabStr == '1') return 2; // Live Monitor tab
         return 0; // Home tab
       }
 
@@ -63,6 +65,11 @@ class _BottomNavigationState extends ConsumerState<BottomNavigation> {
           location.startsWith('/wellness-monitoring') ||
           location.startsWith('/profile/medical-history')) {
         return 1;
+      }
+
+      // AI Monitoring & Subscription section child routes
+      if (location.startsWith('/ai')) {
+        return 2;
       }
 
       // Music section child routes
@@ -90,15 +97,28 @@ class _BottomNavigationState extends ConsumerState<BottomNavigation> {
       return;
     }
 
+    final authSession = ref.read(authNotifierProvider).session;
+    final isCaregiver = authSession?.role == UserRole.caregiver;
+
     switch (index) {
       case 0:
-        context.go('/?tab=0');
+        context.go('/');
         break;
       case 1:
         context.go('/predictive-health');
         break;
       case 2:
-        context.go('/?tab=1');
+        if (isCaregiver) {
+          // Caretaker tapping AI: NEVER send to subscription screen
+          context.go('/ai-monitoring');
+        } else {
+          final subState = ref.read(aiSubscriptionProvider);
+          if (subState.isSubscribed) {
+            context.go('/ai-monitoring');
+          } else {
+            context.go('/ai-subscription');
+          }
+        }
         break;
       case 3:
         context.go('/music');
@@ -119,8 +139,8 @@ class _BottomNavigationState extends ConsumerState<BottomNavigation> {
       top: false,
       child: Container(
         margin: EdgeInsets.only(
-          left: isNarrow ? 10 : 16,
-          right: isNarrow ? 10 : 16,
+          left: isNarrow ? 8 : 14,
+          right: isNarrow ? 8 : 14,
           bottom: 12,
         ),
         height: 68,
@@ -140,7 +160,7 @@ class _BottomNavigationState extends ConsumerState<BottomNavigation> {
             children: [
               _buildNavItem(context, activeIndex, 0, Icons.home_rounded, 'Home'),
               _buildNavItem(context, activeIndex, 1, Icons.favorite_rounded, 'Health'),
-              _buildNavItem(context, activeIndex, 2, Icons.videocam_rounded, 'Live Monitor'),
+              _buildNavItem(context, activeIndex, 2, Icons.auto_awesome_rounded, 'AI'),
               _buildNavItem(context, activeIndex, 3, Icons.music_note_rounded, 'Music'),
               _buildNavItem(context, activeIndex, 4, Icons.shopping_bag_rounded, 'Shop'),
             ],

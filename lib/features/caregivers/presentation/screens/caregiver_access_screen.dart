@@ -37,12 +37,13 @@ class _CaregiverAccessScreenState extends ConsumerState<CaregiverAccessScreen> {
   }
 
   static const Map<String, String> permTitles = {
-    'custom_music': 'Custom Parent Folder',
-    'health_data': 'Baby\'s Wellness & Sensor Readings',
-    'ai_assistant': 'AI Chatbot',
-    'emergency_alerts': 'Real-Time Alerts & Notifications',
-    'camera_snapshot': 'Live Video',
-    'cradle_controls': 'Cradle Controls',
+    'live_video': 'Live Video',
+    'health': 'Health',
+    'ai_monitoring': 'AI Monitoring',
+    'ai_chatbot': 'AI Chatbot',
+    'custom_parent_folder': 'Custom Parent Folder',
+    'shop': 'Shop',
+    'real_time_alerts': 'Real-Time Alerts & Notifications',
   };
 
   void _showSingleCaregiverNotice(BuildContext context) {
@@ -245,19 +246,74 @@ class _CaregiverAccessScreenState extends ConsumerState<CaregiverAccessScreen> {
 
             const SizedBox(height: 24),
 
-            // ACCESS HISTORY SECTION (States 4 & 5)
-            if (state.accessHistory.isNotEmpty) ...[
-              Text(
-                'Access History',
-                style: GoogleFonts.outfit(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 12),
-              ...state.accessHistory.map((h) => AccessHistoryCard(item: h)),
-            ],
+            // ACCESS HISTORY SECTION (Latest 5 Max)
+            Builder(
+              builder: (context) {
+                final rawHistory = state.accessHistory;
+                final Map<String, AccessHistory> uniqueMap = {};
+                for (final item in rawHistory) {
+                  final key = item.id.isNotEmpty
+                      ? item.id
+                      : '${item.name}_${item.date}_${item.timeRange}';
+                  if (!uniqueMap.containsKey(key)) {
+                    uniqueMap[key] = item;
+                  }
+                }
+                final uniqueList = uniqueMap.values.toList();
+                uniqueList.sort((a, b) {
+                  final dtA = a.timestamp ?? DateTime(2000);
+                  final dtB = b.timestamp ?? DateTime(2000);
+                  return dtB.compareTo(dtA);
+                });
+                final latestHistory = uniqueList.take(5).toList();
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Access History',
+                      style: GoogleFonts.outfit(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (latestHistory.isEmpty) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFFE4F0F2)),
+                        ),
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.history_rounded,
+                              size: 36,
+                              color: AppColors.textSecondary.withValues(alpha: 0.4),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'No caregiver activity yet.',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      ...latestHistory.map((h) => AccessHistoryCard(item: h)),
+                    ],
+                  ],
+                );
+              },
+            ),
           ],
         ),
       ),

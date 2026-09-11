@@ -8,6 +8,7 @@ import '../../provider/caregiver_access_provider.dart';
 import '../widgets/flip_clock_duration_selector.dart';
 import '../widgets/qr_code_card.dart';
 import '../widgets/unauthorized_caretaker_card.dart';
+import 'package:maatriva/core/errors/caregiver_error_mapper.dart';
 
 /// 4-Step Parent Wizard for creating secure, temporary caregiver access.
 /// Step 1: Duration (3-Column Flip Clock + Presets)
@@ -29,52 +30,111 @@ class _CreateCaregiverAccessScreenState
   int _selectedMinutes = 30;
 
   Map<String, bool> _permissions = {
-    'custom_music': false,      // Custom parent folder
-    'health_data': true,        // Live telemetry report (Default: ON)
-    'ai_assistant': true,       // AI chatbot (Default: ON)
-    'emergency_alerts': true,   // Real time alert and notification (Default: ON)
-    'camera_snapshot': false,   // Live video
-    'cradle_controls': false,   // Cradle controls
+    'live_video': true,
+    'health': true,
+    'ai_monitoring': true,
+    'ai_chatbot': true,
+    'custom_parent_folder': true,
+    'shop': true,
+    'real_time_alerts': true,
   };
 
   static const Map<String, IconData> permIcons = {
-    'custom_music': Icons.folder_shared_outlined,
-    'health_data': Icons.monitor_heart_outlined,
-    'ai_assistant': Icons.smart_toy_outlined,
-    'emergency_alerts': Icons.notifications_active_outlined,
-    'camera_snapshot': Icons.videocam_outlined,
-    'cradle_controls': Icons.tune_outlined,
+    'live_video': Icons.videocam_outlined,
+    'health': Icons.monitor_heart_outlined,
+    'ai_monitoring': Icons.auto_awesome_rounded,
+    'ai_chatbot': Icons.smart_toy_outlined,
+    'custom_parent_folder': Icons.folder_shared_outlined,
+    'shop': Icons.shopping_bag_outlined,
+    'real_time_alerts': Icons.notifications_active_outlined,
   };
 
   static const Map<String, String> permTitles = {
-    'custom_music': 'Custom Parent Folder',
-    'health_data': 'Baby\'s Wellness & Sensor Readings',
-    'ai_assistant': 'AI Chatbot',
-    'emergency_alerts': 'Real-Time Alerts & Notifications',
-    'camera_snapshot': 'Live Video',
-    'cradle_controls': 'Cradle Controls',
+    'live_video': 'Live Video',
+    'health': 'Health',
+    'ai_monitoring': 'AI Monitoring',
+    'ai_chatbot': 'AI Chatbot',
+    'custom_parent_folder': 'Custom Parent Folder',
+    'shop': 'Shop',
+    'real_time_alerts': 'Real-Time Alerts & Notifications',
   };
 
   static const Map<String, String> permDescs = {
-    'custom_music': 'Access parent custom audio recordings and lullabies folder',
-    'health_data': 'View live baby vitals & telemetry data (live data only, no history)',
-    'ai_assistant': 'Allow caregiver to consult AI Pediatrician chatbot',
-    'emergency_alerts': 'Receive real-time safety alerts and emergency notifications',
-    'camera_snapshot': 'View live nursery video camera feed',
-    'cradle_controls': 'Operate smart cradle rocking & soothing controls',
+    'live_video': 'Allow caretaker to view live video',
+    'health': 'Allow access to baby health data',
+    'ai_monitoring': 'Allow access to AI monitoring',
+    'ai_chatbot': 'Allow access to AI chatbot',
+    'custom_parent_folder': 'Allow access to shared parent folder',
+    'shop': 'Allow access to Shop',
+    'real_time_alerts': 'Allow baby monitoring alerts',
   };
 
   void _generateQR() async {
+    final currentState = ref.read(caregiverAccessProvider);
+    if (currentState.isGeneratingQR) return;
+
     final notifier = ref.read(caregiverAccessProvider.notifier);
     await notifier.updatePermissionsConfig(_permissions);
     await notifier.setDurationLabel(_selectedDurationLabel);
     await notifier.retryGenerateQR();
 
-    if (mounted) {
+    if (!mounted) return;
+
+    final updatedState = ref.read(caregiverAccessProvider);
+    if (updatedState.qrError == null && updatedState.qrToken.isNotEmpty) {
       setState(() {
         _currentStep = 4;
       });
+    } else if (updatedState.qrError != null &&
+        CaregiverErrorMapper.isConflictError(updatedState.qrError!)) {
+      _showSingleCaregiverConflictDialog();
     }
+  }
+
+  void _showSingleCaregiverConflictDialog() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Row(
+            children: [
+              const Icon(Icons.info_outline_rounded, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Active Caregiver Exists',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: AppColors.navyDeep,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'An active caregiver already has access to your baby.\n\nOnly ONE active caregiver is permitted at a time. You must revoke the existing caregiver before creating a new access invitation.',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 13.5,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(
+                'Got It',
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -131,7 +191,7 @@ class _CreateCaregiverAccessScreenState
 
                   if (_currentStep == 1) _buildStep1Duration(),
                   if (_currentStep == 2) _buildStep2Permissions(),
-                  if (_currentStep == 3) _buildStep3Review(),
+                  if (_currentStep == 3) _buildStep3Review(state),
                   if (_currentStep == 4) _buildStep4QR(state),
                 ],
               ),
@@ -433,7 +493,7 @@ class _CreateCaregiverAccessScreenState
   }
 
   // STEP 3: Review
-  Widget _buildStep3Review() {
+  Widget _buildStep3Review(CaregiverAccessState state) {
     final enabledPerms = _permissions.entries.where((e) => e.value).toList();
 
     return Column(
@@ -570,13 +630,41 @@ class _CreateCaregiverAccessScreenState
           ),
         ),
 
-        const SizedBox(height: 28),
+        const SizedBox(height: 20),
+
+        if (state.qrError != null) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF5F5),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFFFCDD2)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    state.qrError!,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      color: const Color(0xFFC62828),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
 
         SizedBox(
           width: double.infinity,
           height: 52,
           child: ElevatedButton(
-            onPressed: _generateQR,
+            onPressed: state.isGeneratingQR ? null : _generateQR,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
@@ -585,20 +673,29 @@ class _CreateCaregiverAccessScreenState
               ),
               elevation: 0,
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.qr_code_2_rounded, size: 22),
-                const SizedBox(width: 8),
-                Text(
-                  'Generate Secure QR',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
+            child: state.isGeneratingQR
+                ? const SizedBox(
+                    height: 22,
+                    width: 22,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2.5,
+                    ),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.qr_code_2_rounded, size: 22),
+                      const SizedBox(width: 8),
+                      Text(
+                        state.qrError != null ? 'Retry Generating QR' : 'Generate Secure QR',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
           ),
         ),
       ],

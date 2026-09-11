@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:maatriva/core/errors/api_exception.dart';
+import 'package:maatriva/core/config/api_config.dart';
 import 'package:maatriva/core/config/app_config.dart';
 import 'package:maatriva/features/caregivers/provider/caregiver_access_provider.dart';
 import 'package:maatriva/domain/repositories/caregiver_repository.dart';
@@ -31,7 +33,7 @@ class MockCaregiverRepository implements CaregiverRepository {
     String? role,
   }) async {
     if (shouldFail) {
-      throw Exception("Generation failed");
+      throw const ApiException(statusCode: 409, message: 'An active caregiver already has access.');
     }
     return nextToken;
   }
@@ -82,6 +84,9 @@ class MockCaregiverRepository implements CaregiverRepository {
 
   @override
   Future<Map<String, dynamic>> updatePermissions(String permissionId, Map<String, bool> permissions) async {
+    if (shouldFail) {
+      throw const ApiException(statusCode: 400, message: 'Invalid payload or session expired.');
+    }
     return {'id': permissionId, 'permissions': permissions};
   }
 
@@ -226,6 +231,71 @@ void main() {
       expect(notifier.state.activeSessions.length, 0);
       expect(notifier.state.accessHistory.length, 1);
       expect(notifier.state.accessHistory.first.name, 'Uncle David');
+    });
+
+    test('HTTP 409 conflict error is mapped to clean user message and cleared on retry', () async {
+      mockRepo.shouldFail = true;
+      final notifier = CaregiverAccessNotifier(caregiverRepo: mockRepo);
+
+      notifier.generateNewQR();
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      expect(notifier.state.qrToken, isEmpty);
+      expect(notifier.state.qrError, contains('An active caregiver already has access'));
+      expect(notifier.state.qrError, isNot(contains('ApiException')));
+
+      // Test clearing error on retry
+      mockRepo.shouldFail = false;
+      mockRepo.nextToken = "RETRY_SUCCESS_TOKEN";
+
+      final retryFuture = notifier.retryGenerateQR();
+      // Should immediately clear error while generating
+      expect(notifier.state.qrError, isNull);
+      expect(notifier.state.isGeneratingQR, isTrue);
+
+      await retryFuture;
+      expect(notifier.state.qrToken, "RETRY_SUCCESS_TOKEN");
+      expect(notifier.state.qrError, isNull);
+      expect(notifier.state.isGeneratingQR, isFalse);
+    });
+
+    test('updateTemporaryPermissions returns true on success and false on failure', () async {
+      final notifier = CaregiverAccessNotifier(caregiverRepo: mockRepo);
+
+      // Successful update returns true
+      mockRepo.shouldFail = false;
+      final success = await notifier.updateTemporaryPermissions(
+        permissionId: 'perm_1',
+        permissions: {'custom_music': true},
+      );
+      expect(success, isTrue);
+
+      // Failed update returns false
+      mockRepo.shouldFail = true;
+      final failure = await notifier.updateTemporaryPermissions(
+        permissionId: 'perm_1',
+        permissions: {'custom_music': false},
+      );
+      expect(failure, isFalse);
+    });
+
+    test('ApiConfig.sanitizeApiUrl normalizes URLs without duplicate /api or trailing slashes', () {
+      expect(ApiConfig.sanitizeApiUrl('http://192.168.1.15:3000'), 'http://192.168.1.15:3000/api');
+      expect(ApiConfig.sanitizeApiUrl('http://192.168.1.15:3000/'), 'http://192.168.1.15:3000/api');
+      expect(ApiConfig.sanitizeApiUrl('http://192.168.1.15:3000/api'), 'http://192.168.1.15:3000/api');
+      expect(ApiConfig.sanitizeApiUrl('http://192.168.1.15:3000/api/'), 'http://192.168.1.15:3000/api');
+      expect(ApiConfig.sanitizeApiUrl('http://192.168.1.15:3000/api/api'), 'http://192.168.1.15:3000/api');
+      expect(ApiConfig.sanitizeApiUrl('192.168.1.15:3000'), 'http://192.168.1.15:3000/api');
+    });
+
+    test('ApiConfig customBaseUrl takes precedence over environment defaults', () {
+      ApiConfig.setCustomBaseUrl('http://192.168.1.200:3000');
+      expect(ApiConfig.baseUrl, 'http://192.168.1.200:3000/api');
+      expect(ApiConfig.hasExplicitOverride, isTrue);
+
+      // Resetting clears custom URL
+      ApiConfig.setCustomBaseUrl(null);
+      expect(ApiConfig.customBaseUrl, isNull);
     });
   });
 }

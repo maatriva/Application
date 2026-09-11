@@ -123,9 +123,14 @@ class AuthRepositoryImpl implements AuthRepository {
       rawUserMap = dataMap;
     }
 
-    final userId = rawUserMap['id'] as String? ?? rawUserMap['_id'] as String? ?? '';
-    final userRole = rawUserMap['role'] as String? ?? 'PARENT';
-    final email = rawUserMap['email'] as String? ?? '';
+    final userId = rawUserMap['id'] as String? ?? rawUserMap['_id'] as String? ?? dataMap['id'] as String? ?? '';
+    final userRole = rawUserMap['role'] as String? ??
+        rawUserMap['userRole'] as String? ??
+        dataMap['role'] as String? ??
+        dataMap['userRole'] as String? ??
+        responseMap['role'] as String? ??
+        'PARENT';
+    final email = rawUserMap['email'] as String? ?? dataMap['email'] as String? ?? '';
 
     debugPrint('[TOKEN] Saving session tokens: userId=$userId, role=$userRole, email=$email');
     await _secureStorage.saveSession(

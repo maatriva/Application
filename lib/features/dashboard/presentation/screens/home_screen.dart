@@ -5,23 +5,20 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
-import '../../../../routes/app_routes.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../shared/models/vitals_telemetry.dart';
 import '../../../../shared/models/user_session.dart';
 import '../../../authentication/presentation/providers/auth_provider.dart';
 import '../../../onboarding/providers/onboarding_provider.dart';
-import '../../../monitoring/presentation/screens/live_monitoring_screen.dart';
+import '../../../monitoring/presentation/widgets/camera_card.dart';
 import '../../../../shared/widgets/bottom_navigation.dart';
 import '../../../../shared/widgets/app_drawer.dart';
 import '../providers/dashboard_provider.dart';
 import '../widgets/dashboard_header.dart';
 import '../widgets/greeting_section.dart';
-import '../widgets/baby_status_hero_card.dart';
 import '../widgets/wellness_section.dart';
 import '../widgets/smart_cradle_card.dart';
 import '../widgets/caregiver_status_card.dart';
-import '../widgets/ai_insight_card.dart';
 import '../widgets/quick_action_button.dart';
 import '../../../caregivers/provider/caregiver_access_provider.dart';
 import '../../../../shared/models/caregiver.dart';
@@ -35,28 +32,15 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  late int _currentNavIndex;
-
   @override
   void initState() {
     super.initState();
-    _currentNavIndex = widget.initialTab == 1 ? 2 : widget.initialTab;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final onboardingState = ref.read(onboardingProvider);
       if (!onboardingState.isCompleted) {
         context.go('/onboarding');
       }
     });
-  }
-
-  @override
-  void didUpdateWidget(HomeScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.initialTab != oldWidget.initialTab) {
-      setState(() {
-        _currentNavIndex = widget.initialTab == 1 ? 2 : widget.initialTab;
-      });
-    }
   }
 
   String calculateAge(DateTime birthDate) {
@@ -107,18 +91,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final sleepVal = telemetry['sleep_stage']?.value ?? 0.0;
     if (sleepVal > 0) return 'Sleeping';
     return 'Awake';
-  }
-
-  String getAIInsight(DashboardState state) {
-    if (state.latestTelemetry == null) {
-      return 'Waiting for active telemetry to analyze baby care sleep patterns.';
-    }
-    final hr = state.latestTelemetry!['heart_rate']?.value.toInt() ?? 0;
-    final temp = state.latestTelemetry!['body_temperature']?.value ?? 0.0;
-    final cry = state.latestTelemetry!['cry_detection']?.value ?? 0.0;
-    final status = cry > 0 ? 'crying' : (state.latestTelemetry!['sleep_stage']?.value ?? 0) > 0 ? 'sleeping' : 'awake';
-    
-    return 'Your baby is currently $status. Heart rate is $hr bpm and body temperature is ${temp.toStringAsFixed(1)}°C. Ambient nursery parameters are looking optimal for growth.';
   }
 
   void _showRestrictedAccessDialog(BuildContext context, String featureName) {
@@ -173,9 +145,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final baby = ref.watch(dashboardProvider.select((s) => s.baby));
     final isCaregiver = authState.session?.role == UserRole.caregiver;
 
-    final cacheService = ref.watch(cacheServiceProvider);
-    final caregiverSession = cacheService.getCaregiverGrantedSession();
-    final perms = (caregiverSession?['permissions'] as Map<String, dynamic>?) ?? {};
+    final perms = ref.watch(caregiverPermissionsProvider);
     final bool permsHealth = !isCaregiver || (perms['health_data'] == true);
     final bool permsAi = !isCaregiver || (perms['ai_assistant'] == true);
 
@@ -183,9 +153,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: _currentNavIndex == 0 ? const DashboardHeader() : null,
+      appBar: const DashboardHeader(),
       drawer: const AppDrawer(),
-      body: _buildBody(isLiveMonitorOnly, isCaregiver),
+      body: _buildHomeBody(isLiveMonitorOnly, isCaregiver),
       floatingActionButton: (!isCaregiver || permsAi)
           ? Container(
               decoration: BoxDecoration(
@@ -211,46 +181,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             )
           : null,
-      bottomNavigationBar: BottomNavigation(
-        currentIndex: _currentNavIndex,
-        onTap: (index) {
-          if (index == 0) {
-            setState(() {
-              _currentNavIndex = 0;
-            });
-            context.go('/?tab=0');
-          } else if (index == 1) {
-            context.go('/predictive-health');
-          } else if (index == 2) {
-            setState(() {
-              _currentNavIndex = 2;
-            });
-            context.go('/?tab=1');
-          } else if (index == 3) {
-            setState(() {
-              _currentNavIndex = 3;
-            });
-            context.go('/music');
-          } else if (index == 4) {
-            setState(() {
-              _currentNavIndex = 4;
-            });
-            context.go('/shop');
-          }
-        },
-      ),
+      bottomNavigationBar: const BottomNavigation(currentIndex: 0),
     );
-  }
-
-  Widget _buildBody(bool isLiveMonitorOnly, bool isCaregiver) {
-    switch (_currentNavIndex) {
-      case 0:
-        return _buildHomeBody(isLiveMonitorOnly, isCaregiver);
-      case 2:
-        return const LiveMonitoringScreen();
-      default:
-        return _buildHomeBody(isLiveMonitorOnly, isCaregiver);
-    }
   }
 
   Widget _buildHomeBody(bool isLiveMonitorOnly, bool isCaregiver) {
@@ -308,6 +240,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     if (baby == null) {
+      if (isCaregiver) {
+        return _buildEmptyState(
+          title: 'Join Shared Baby',
+          icon: Icons.qr_code_scanner_rounded,
+          message: 'No active baby monitoring session assigned. Scan the QR code generated on the parent\'s device to monitor.',
+          actionLabel: 'Scan Parent\'s QR Code',
+          onActionPressed: () {
+            context.push('/join-shared-baby');
+          },
+        );
+      }
       return _buildEmptyState(
         title: 'Register Your Baby',
         icon: Icons.baby_changing_station_rounded,
@@ -327,14 +270,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final actionsCrossAxisCount = isTablet ? 6 : 3;
     final actionsChildAspectRatio = isTablet ? 1.25 : 1.05;
 
-    final cacheService = ref.watch(cacheServiceProvider);
-    final caregiverSession = cacheService.getCaregiverGrantedSession();
-    final perms = (caregiverSession?['permissions'] as Map<String, dynamic>?) ?? {};
-    final bool permsCamera = !isCaregiver || (perms['camera_snapshot'] == true);
-    final bool permsMusic = !isCaregiver || (perms['custom_music'] == true || perms['music'] == true);
-    final bool permsAi = !isCaregiver || (perms['ai_assistant'] == true);
-    final bool permsHealth = !isCaregiver || (perms['health_data'] == true);
-    final bool permsCradle = !isCaregiver || (perms['cradle_controls'] == true);
+    final perms = ref.watch(caregiverPermissionsProvider);
+    final bool permsMusic = !isCaregiver || (perms['custom_parent_folder'] == true || perms['custom_music'] == true);
+    final bool permsHealth = !isCaregiver || (perms['health'] == true || perms['health_data'] == true);
+    final bool permsCradle = true;
 
     return RefreshIndicator(
       onRefresh: () => ref.read(dashboardProvider.notifier).refresh(),
@@ -354,10 +293,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 final authState = ref.watch(authNotifierProvider);
                 final isCaregiverUser = isCaregiver || authState.session?.role == UserRole.caregiver;
                 
+                final reactiveExpiry = ref.watch(caregiverSessionExpiryProvider);
                 final cacheService = ref.watch(cacheServiceProvider);
                 final caregiverSession = cacheService.getCaregiverGrantedSession();
-                DateTime? expiresAt;
-                if (caregiverSession != null && caregiverSession['expiresAt'] != null) {
+                DateTime? expiresAt = reactiveExpiry;
+                if (expiresAt == null && caregiverSession != null && caregiverSession['expiresAt'] != null) {
                   expiresAt = DateTime.tryParse(caregiverSession['expiresAt'] as String);
                 }
 
@@ -371,26 +311,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             SizedBox(height: 16.h),
 
-            // 2. Baby Status Hero Card ("Is my baby okay?")
-            Consumer(
-              builder: (context, ref, child) {
-                final telemetry = ref.watch(dashboardProvider.select((s) => s.latestTelemetry));
-                return BabyStatusHeroCard(
-                  baby: baby,
-                  telemetry: telemetry,
-                  onTap: isLiveMonitorOnly ? null : () => context.push('/predictive-health'),
-                );
-              },
-            ),
+            // 2. Primary Live Camera Video Section (Replaces the Nobita Baby Status Hero card)
+            const CameraCard(),
             SizedBox(height: 24.h),
 
             // 3. Caregiver Access Banner / Timer (only shown if caregiver active or caregiver user)
             Consumer(
               builder: (context, ref, child) {
+                final reactiveExpiry = ref.watch(caregiverSessionExpiryProvider);
                 final cacheService = ref.watch(cacheServiceProvider);
                 final caregiverSession = cacheService.getCaregiverGrantedSession();
-                DateTime? expiresAt;
-                if (caregiverSession != null && caregiverSession['expiresAt'] != null) {
+                DateTime? expiresAt = reactiveExpiry;
+                if (expiresAt == null && caregiverSession != null && caregiverSession['expiresAt'] != null) {
                   expiresAt = DateTime.tryParse(caregiverSession['expiresAt'] as String);
                 }
 
@@ -404,7 +336,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 final activeCaregiverName = activeSessions.isNotEmpty ? activeSessions.first.name : null;
                 final activeSessionId = activeSessions.isNotEmpty ? activeSessions.first.id : null;
 
-                if (!isCaregiver && (activeCaregiverName == null || activeCaregiverName.trim().isEmpty)) {
+                final authState = ref.watch(authNotifierProvider);
+                final isCaregiverUser = isCaregiver || authState.session?.role == UserRole.caregiver;
+
+                if (isCaregiverUser || activeCaregiverName == null || activeCaregiverName.trim().isEmpty) {
                   return const SizedBox.shrink();
                 }
 
@@ -431,6 +366,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   return WellnessSection(
                     telemetry: telemetry,
                     isRestricted: isLiveMonitorOnly,
+                    showViewAll: true,
+                    onViewAllTap: () => context.go('/predictive-health'),
                   );
                 },
               ),
@@ -451,79 +388,63 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               SizedBox(height: 24.h),
             ],
 
-            // 6. Maatriva AI Insight Card
-            if (!isCaregiver || permsAi) ...[
-              Consumer(
-                builder: (context, ref, child) {
-                  final state = ref.watch(dashboardProvider);
-                  return AIInsightCard(
-                    insight: getAIInsight(state),
-                    isLoading: false,
-                    onRefresh: () => ref.read(dashboardProvider.notifier).refresh(),
-                  );
-                },
+            // 6. Quick Action Shortcuts Section Header
+            Text(
+              'Quick Actions',
+              style: AppTypography.sectionTitle.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.bold,
               ),
-              SizedBox(height: 24.h),
-            ],
-
-            // 7. Quick Actions Grid
-            Text('Quick Actions', style: AppTypography.sectionTitle),
+            ),
             SizedBox(height: 12.h),
+
+            // Quick Actions Grid Layout
             GridView.count(
               crossAxisCount: actionsCrossAxisCount,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 10.w,
-              mainAxisSpacing: 10.h,
+              mainAxisSpacing: 12.h,
+              crossAxisSpacing: 12.w,
               childAspectRatio: actionsChildAspectRatio,
               children: [
-                if (!isCaregiver || permsCamera)
-                  QuickActionButton(
-                    icon: Icons.videocam_outlined,
-                    label: 'Live Feed',
-                    onTap: () {
-                      setState(() {
-                        _currentNavIndex = 1;
-                      });
-                    },
-                  ),
-                if (!isCaregiver || permsAi)
-                  QuickActionButton(
-                    icon: Icons.smart_toy_outlined,
-                    label: 'AI Chat',
-                    onTap: () => context.push('/ai-assistant'),
-                  ),
-                if (!isCaregiver || permsHealth)
-                  QuickActionButton(
-                    icon: Icons.bar_chart_rounded,
-                    label: 'Sensor Reports',
-                    onTap: () => context.push('/wellness-monitoring'),
-                  ),
-                if (!isCaregiver || permsCradle)
-                  QuickActionButton(
-                    icon: Icons.bedroom_baby_outlined,
-                    label: 'Cradle',
-                    onTap: () {
-                      final device = ref.read(dashboardProvider).device;
-                      if (device != null && device.deviceId.isNotEmpty) {
-                        context.push('/profile/connected-devices/detail?id=${device.deviceId}');
-                      } else {
-                        context.push('/profile/connected-devices');
-                      }
-                    },
-                  ),
-                if (!isCaregiver)
-                  QuickActionButton(
-                    icon: Icons.supervisor_account_outlined,
-                    label: 'Caretaker Access',
-                    onTap: () => context.push(AppRoutes.caregiverAccess),
-                  ),
-                if (!isCaregiver || permsMusic)
-                  QuickActionButton(
-                    icon: Icons.music_note_outlined,
-                    label: 'Lullabies',
-                    onTap: () => context.push('/music'),
-                  ),
+                QuickActionButton(
+                  icon: Icons.monitor_heart_outlined,
+                  label: 'Health',
+                  onTap: () {
+                    if (isCaregiver && !permsHealth) {
+                      _showRestrictedAccessDialog(context, 'Health');
+                    } else {
+                      context.go('/predictive-health');
+                    }
+                  },
+                ),
+                QuickActionButton(
+                  icon: Icons.music_note_outlined,
+                  label: 'Music Library',
+                  onTap: () {
+                    if (isCaregiver && !permsMusic) {
+                      _showRestrictedAccessDialog(context, 'Music Library');
+                    } else {
+                      context.go('/music');
+                    }
+                  },
+                ),
+                QuickActionButton(
+                  icon: Icons.shopping_bag_outlined,
+                  label: 'Shop Essentials',
+                  onTap: () {
+                    if (isCaregiver) {
+                      _showRestrictedAccessDialog(context, 'Shop Essentials');
+                    } else {
+                      context.go('/shop');
+                    }
+                  },
+                ),
+                QuickActionButton(
+                  icon: Icons.notifications_none_rounded,
+                  label: 'Alerts',
+                  onTap: () => context.push('/notifications'),
+                ),
               ],
             ),
           ],
@@ -534,36 +455,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Widget _buildSkeletonLoader() {
     return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ShimmerPlaceholder(width: 220.w, height: 28.h),
-          SizedBox(height: 8.h),
-          ShimmerPlaceholder(width: 300.w, height: 16.h),
+          Container(
+            height: 60.h,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20.r),
+            ),
+          ),
+          SizedBox(height: 16.h),
+          Container(
+            height: 230.h,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(28.r),
+            ),
+          ),
           SizedBox(height: 24.h),
-          ShimmerPlaceholder(width: double.infinity, height: 80.h, borderRadius: 24.r),
-          SizedBox(height: 28.h),
-          ShimmerPlaceholder(width: 140.w, height: 22.h),
-          SizedBox(height: 12.h),
-          ShimmerPlaceholder(width: double.infinity, height: 220.h, borderRadius: 28.r),
-          SizedBox(height: 28.h),
-          ShimmerPlaceholder(width: 160.w, height: 22.h),
-          SizedBox(height: 12.h),
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisSpacing: 14.w,
-            mainAxisSpacing: 14.h,
-            childAspectRatio: 1.15,
-            children: List.generate(
-              6,
-              (index) => ShimmerPlaceholder(
-                width: double.infinity,
-                height: double.infinity,
-                borderRadius: 24.r,
-              ),
+          Container(
+            height: 150.h,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20.r),
             ),
           ),
         ],
@@ -579,49 +494,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required VoidCallback onActionPressed,
   }) {
     return Center(
-      child: Container(
-        margin: EdgeInsets.symmetric(horizontal: 20.w, vertical: 40.h),
-        padding: EdgeInsets.all(24.r),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(28.r),
-          border: Border.all(color: AppColors.primary.withOpacity(0.08), width: 1.5),
-          boxShadow: AppColors.softShadow,
-        ),
+      child: Padding(
+        padding: EdgeInsets.all(24.w),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 48.r, color: AppColors.primary.withOpacity(0.5)),
+            Icon(icon, size: 72.r, color: AppColors.primary),
             SizedBox(height: 16.h),
             Text(
               title,
-              style: TextStyle(
-                fontSize: 16.sp,
+              style: AppTypography.sectionTitle.copyWith(
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
               ),
+              textAlign: TextAlign.center,
             ),
             SizedBox(height: 8.h),
             Text(
               message,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13.sp,
-                fontWeight: FontWeight.w500,
+              style: AppTypography.bodyMedium.copyWith(
                 color: AppColors.textSecondary,
               ),
+              textAlign: TextAlign.center,
             ),
-            SizedBox(height: 20.h),
-            ElevatedButton.icon(
+            SizedBox(height: 24.h),
+            ElevatedButton(
               onPressed: onActionPressed,
-              icon: const Icon(Icons.arrow_forward_rounded),
-              label: Text(actionLabel),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+                padding: EdgeInsets.symmetric(horizontal: 32.w, vertical: 12.h),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16.r),
+                ),
               ),
+              child: Text(actionLabel),
             ),
           ],
         ),
@@ -631,24 +538,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Widget _buildErrorState(String message) {
     return Center(
-      child: Container(
-        margin: EdgeInsets.symmetric(horizontal: 20.w, vertical: 40.h),
-        padding: EdgeInsets.all(24.r),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(28.r),
-          border: Border.all(color: Colors.red.withOpacity(0.12), width: 1.5),
-          boxShadow: AppColors.softShadow,
-        ),
+      child: Padding(
+        padding: EdgeInsets.all(24.w),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline_rounded, size: 48.r, color: Colors.redAccent),
+            Icon(Icons.error_outline_rounded, size: 64.r, color: Colors.redAccent),
             SizedBox(height: 16.h),
             Text(
-              'Failed to load dashboard',
-              style: TextStyle(
-                fontSize: 16.sp,
+              'Something went wrong',
+              style: AppTypography.sectionTitle.copyWith(
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
               ),
@@ -656,93 +555,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             SizedBox(height: 8.h),
             Text(
               message,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13.sp,
-                fontWeight: FontWeight.w500,
+              style: AppTypography.bodyMedium.copyWith(
                 color: AppColors.textSecondary,
               ),
+              textAlign: TextAlign.center,
             ),
-            SizedBox(height: 20.h),
+            SizedBox(height: 24.h),
             ElevatedButton.icon(
-              onPressed: () => ref.read(dashboardProvider.notifier).loadDashboard(),
+              onPressed: () => ref.read(dashboardProvider.notifier).refresh(),
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('Try Again'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16.r),
+                ),
               ),
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class ShimmerPlaceholder extends StatefulWidget {
-  final double width;
-  final double height;
-  final double borderRadius;
-
-  const ShimmerPlaceholder({
-    super.key,
-    required this.width,
-    required this.height,
-    this.borderRadius = 16,
-  });
-
-  @override
-  State<ShimmerPlaceholder> createState() => _ShimmerPlaceholderState();
-}
-
-class _ShimmerPlaceholderState extends State<ShimmerPlaceholder>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    )..repeat(reverse: true);
-    _animation = Tween<double>(begin: 0.35, end: 0.75).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        return Opacity(
-          opacity: _animation.value,
-          child: Container(
-            width: widget.width,
-            height: widget.height,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(widget.borderRadius),
-              border: Border.all(
-                color: AppColors.primary.withOpacity(0.04),
-                width: 1.5,
-              ),
-              boxShadow: AppColors.softShadow,
-            ),
-          ),
-        );
-      },
     );
   }
 }

@@ -33,30 +33,33 @@ class _CaretakerManagementScreenState
   Timer? _countdownTimer;
 
   static const Map<String, IconData> permIcons = {
-    'custom_music': Icons.folder_shared_outlined,
-    'health_data': Icons.monitor_heart_outlined,
-    'ai_assistant': Icons.smart_toy_outlined,
-    'emergency_alerts': Icons.notifications_active_outlined,
-    'camera_snapshot': Icons.videocam_outlined,
-    'cradle_controls': Icons.tune_outlined,
+    'live_video': Icons.videocam_outlined,
+    'health': Icons.monitor_heart_outlined,
+    'ai_monitoring': Icons.auto_awesome_rounded,
+    'ai_chatbot': Icons.smart_toy_outlined,
+    'custom_parent_folder': Icons.folder_shared_outlined,
+    'shop': Icons.shopping_bag_outlined,
+    'real_time_alerts': Icons.notifications_active_outlined,
   };
 
   static const Map<String, String> permTitles = {
-    'custom_music': 'Custom Parent Folder',
-    'health_data': 'Baby\'s Wellness & Sensor Readings',
-    'ai_assistant': 'AI Chatbot',
-    'emergency_alerts': 'Real-Time Alerts & Notifications',
-    'camera_snapshot': 'Live Video',
-    'cradle_controls': 'Cradle Controls',
+    'live_video': 'Live Video',
+    'health': 'Health',
+    'ai_monitoring': 'AI Monitoring',
+    'ai_chatbot': 'AI Chatbot',
+    'custom_parent_folder': 'Custom Parent Folder',
+    'shop': 'Shop',
+    'real_time_alerts': 'Real-Time Alerts & Notifications',
   };
 
   static const Map<String, String> permDescs = {
-    'custom_music': 'Access parent custom audio recordings and lullabies folder',
-    'health_data': 'View live baby vitals & telemetry data (live data only, no history)',
-    'ai_assistant': 'Allow caregiver to consult AI Pediatrician chatbot',
-    'emergency_alerts': 'Receive real-time safety alerts and emergency notifications',
-    'camera_snapshot': 'View live nursery video camera feed',
-    'cradle_controls': 'Operate smart cradle rocking & soothing controls',
+    'live_video': 'Allow caretaker to view live video',
+    'health': 'Allow access to baby health data',
+    'ai_monitoring': 'Allow access to AI monitoring',
+    'ai_chatbot': 'Allow access to AI chatbot',
+    'custom_parent_folder': 'Allow access to shared parent folder',
+    'shop': 'Allow access to Shop',
+    'real_time_alerts': 'Allow baby monitoring alerts',
   };
 
   @override
@@ -107,25 +110,18 @@ class _CaretakerManagementScreenState
     final authState = ref.watch(authNotifierProvider);
     final isUnauthenticated = authState.status != AuthStatus.authenticated;
 
-    final session = state.activeSessions.firstWhere(
-      (s) => s.id == widget.sessionId,
-      orElse: () => state.activeSessions.isNotEmpty
-          ? state.activeSessions.first
-          : ActiveSession(
-              id: widget.sessionId,
-              name: 'Caregiver',
-              relationship: 'Temporary Caregiver',
-              imageUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=120',
-              expiresAt: DateTime.now().add(const Duration(minutes: 30)),
-              status: SessionStatus.active,
-              permissions: state.permissions,
-            ),
-    );
+    final hasActiveCaregiver = state.activeSessions.isNotEmpty;
+    final session = hasActiveCaregiver
+        ? state.activeSessions.firstWhere(
+            (s) => s.id == widget.sessionId,
+            orElse: () => state.activeSessions.first,
+          )
+        : null;
 
     final now = DateTime.now();
-    final remaining = session.expiresAt.difference(now);
-    final isExpired = remaining.isNegative;
-    final isExpiringSoon = !isExpired && remaining.inMinutes <= 120;
+    final remaining = session != null ? session.expiresAt.difference(now) : Duration.zero;
+    final isExpired = session != null && remaining.isNegative;
+    final isExpiringSoon = session != null && !isExpired && remaining.inMinutes <= 120;
 
     // Status colors and badges
     Color statusColor;
@@ -152,7 +148,7 @@ class _CaretakerManagementScreenState
         : (remaining.inSeconds / (24 * 3600)).clamp(0.0, 1.0);
 
     // Dynamic permissions map
-    final sessionPermissions = session.permissions ?? state.permissions;
+    final sessionPermissions = session?.permissions ?? state.permissions;
 
     return Scaffold(
       backgroundColor: const Color(0xFFEAF8F9),
@@ -208,6 +204,8 @@ class _CaretakerManagementScreenState
             children: [
               if (isUnauthenticated) ...[
                 const UnauthorizedCaretakerCard(),
+              ] else if (!hasActiveCaregiver || session == null) ...[
+                _buildNoActiveCaregiverState(context),
               ] else ...[
                 // -------------------------------------------------------------
                 // 3. CARETAKER PROFILE CARD
@@ -504,9 +502,8 @@ class _CaretakerManagementScreenState
               ),
               const SizedBox(height: 14),
 
-              ...sessionPermissions.entries.map((entry) {
-                final key = entry.key;
-                final val = entry.value;
+              ...permTitles.keys.map((key) {
+                final val = sessionPermissions[key] ?? true;
                 return Container(
                   margin: const EdgeInsets.only(bottom: 10),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -853,6 +850,81 @@ class _CaretakerManagementScreenState
             child: Text(
               'Revoke Access',
               style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoActiveCaregiverState(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFE4F0F2), width: 1.5),
+        boxShadow: AppColors.softShadow,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.supervisor_account_outlined,
+              size: 32,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No Active Caretaker',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.navyDeep,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'You currently have no active caregiver access granted for your baby. Tap below to generate a secure QR code invitation.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => context.push('/create-caregiver-access'),
+              icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+              label: Text(
+                'Grant Caregiver Access',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 0,
+              ),
             ),
           ),
         ],

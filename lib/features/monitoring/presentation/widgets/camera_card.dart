@@ -6,6 +6,10 @@ import 'package:maatriva/core/services/providers.dart';
 import 'package:maatriva/core/services/webrtc_service.dart';
 import 'package:maatriva/features/dashboard/presentation/providers/dashboard_provider.dart';
 
+import 'package:google_fonts/google_fonts.dart';
+import 'package:maatriva/features/authentication/presentation/providers/auth_provider.dart';
+import 'package:maatriva/shared/models/user_session.dart';
+
 class CameraCard extends ConsumerStatefulWidget {
   const CameraCard({super.key});
 
@@ -41,6 +45,50 @@ class _CameraCardState extends ConsumerState<CameraCard> {
 
   @override
   Widget build(BuildContext context) {
+    final authSession = ref.watch(authNotifierProvider).session;
+    final isCaregiver = authSession?.role == UserRole.caregiver;
+    final perms = ref.watch(caregiverPermissionsProvider);
+    final canViewLiveVideo = !isCaregiver || (perms['live_video'] == true || perms['camera_snapshot'] == true);
+
+    if (!canViewLiveVideo) {
+      return Container(
+        width: double.infinity,
+        height: 230,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(28),
+          color: const Color(0xFF173A70),
+          boxShadow: AppColors.softShadow,
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.videocam_off_outlined, color: Colors.orangeAccent, size: 36),
+              const SizedBox(height: 10),
+              Text(
+                'Access Restricted',
+                style: GoogleFonts.outfit(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'You are not authorised to access this section.\nPlease ask the parent to enable access.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  color: Colors.white70,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final dashboardState = ref.watch(dashboardProvider);
     final webrtcState = ref.watch(webrtcServiceProvider);
     final webrtcNotifier = ref.read(webrtcServiceProvider.notifier);

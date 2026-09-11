@@ -83,6 +83,8 @@ class WebSocketService with WidgetsBindingObserver {
   WsConnectionState get currentState => _currentState;
   String? get selectedBabyId => _selectedBabyId;
 
+  Future<String?> getAccessToken() => _secureStorage.getAccessToken();
+
   void _log(String message) {
     if (kDebugMode) {
       debugPrint('[Socket.IO] $message');
@@ -180,6 +182,8 @@ class WebSocketService with WidgetsBindingObserver {
     } catch (e) {
       debugPrint('[Auth] Token refresh failed: $e');
       _isRefreshing = false;
+      await _secureStorage.clearSession();
+      onSessionExpired?.call();
       return null;
     }
   }
@@ -516,10 +520,35 @@ class WebSocketService with WidgetsBindingObserver {
   /// Emits an event to the Socket.IO server.
   void emit(String event, [dynamic data]) {
     if (_socket != null) {
-      _log('Emitting event: $event');
-      _socket!.emit(event, data);
+      if (_socket!.connected) {
+        _log('Emitting event: $event');
+        _socket!.emit(event, data);
+      } else {
+        _secureStorage.getAccessToken().then((token) {
+          if (token != null && token.isNotEmpty) {
+            _log('Socket not connected yet. Connecting socket for event: $event');
+            _socket!.connect();
+            _socket!.once('connect', (_) {
+              _socket!.emit(event, data);
+            });
+          } else {
+            _log('Cannot emit event $event: No access token stored (user unauthenticated).');
+          }
+        });
+      }
     } else {
-      _log('Cannot emit event $event: Socket is null.');
+      _secureStorage.getAccessToken().then((token) {
+        if (token != null && token.isNotEmpty) {
+          _log('Cannot emit event $event: Socket is null. Initiating connection...');
+          connect().then((_) {
+            if (_socket != null && _socket!.connected) {
+              _socket!.emit(event, data);
+            }
+          });
+        } else {
+          _log('Cannot emit event $event: No access token stored (user unauthenticated).');
+        }
+      });
     }
   }
 

@@ -69,9 +69,9 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
     });
 
     _caregiverPermsSub = _wsService.caregiverPermissionsUpdatedStream.listen((data) {
-      if (data is Map && data['permissions'] is Map) {
+      if (data['permissions'] is Map) {
         final perms = data['permissions'] as Map;
-        final canViewCamera = perms['camera_snapshot'] == true || perms['canViewCamera'] == true;
+        final canViewCamera = perms['live_video'] == true || perms['camera_snapshot'] == true || perms['canViewCamera'] == true;
         if (!canViewCamera) {
           debugPrint('[WebRTC] Camera permission disabled by parent. Disconnecting WebRTC stream...');
           disconnectStream();
@@ -81,9 +81,17 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
   }
 
   void _listenToSocketState() {
-
     WsConnectionState? lastState;
     _wsStateSubscription = _wsService.stateStream.listen((wsState) {
+      if (wsState == WsConnectionState.disconnected || wsState == WsConnectionState.error) {
+        _wsService.getAccessToken().then((token) {
+          if (token == null || token.isEmpty) {
+            debugPrint('[WebRTC] Auth token missing. Canceling background polling...');
+            _stopOfflinePolling();
+            _reconnectTimer?.cancel();
+          }
+        });
+      }
       if (lastState != WsConnectionState.connected && 
           wsState == WsConnectionState.connected && 
           _currentBabyId != null) {
@@ -128,13 +136,25 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
     }
   }
 
-  void _joinRoom(String babyId) {
+  Future<void> _joinRoom(String babyId) async {
+    final token = await _wsService.getAccessToken();
+    if (token == null || token.isEmpty) {
+      debugPrint('[WebRTC] Cannot join room: No access token stored (user unauthenticated). Stopping polling.');
+      _stopOfflinePolling();
+      _reconnectTimer?.cancel();
+      return;
+    }
+
     final now = DateTime.now();
     if (_lastJoinEmitTime != null && 
         now.difference(_lastJoinEmitTime!) < const Duration(seconds: 3)) {
       return;
     }
     _lastJoinEmitTime = now;
+
+    if (_wsService.currentState != WsConnectionState.connected) {
+      await _wsService.connect();
+    }
 
     debugPrint('[WebRTC] Joining room for baby: $babyId');
     _wsService.emit('join-room', {
@@ -238,12 +258,9 @@ class WebrtcNotifier extends StateNotifier<WebrtcState> {
         state = state.copyWith(status: WebrtcStatus.offline, errorMessage: 'Cradle Camera is Offline');
         _startOfflinePolling();
       } else if (status == 'online') {
-        debugPrint('[WebRTC] Camera came ONLINE! Re-joining WebRTC room...');
+        debugPrint('[WebRTC] Camera came ONLINE!');
         _stopOfflinePolling();
         state = state.copyWith(status: WebrtcStatus.connecting, errorMessage: null);
-        if (_currentBabyId != null) {
-          _joinRoom(_currentBabyId!);
-        }
       }
     }
   }

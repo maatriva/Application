@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/services/providers.dart';
+import '../../domain/models/sensor_health_analysis.dart';
+import '../../services/sensor_analysis_service.dart';
 import 'dashboard_provider.dart';
 
 class SensorReportState {
@@ -10,6 +12,8 @@ class SensorReportState {
   final String sensor;
   final String period; // '1d', '2d', '7d', '1m'
   final Map<String, dynamic>? data;
+  final bool isAnalyzing;
+  final SensorHealthAnalysis? analysis;
 
   const SensorReportState({
     required this.isLoading,
@@ -17,6 +21,8 @@ class SensorReportState {
     required this.sensor,
     required this.period,
     this.data,
+    this.isAnalyzing = false,
+    this.analysis,
   });
 
   factory SensorReportState.initial(String sensor) => SensorReportState(
@@ -31,6 +37,9 @@ class SensorReportState {
     String? sensor,
     String? period,
     Map<String, dynamic>? data,
+    bool? isAnalyzing,
+    SensorHealthAnalysis? analysis,
+    bool clearAnalysis = false,
     bool clearError = false,
   }) {
     return SensorReportState(
@@ -39,6 +48,8 @@ class SensorReportState {
       sensor: sensor ?? this.sensor,
       period: period ?? this.period,
       data: data ?? this.data,
+      isAnalyzing: isAnalyzing ?? this.isAnalyzing,
+      analysis: clearAnalysis ? null : (analysis ?? this.analysis),
     );
   }
 }
@@ -59,14 +70,30 @@ class SensorReportNotifier extends StateNotifier<SensorReportState> {
 
   Future<void> fetchReport({String? newPeriod}) async {
     final periodToFetch = newPeriod ?? state.period;
-    state = state.copyWith(isLoading: true, period: periodToFetch, clearError: true);
+    final hadAnalysis = state.analysis != null;
+    
+    state = state.copyWith(
+      isLoading: true,
+      period: periodToFetch,
+      clearError: true,
+    );
 
     try {
       if (_babyId.isEmpty) {
         // Fallback for unselected baby state
+        final fallbackData = _buildFallbackData(state.sensor, periodToFetch);
+        SensorHealthAnalysis? updatedAnalysis;
+        if (hadAnalysis) {
+          updatedAnalysis = SensorAnalysisService.generateAnalysis(
+            sensorId: state.sensor,
+            period: periodToFetch,
+            data: fallbackData,
+          );
+        }
         state = state.copyWith(
           isLoading: false,
-          data: _buildFallbackData(state.sensor, periodToFetch),
+          data: fallbackData,
+          analysis: updatedAnalysis,
         );
         return;
       }
@@ -82,17 +109,37 @@ class SensorReportNotifier extends StateNotifier<SensorReportState> {
       final responseMap = res as Map<String, dynamic>;
       final reportData = responseMap['data'] as Map<String, dynamic>? ?? {};
 
+      SensorHealthAnalysis? updatedAnalysis;
+      if (hadAnalysis) {
+        updatedAnalysis = SensorAnalysisService.generateAnalysis(
+          sensorId: state.sensor,
+          period: periodToFetch,
+          data: reportData,
+        );
+      }
+
       state = state.copyWith(
         isLoading: false,
         data: reportData,
+        analysis: updatedAnalysis,
       );
     } catch (e) {
       if (kDebugMode) {
         print('[SensorReportNotifier] Error fetching report: $e. Using client fallback data.');
       }
+      final fallbackData = _buildFallbackData(state.sensor, periodToFetch);
+      SensorHealthAnalysis? updatedAnalysis;
+      if (hadAnalysis) {
+        updatedAnalysis = SensorAnalysisService.generateAnalysis(
+          sensorId: state.sensor,
+          period: periodToFetch,
+          data: fallbackData,
+        );
+      }
       state = state.copyWith(
         isLoading: false,
-        data: _buildFallbackData(state.sensor, periodToFetch),
+        data: fallbackData,
+        analysis: updatedAnalysis,
       );
     }
   }
@@ -100,6 +147,26 @@ class SensorReportNotifier extends StateNotifier<SensorReportState> {
   void changePeriod(String newPeriod) {
     if (state.period == newPeriod) return;
     fetchReport(newPeriod: newPeriod);
+  }
+
+  Future<void> generateAnalysis(bool isSubscribed) async {
+    if (!isSubscribed) return;
+
+    state = state.copyWith(isAnalyzing: true);
+
+    // Simulate dynamic loading state
+    await Future.delayed(const Duration(milliseconds: 700));
+
+    final result = SensorAnalysisService.generateAnalysis(
+      sensorId: state.sensor,
+      period: state.period,
+      data: state.data,
+    );
+
+    state = state.copyWith(
+      isAnalyzing: false,
+      analysis: result,
+    );
   }
 
   Map<String, dynamic> _buildFallbackData(String sensor, String period) {

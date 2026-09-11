@@ -19,32 +19,30 @@ export class DevicesService {
       return false; // Unassigned/unpaired or deleted devices cannot be accessed by non-admins
     }
 
-    if (userRole === 'PARENT' && assignment.baby.parentId === userId) {
+    if (assignment.baby.parentId === userId) {
       return true;
     }
 
-    if (userRole === 'CAREGIVER') {
-      const now = new Date();
-      const activeTemp = await (prisma as any).temporaryCaregiverPermission.findFirst({
-        where: {
-          caregiverId: userId,
-          babyId: assignment.babyId,
-          revoked: false,
-          status: 'ACTIVE',
-          expiresAt: { gt: now },
-        },
-      });
-      if (activeTemp) return true;
+    const now = new Date();
+    const activeTemp = await (prisma as any).temporaryCaregiverPermission.findFirst({
+      where: {
+        caregiverId: userId,
+        babyId: assignment.babyId,
+        revoked: false,
+        status: 'ACTIVE',
+        expiresAt: { gt: now },
+      },
+    });
+    if (activeTemp) return true;
 
-      const activeCg = await prisma.caregiver.findFirst({
-        where: {
-          userId,
-          babyId: assignment.babyId,
-          status: 'accepted',
-        },
-      });
-      if (activeCg) return true;
-    }
+    const activeCg = await prisma.caregiver.findFirst({
+      where: {
+        userId,
+        babyId: assignment.babyId,
+        status: 'accepted',
+      },
+    });
+    if (activeCg) return true;
 
     return false;
   }
@@ -206,23 +204,45 @@ export class DevicesService {
    * Fetch devices assigned to user's babies.
    */
   public async listDevices(userId: string) {
+    const now = new Date();
+
+    const parentBabies = await prisma.baby.findMany({
+      where: { parentId: userId },
+      select: { id: true },
+    });
+
+    const caregiverBabies = await prisma.caregiver.findMany({
+      where: { userId, status: 'accepted' },
+      select: { babyId: true },
+    });
+
+    const tempCaregiverPerms = await (prisma as any).temporaryCaregiverPermission.findMany({
+      where: {
+        caregiverId: userId,
+        status: 'ACTIVE',
+        revoked: false,
+        expiresAt: { gt: now },
+      },
+      select: { babyId: true },
+    });
+
+    const babyIds = Array.from(
+      new Set([
+        ...parentBabies.map((b) => b.id),
+        ...caregiverBabies.map((c) => c.babyId),
+        ...tempCaregiverPerms.map((t: any) => t.babyId as string),
+      ])
+    );
+
+    if (babyIds.length === 0) {
+      return [];
+    }
+
     const devices = await prisma.device.findMany({
       where: {
         assignments: {
           some: {
-            baby: {
-              OR: [
-                { parentId: userId },
-                {
-                  caregivers: {
-                    some: {
-                      userId,
-                      status: 'accepted',
-                    },
-                  },
-                },
-              ],
-            },
+            babyId: { in: babyIds },
           },
         },
       },

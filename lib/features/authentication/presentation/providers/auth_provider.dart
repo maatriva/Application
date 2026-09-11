@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/errors/api_exception.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/storage/secure_storage_service.dart';
 import '../../../../domain/repositories/auth_repository.dart';
@@ -16,6 +17,8 @@ import '../../../devices/providers/device_provider.dart';
 import '../../../onboarding/providers/onboarding_provider.dart';
 import '../../../music/providers/music_provider.dart';
 import '../../../caregivers/provider/caregiver_access_provider.dart';
+import '../../../notifications/providers/notifications_provider.dart';
+import '../../../notifications/providers/alerts_provider.dart';
 
 enum AuthStatus { initial, authenticated, unauthenticated, loading, error }
 
@@ -60,6 +63,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
         _profileRepository = profileRepository,
         _ref = ref,
         super(AuthState.initial()) {
+    ApiClient.onSessionExpired = () {
+      if (mounted && state.status == AuthStatus.authenticated) {
+        debugPrint('[AUTH] Session expired / account deleted on backend. Triggering auto logout.');
+        logout();
+      }
+    };
     checkAuth();
   }
 
@@ -89,7 +98,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
         final finalSession = session.copyWith(hasActiveCaregiverPermission: hasActiveCaregiverPerm);
         debugPrint('[AUTH] User session validated from storage: userId=$userId, role=${userRole.name}, hasActivePerm=$hasActiveCaregiverPerm. State -> authenticated.');
-        await _ref.read(onboardingProvider.notifier).completeOnboarding();
         if (mounted) {
           state = AuthState.authenticated(finalSession);
         }
@@ -164,6 +172,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         _ref.invalidate(deviceProvider);
         _ref.invalidate(musicProvider);
         _ref.invalidate(caregiverAccessProvider);
+        _ref.invalidate(notificationsProvider);
+        _ref.invalidate(alertsProvider);
       } catch (_) {}
 
       // Existing user logging in: bypass onboarding directly to Dashboard
@@ -211,7 +221,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final firstName = names.isNotEmpty ? names.first : '';
       final lastName = names.length > 1 ? names.sublist(1).join(' ') : '';
 
-      final session = await _authRepository.register(
+      var session = await _authRepository.register(
         email: email,
         password: password,
         firstName: firstName,
@@ -219,10 +229,34 @@ class AuthNotifier extends StateNotifier<AuthState> {
         role: role,
       );
 
-      debugPrint('[AUTH] Registration successful! Session issued for userId=${session.id}.');
+      final requestedRole = parseRole(role);
+      if (session.role != requestedRole) {
+        session = session.copyWith(role: requestedRole);
+        try {
+          final accessToken = await _secureStorage.getAccessToken() ?? '';
+          final refreshToken = await _secureStorage.getRefreshToken() ?? '';
+          await _secureStorage.saveSession(
+            accessToken: accessToken,
+            refreshToken: refreshToken,
+            userId: session.id,
+            userRole: role.toUpperCase(),
+            userEmail: session.email,
+          );
+        } catch (_) {}
+      }
+
+      bool hasActiveCaregiverPerm = false;
+      if (session.role == UserRole.caregiver) {
+        hasActiveCaregiverPerm = await verifyCaregiverActivePermissions(session);
+        await _ref.read(onboardingProvider.notifier).completeOnboarding();
+      }
+
+      final finalSession = session.copyWith(hasActiveCaregiverPermission: hasActiveCaregiverPerm);
+
+      debugPrint('[AUTH] Registration successful! Session issued for userId=${finalSession.id}, role=${finalSession.role.name}.');
       if (mounted) {
-        state = AuthState.authenticated(session);
-        debugPrint('[AUTH] AuthState updated to authenticated. Navigation triggered.');
+        state = AuthState.authenticated(finalSession);
+        debugPrint('[AUTH] AuthState updated to authenticated (hasActiveCaregiverPermission=$hasActiveCaregiverPerm). Navigation triggered.');
       }
 
       try {
@@ -234,6 +268,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         _ref.invalidate(deviceProvider);
         _ref.invalidate(musicProvider);
         _ref.invalidate(caregiverAccessProvider);
+        _ref.invalidate(notificationsProvider);
+        _ref.invalidate(alertsProvider);
       } catch (_) {}
 
       _loadProfileInBackground();
@@ -257,7 +293,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _profileRepository.getProfile().then((profile) {
       debugPrint('[PROFILE] Background profile fetch completed successfully: parentName=${profile.parentName}');
     }).catchError((err) {
-      debugPrint('[PROFILE] Background profile fetch non-fatal notice: $err');
+      debugPrint('[PROFILE] Background profile fetch notice: $err');
+      final errStr = err.toString().toLowerCase();
+      if (errStr.contains('401') ||
+          errStr.contains('unauthorized') ||
+          errStr.contains('404') ||
+          errStr.contains('not found') ||
+          errStr.contains('invalid token') ||
+          errStr.contains('user not found')) {
+        debugPrint('[AUTH] User account deleted or session revoked on server. Triggering auto-logout!');
+        logout();
+      }
     });
   }
 
@@ -335,12 +381,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
         final permsMap = parsedPerms.isNotEmpty
             ? parsedPerms
             : (cachedPerms ?? {
-                'health_data': true,
-                'ai_assistant': true,
-                'emergency_alerts': true,
-                'custom_music': false,
-                'camera_snapshot': false,
-                'cradle_controls': false,
+                'live_video': true,
+                'health': true,
+                'ai_monitoring': true,
+                'ai_chatbot': true,
+                'custom_parent_folder': true,
+                'shop': true,
+                'real_time_alerts': true,
               });
 
         final babyData = (accessRes?['data']?['baby'] as Map<String, dynamic>?) ??
@@ -351,13 +398,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
           'gender': 'female',
         };
 
+        final finalExpiresAtStr = expiresAt ?? DateTime.now().add(const Duration(hours: 24)).toIso8601String();
         await cache.cacheCaregiverGrantedSession({
           'babyId': babyId ?? 'shared_baby_01',
           'babyName': babyData['name'] ?? 'Shared Baby',
           'permissions': permsMap,
-          'expiresAt': expiresAt ?? DateTime.now().add(const Duration(hours: 24)).toIso8601String(),
+          'expiresAt': finalExpiresAtStr,
           'baby': babyData,
         });
+
+        final parsedExpiry = DateTime.tryParse(finalExpiresAtStr);
+        if (parsedExpiry != null) {
+          _ref.read(caregiverSessionExpiryProvider.notifier).state = parsedExpiry;
+        }
 
 
         if (mounted && state.session != null && state.session!.hasActiveCaregiverPermission != true) {
@@ -413,6 +466,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       _ref.read(musicProvider.notifier).clearSessionMusicData();
       _ref.invalidate(musicProvider);
       _ref.invalidate(caregiverAccessProvider);
+      _ref.invalidate(notificationsProvider);
+      _ref.invalidate(alertsProvider);
     } catch (_) {}
 
     // 3. Dispatch network sign-out request and wipe local cache/tokens via repository
@@ -461,48 +516,80 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Map<String, bool> _parseServerPermissions(Map<String, dynamic>? raw) {
-    if (raw == null) return {};
+    final Map<String, bool> result = {
+      'live_video': true,
+      'health': true,
+      'ai_monitoring': true,
+      'ai_chatbot': true,
+      'custom_parent_folder': true,
+      'shop': true,
+      'real_time_alerts': true,
+    };
 
-    final Map<String, bool> result = {};
+    if (raw == null) return result;
 
-    // 1. If explicit map exists in raw['permissions'] or raw['data']['permissions']
     final mapObj = (raw['data']?['permissions'] as Map?) ?? (raw['permissions'] as Map?);
     if (mapObj != null) {
       mapObj.forEach((k, v) {
         if (k is String) {
-          result[k] = v == true || v == 'true' || v == 1;
+          final bool val = v == true || v == 'true' || v == 1;
+          result[k] = val;
+          if (k == 'live_video' || k == 'liveVideo' || k == 'camera_snapshot' || k == 'camera' || k == 'cameraSnapshot') {
+            result['live_video'] = val;
+          }
+          if (k == 'health' || k == 'health_data' || k == 'health_reports' || k == 'healthData' || k == 'telemetry') {
+            result['health'] = val;
+          }
+          if (k == 'ai_monitoring' || k == 'aiMonitoring' || k == 'ai') {
+            result['ai_monitoring'] = val;
+          }
+          if (k == 'ai_chatbot' || k == 'aiChatbot' || k == 'ai_assistant' || k == 'aiAssistant') {
+            result['ai_chatbot'] = val;
+          }
+          if (k == 'custom_parent_folder' || k == 'customParentFolder' || k == 'custom_music' || k == 'customMusic' || k == 'music') {
+            result['custom_parent_folder'] = val;
+          }
+          if (k == 'shop' || k == 'shopAccess' || k == 'canViewShop' || k == 'shop_access') {
+            result['shop'] = val;
+          }
+          if (k == 'real_time_alerts' || k == 'realTimeAlerts' || k == 'emergency_alerts' || k == 'alerts' || k == 'notifications') {
+            result['real_time_alerts'] = val;
+          }
         }
       });
     }
 
-    // 2. Parse boolean flags (canViewLiveMonitoring, canViewCamera, etc.)
     final data = (raw['data'] as Map<String, dynamic>?) ?? raw;
     if (data.containsKey('canViewLiveMonitoring') || data.containsKey('canViewCamera') || data.containsKey('canViewTelemetry')) {
-      result['live_monitoring'] = data['canViewLiveMonitoring'] == true;
-      result['camera_snapshot'] = data['canViewCamera'] == true;
-      result['health_data'] = data['canViewTelemetry'] == true;
-      result['emergency_alerts'] = data['canReceiveAlerts'] == true;
-      result['notifications'] = data['canReceiveAlerts'] == true;
-      result['ai_assistant'] = data['canUseAi'] == true;
-      result['custom_music'] = data['canPlayMusic'] == true;
-      result['cradle_controls'] = data['canControlCradle'] == true;
+      if (data.containsKey('canViewCamera')) result['live_video'] = data['canViewCamera'] == true;
+      if (data.containsKey('canViewTelemetry')) result['health'] = data['canViewTelemetry'] == true;
+      if (data.containsKey('canViewAiMonitoring')) result['ai_monitoring'] = data['canViewAiMonitoring'] == true;
+      if (data.containsKey('canUseAi')) result['ai_chatbot'] = data['canUseAi'] == true;
+      if (data.containsKey('canPlayMusic')) result['custom_parent_folder'] = data['canPlayMusic'] == true;
+      if (data.containsKey('canViewShop')) result['shop'] = data['canViewShop'] == true;
+      if (data.containsKey('canReceiveAlerts')) result['real_time_alerts'] = data['canReceiveAlerts'] == true;
     }
 
-    // 3. Parse comma-separated string "permission": "live_monitoring,notifications,..."
     final permStr = (data['permission'] as String?) ?? (raw['permission'] as String?);
     if (permStr != null && permStr.isNotEmpty) {
       final tokens = permStr.split(',').map((s) => s.trim().toLowerCase()).toSet();
-      if (tokens.contains('live_monitoring')) result['live_monitoring'] = true;
-      if (tokens.contains('camera_snapshot') || tokens.contains('camera')) result['camera_snapshot'] = true;
-      if (tokens.contains('health_data') || tokens.contains('telemetry')) result['health_data'] = true;
-      if (tokens.contains('emergency_alerts') || tokens.contains('notifications') || tokens.contains('alerts')) {
-        result['emergency_alerts'] = true;
-        result['notifications'] = true;
-      }
-      if (tokens.contains('ai_assistant') || tokens.contains('ai')) result['ai_assistant'] = true;
-      if (tokens.contains('custom_music') || tokens.contains('music')) result['custom_music'] = true;
-      if (tokens.contains('cradle_controls') || tokens.contains('cradle')) result['cradle_controls'] = true;
+      if (tokens.contains('live_video') || tokens.contains('camera_snapshot') || tokens.contains('camera')) result['live_video'] = true;
+      if (tokens.contains('health') || tokens.contains('health_data') || tokens.contains('telemetry')) result['health'] = true;
+      if (tokens.contains('ai_monitoring') || tokens.contains('ai')) result['ai_monitoring'] = true;
+      if (tokens.contains('ai_chatbot') || tokens.contains('ai_assistant')) result['ai_chatbot'] = true;
+      if (tokens.contains('custom_parent_folder') || tokens.contains('custom_music') || tokens.contains('music')) result['custom_parent_folder'] = true;
+      if (tokens.contains('shop') || tokens.contains('shop_access')) result['shop'] = true;
+      if (tokens.contains('real_time_alerts') || tokens.contains('emergency_alerts') || tokens.contains('notifications') || tokens.contains('alerts')) result['real_time_alerts'] = true;
     }
+
+    // Aliases for backward compatibility
+    result['camera_snapshot'] = result['live_video'] == true;
+    result['health_data'] = result['health'] == true;
+    result['health_reports'] = result['health'] == true;
+    result['ai_assistant'] = result['ai_chatbot'] == true;
+    result['custom_music'] = result['custom_parent_folder'] == true;
+    result['emergency_alerts'] = result['real_time_alerts'] == true;
+    result['notifications'] = result['real_time_alerts'] == true;
 
     return result;
   }

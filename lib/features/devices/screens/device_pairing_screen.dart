@@ -8,6 +8,7 @@ import '../../../../core/services/providers.dart';
 import '../../../../domain/repositories/baby_repository.dart';
 import '../../../../shared/models/baby_profile.dart';
 import '../../dashboard/presentation/providers/dashboard_provider.dart';
+import '../../onboarding/providers/onboarding_provider.dart';
 import '../providers/device_provider.dart';
 
 class DevicePairingScreen extends ConsumerStatefulWidget {
@@ -91,7 +92,9 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
         babyId: _selectedBaby!.id,
       );
 
-      // Successfully paired! Load details
+      // Successfully paired! Load details and mark onboarding complete
+      await ref.read(onboardingProvider.notifier).completeOnboarding();
+
       setState(() {
         _isSuccess = true;
         _pairedDeviceName = pairedDevice.deviceName;
@@ -133,6 +136,9 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final deviceState = ref.watch(deviceProvider);
+    final hasNoDevices = deviceState.devices.isEmpty;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -147,10 +153,19 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
             fontSize: 16.sp,
           ),
         ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.textPrimary),
-          onPressed: () => context.pop(),
-        ),
+        automaticallyImplyLeading: !hasNoDevices,
+        leading: hasNoDevices
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.textPrimary),
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/');
+                  }
+                },
+              ),
       ),
       body: SafeArea(
         child: _loadingBabies
@@ -162,7 +177,7 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (!_isSuccess) ..._buildPairingForm() else _buildSuccessView(),
+                      if (!_isSuccess) ..._buildPairingForm(hasNoDevices) else _buildSuccessView(),
                     ],
                   ),
                 ),
@@ -171,8 +186,49 @@ class _DevicePairingScreenState extends ConsumerState<DevicePairingScreen> {
     );
   }
 
-  List<Widget> _buildPairingForm() {
+  List<Widget> _buildPairingForm(bool hasNoDevices) {
     return [
+      if (hasNoDevices) ...[
+        Container(
+          margin: EdgeInsets.only(bottom: 20.h),
+          padding: EdgeInsets.all(16.r),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8E7),
+            borderRadius: BorderRadius.circular(20.r),
+            border: Border.all(color: const Color(0xFFFFE0B2), width: 1.2),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: const Color(0xFFE65100), size: 24.sp),
+              SizedBox(width: 12.w),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Smart Cradle Required',
+                      style: GoogleFonts.outfit(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFFE65100),
+                      ),
+                    ),
+                    SizedBox(height: 2.h),
+                    Text(
+                      'You must pair your Maatriva Smart Cradle device before accessing the live baby telemetry dashboard.',
+                      style: TextStyle(
+                        fontSize: 11.5.sp,
+                        color: const Color(0xFF5D4037),
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
       Text(
         'Connect Your Smart Cradle',
         style: GoogleFonts.outfit(

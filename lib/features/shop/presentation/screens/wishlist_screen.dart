@@ -8,11 +8,31 @@ import '../../provider/shop_provider.dart';
 import '../widgets/empty_state_widget.dart';
 import '../widgets/product_card.dart';
 
+import 'package:maatriva/core/services/providers.dart';
+import 'package:maatriva/features/authentication/presentation/providers/auth_provider.dart';
+import 'package:maatriva/shared/models/user_session.dart';
+import 'package:maatriva/shared/widgets/caretaker_access_restricted_widget.dart';
+
 class WishlistScreen extends ConsumerWidget {
   const WishlistScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final authSession = ref.watch(authNotifierProvider).session;
+    final isCaregiver = authSession?.role == UserRole.caregiver;
+    final perms = ref.watch(caregiverPermissionsProvider);
+    final bool permsShop = !isCaregiver ||
+        (perms['shop'] == true ||
+            perms['shop_access'] == true ||
+            perms['canViewShop'] == true);
+
+    if (!permsShop) {
+      return CaretakerAccessRestrictedWidget.restricted(
+        sectionName: 'Shop',
+        tabIndex: 4,
+      );
+    }
+
     final shopState = ref.watch(shopProvider);
     final products = shopState.products;
     final wishlistIds = shopState.wishlist;

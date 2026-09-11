@@ -10,6 +10,7 @@ import 'package:maatriva/shared/models/baby_profile.dart';
 import '../../provider/profile_provider.dart';
 import '../../../devices/providers/device_provider.dart';
 import '../../../authentication/presentation/providers/auth_provider.dart';
+import '../../../ai_monitoring/providers/ai_subscription_provider.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../routes/app_routes.dart';
 
@@ -20,6 +21,10 @@ class ProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final profile = ref.watch(profileProvider);
     final deviceState = ref.watch(deviceProvider);
+    final authSession = ref.watch(authNotifierProvider).session;
+    final isCaregiver = authSession?.role == UserRole.caregiver;
+    final isSubscribed = ref.watch(aiSubscriptionProvider).isSubscribed;
+    final isParentSubscribed = !isCaregiver && isSubscribed;
 
     // Filter connected smart cradles
     final smartCradles = deviceState.devices
@@ -64,7 +69,7 @@ class ProfileScreen extends ConsumerWidget {
           child: Column(
             children: [
               // 1. Profile Details Card
-              _buildCaregiverDetailsCard(context, profile),
+              _buildCaregiverDetailsCard(context, profile, isParentSubscribed),
               SizedBox(height: 16.h),
 
               // 2. Registered Babies Section
@@ -86,7 +91,7 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildCaregiverDetailsCard(BuildContext context, ProfileState profile) {
+  Widget _buildCaregiverDetailsCard(BuildContext context, ProfileState profile, bool isParentSubscribed) {
     final relationship = profile.relationship.isNotEmpty ? profile.relationship : 'Caregiver';
     final parentAvatarUrl = profile.parentAvatar.isNotEmpty
         ? profile.parentAvatar
@@ -112,9 +117,18 @@ class ProfileScreen extends ConsumerWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: AppColors.primary.withOpacity(0.2),
-                    width: 3.r,
+                    color: isParentSubscribed ? const Color(0xFFD4AF37) : AppColors.primary.withOpacity(0.2),
+                    width: isParentSubscribed ? 3.5.r : 3.r,
                   ),
+                  boxShadow: isParentSubscribed
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFFD4AF37).withOpacity(0.4),
+                            blurRadius: 10.r,
+                            spreadRadius: 1.r,
+                          ),
+                        ]
+                      : null,
                 ),
                 child: CircleAvatar(
                   radius: 36.r,
@@ -136,20 +150,51 @@ class ProfileScreen extends ConsumerWidget {
                       ),
                     ),
                     SizedBox(height: 4.h),
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(12.r),
-                      ),
-                      child: Text(
-                        relationship,
-                        style: TextStyle(
-                          fontSize: 10.sp,
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
+                    Row(
+                      children: [
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(12.r),
+                          ),
+                          child: Text(
+                            relationship,
+                            style: TextStyle(
+                              fontSize: 10.sp,
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
-                      ),
+                        if (isParentSubscribed) ...[
+                          SizedBox(width: 6.w),
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFD4AF37), Color(0xFFB8860B)],
+                              ),
+                              borderRadius: BorderRadius.circular(12.r),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 10.r),
+                                SizedBox(width: 3.w),
+                                Text(
+                                  'AI+ Member',
+                                  style: TextStyle(
+                                    fontSize: 10.sp,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),

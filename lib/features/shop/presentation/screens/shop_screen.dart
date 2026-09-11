@@ -14,6 +14,11 @@ import '../../provider/shop_provider.dart';
 import '../../domain/product.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:maatriva/core/services/providers.dart';
+import 'package:maatriva/features/authentication/presentation/providers/auth_provider.dart';
+import 'package:maatriva/shared/models/user_session.dart';
+import 'package:maatriva/shared/widgets/caretaker_access_restricted_widget.dart';
+
 class ShopScreen extends ConsumerStatefulWidget {
   const ShopScreen({super.key});
 
@@ -26,6 +31,21 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authSession = ref.watch(authNotifierProvider).session;
+    final isCaregiver = authSession?.role == UserRole.caregiver;
+    final perms = ref.watch(caregiverPermissionsProvider);
+    final bool permsShop = !isCaregiver ||
+        (perms['shop'] == true ||
+            perms['shop_access'] == true ||
+            perms['canViewShop'] == true);
+
+    if (!permsShop) {
+      return CaretakerAccessRestrictedWidget.restricted(
+        sectionName: 'Shop',
+        tabIndex: 4,
+      );
+    }
+
     final shopState = ref.watch(shopProvider);
     final shopNotifier = ref.read(shopProvider.notifier);
     final filteredProducts = shopNotifier.getFilteredProducts();

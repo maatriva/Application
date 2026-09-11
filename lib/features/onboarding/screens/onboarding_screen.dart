@@ -9,6 +9,7 @@ import '../../../../core/services/providers.dart';
 import '../../profile/provider/profile_provider.dart';
 import '../providers/onboarding_provider.dart';
 import '../../dashboard/presentation/providers/dashboard_provider.dart';
+import '../../devices/providers/device_provider.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
@@ -133,8 +134,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               relationship: _relationship,
             );
 
-        // Transition logic checking status
-        await ref.read(onboardingProvider.notifier).checkOnboardingStatus();
+        ref.read(onboardingProvider.notifier).nextStep(OnboardingStep.babyRegister);
       } catch (e) {
         setState(() {
           _formErrorMessage = e.toString();
@@ -178,8 +178,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         // Refresh dashboard to load babies list
         await ref.read(dashboardProvider.notifier).refresh();
 
-        // Check onboarding progress
-        await ref.read(onboardingProvider.notifier).checkOnboardingStatus();
+        // Advance to Cradle Device Pairing
+        ref.read(onboardingProvider.notifier).nextStep(OnboardingStep.devicePairing);
       } catch (e) {
         setState(() {
           _formErrorMessage = e.toString();
@@ -215,11 +215,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           babyId: babyId,
         );
 
-        // Refresh dashboard state
+        // Refresh device notifier state & dashboard telemetry
+        await ref.read(deviceProvider.notifier).loadDevices();
         await ref.read(dashboardProvider.notifier).refresh();
 
         // Complete onboarding
-        await ref.read(onboardingProvider.notifier).checkOnboardingStatus();
+        await ref.read(onboardingProvider.notifier).completeOnboarding();
       } catch (e) {
         setState(() {
           _formErrorMessage = e.toString();
@@ -1074,23 +1075,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                ),
-                SizedBox(height: 16.h),
-
-                // Skip button
-                TextButton(
-                  onPressed: _skipDevicePairing,
-                  style: TextButton.styleFrom(
-                    minimumSize: Size(double.infinity, 44.h),
-                  ),
-                  child: Text(
-                    'Skip for now',
-                    style: TextStyle(
-                      fontSize: 14.sp,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
                 ),
               ],
             ),

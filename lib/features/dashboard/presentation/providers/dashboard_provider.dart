@@ -80,6 +80,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
   StreamSubscription? _caregiverRevokedSubscription;
   Timer? _heartbeatTimer;
   Timer? _sessionExpiryTimer;
+  Timer? _telemetryPollTimer;
   static const Duration _heartbeatTimeout = Duration(seconds: 15);
 
   DashboardNotifier({
@@ -101,6 +102,25 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     loadDashboard();
     _subscribeToStreams();
     _startSessionExpiryCheck();
+    _startTelemetryPolling();
+  }
+
+  void _startTelemetryPolling() {
+    _telemetryPollTimer?.cancel();
+    _telemetryPollTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      if (mounted && state.device != null && state.device!.deviceId.isNotEmpty) {
+        try {
+          final telemetryList = await _deviceRepo.getLatestTelemetry(state.device!.deviceId);
+          if (telemetryList.isNotEmpty && mounted) {
+            final updatedTelemetry = Map<String, VitalsTelemetry>.from(state.latestTelemetry ?? {});
+            for (var v in telemetryList) {
+              updatedTelemetry[v.sensorType] = v;
+            }
+            state = state.copyWith(latestTelemetry: updatedTelemetry);
+          }
+        } catch (_) {}
+      }
+    });
   }
 
   void _resetHeartbeatTimer() {
@@ -244,6 +264,7 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     _caregiverExtendedSubscription?.cancel();
     _heartbeatTimer?.cancel();
     _sessionExpiryTimer?.cancel();
+    _telemetryPollTimer?.cancel();
     super.dispose();
   }
 

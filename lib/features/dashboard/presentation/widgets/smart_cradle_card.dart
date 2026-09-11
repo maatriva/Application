@@ -21,18 +21,6 @@ class SmartCradleCard extends ConsumerWidget {
     this.isRestricted = false,
   });
 
-  String _formatDate(DateTime? dateTime) {
-    if (dateTime == null) return 'Not available';
-    final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    final day = dateTime.day.toString().padLeft(2, '0');
-    final month = months[dateTime.month - 1];
-    final year = dateTime.year;
-    return '$day $month $year';
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final musicState = ref.watch(musicProvider);
@@ -41,12 +29,6 @@ class SmartCradleCard extends ConsumerWidget {
             device!.status == 'ONLINE' ||
             device!.status == 'Connected' ||
             device!.status == 'PAIRED');
-
-    final deviceIdText = (device != null && device!.deviceId.isNotEmpty)
-        ? device!.deviceId
-        : 'Not available';
-
-    final pairedDateText = device != null ? _formatDate(device!.lastSeen) : 'Not available';
 
     final currentSongTitle = musicState.currentSong?.title ?? 'Sweet Lullaby';
 
@@ -292,72 +274,6 @@ class SmartCradleCard extends ConsumerWidget {
                   ),
                 ],
               ),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // 5. Supporting Device Information (Device ID & Paired Date)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: AppColors.royalBlue.withValues(alpha: 0.08),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Text(
-                        'Device ID: ',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      Flexible(
-                        child: Text(
-                          deviceIdText,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.navyDeep,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Row(
-                  children: [
-                    Text(
-                      'Paired on: ',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    Text(
-                      pairedDateText,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.navyDeep,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
             ),
           ),
         ],

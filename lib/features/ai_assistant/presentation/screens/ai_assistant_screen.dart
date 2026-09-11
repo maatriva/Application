@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maatriva/core/theme/app_colors.dart';
+import 'package:maatriva/core/services/providers.dart';
+import 'package:maatriva/features/authentication/presentation/providers/auth_provider.dart';
+import 'package:maatriva/shared/models/user_session.dart';
+import 'package:maatriva/shared/widgets/caretaker_access_restricted_widget.dart';
 import '../../../dashboard/presentation/widgets/dashboard_header.dart';
 import 'package:maatriva/shared/widgets/bottom_navigation.dart';
 import '../../provider/ai_assistant_provider.dart';
@@ -53,6 +57,22 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authSession = ref.watch(authNotifierProvider).session;
+    final isCaregiver = authSession?.role == UserRole.caregiver;
+    final perms = ref.watch(caregiverPermissionsProvider);
+    final bool hasChatbotPerm = !isCaregiver ||
+        (perms['ai_chatbot'] == true ||
+            perms['ai_assistant'] == true ||
+            perms['canUseAiChatbot'] == true ||
+            perms['canUseAi'] == true);
+
+    if (!hasChatbotPerm) {
+      return CaretakerAccessRestrictedWidget.restricted(
+        sectionName: 'AI Chatbot',
+        tabIndex: 2,
+      );
+    }
+
     final aiState = ref.watch(aiAssistantProvider);
 
     // Automatically scroll to bottom if a new message is appended or AI is typing

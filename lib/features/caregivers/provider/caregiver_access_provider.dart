@@ -7,6 +7,8 @@ import '../../../../core/services/websocket_service.dart';
 import '../../../../domain/repositories/caregiver_repository.dart';
 import '../../../../shared/models/caregiver.dart';
 
+import '../../../../core/errors/caregiver_error_mapper.dart';
+
 class CaregiverAccessState {
   final Map<String, bool> permissions;
   final String selectedDurationLabel;
@@ -14,7 +16,7 @@ class CaregiverAccessState {
   final List<AccessHistory> accessHistory;
   final String qrToken;
   final bool isGeneratingQR;
-  final String? qrError;  // null = no error
+  final String? qrError; // null = no error
   final Duration serverClockOffset;
 
   CaregiverAccessState({
@@ -67,16 +69,21 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
   CaregiverAccessNotifier({required CaregiverRepository caregiverRepo, WebSocketService? webSocket})
       : _caregiverRepo = caregiverRepo,
         _webSocket = webSocket,
-
         super(
           CaregiverAccessState(
             permissions: {
-              'health_data': true,        // Live telemetry report (Default: ON)
-              'ai_assistant': true,       // AI chatbot (Default: ON)
-              'emergency_alerts': true,   // Real time alert and notification (Default: ON)
-              'custom_music': false,      // Custom parent folder (Default: OFF)
-              'camera_snapshot': false,   // Live video (Default: OFF)
-              'cradle_controls': false,   // Cradle controls (Default: OFF)
+              'live_video': true,
+              'health': true,
+              'ai_monitoring': true,
+              'ai_chatbot': true,
+              'custom_parent_folder': true,
+              'shop': true,
+              'real_time_alerts': true,
+              'camera_snapshot': true,
+              'health_data': true,
+              'ai_assistant': true,
+              'custom_music': true,
+              'emergency_alerts': true,
             },
             selectedDurationLabel: '30 Mins',
             activeSessions: [],
@@ -92,12 +99,75 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
 
   void _listenForAccessEvents() {
     if (_webSocket == null) return;
-    // Events carry the authoritative access record. A background fetch reconciles
-    // any fields not included without requiring user interaction.
-    _acceptedSubscription = _webSocket.caregiverAccessAcceptedStream.listen((_) => loadSessions(loadHistory: true));
-    _permissionsSubscription = _webSocket.caregiverPermissionsUpdatedStream.listen((_) => loadSessions());
-    _extendedSubscription = _webSocket.caregiverExtendedStream.listen((_) => loadSessions());
-    _revokedSubscription = _webSocket.caregiverRevokedStream.listen((_) => loadSessions(loadHistory: true));
+
+    _acceptedSubscription = _webSocket.caregiverAccessAcceptedStream.listen((data) {
+      debugPrint('[CaregiverAccessNotifier] Real-time socket event caregiver.access.accepted: $data');
+      final permId = data['accessId'] as String? ?? data['permissionId'] as String? ?? '';
+      final caregiverName = data['caregiverName'] as String? ?? 'Caregiver';
+      final expiresAtStr = data['expiresAt'] as String?;
+      final expiresAt = expiresAtStr != null
+          ? DateTime.tryParse(expiresAtStr) ?? DateTime.now().add(const Duration(minutes: 30))
+          : DateTime.now().add(const Duration(minutes: 30));
+
+      final Map<String, bool> perms = data['permissions'] is Map
+          ? Map<String, bool>.from((data['permissions'] as Map).map((k, v) => MapEntry(k.toString(), v == true)))
+          : state.permissions;
+
+      final newSession = ActiveSession(
+        id: permId,
+        name: caregiverName,
+        relationship: 'Caregiver',
+        imageUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80',
+        expiresAt: expiresAt,
+        status: SessionStatus.active,
+        permissions: perms,
+      );
+
+      final updated = [newSession, ...state.activeSessions.where((s) => s.id != permId)];
+      state = state.copyWith(
+        activeSessions: updated,
+        qrToken: '',
+        isGeneratingQR: false,
+        clearQrError: true,
+      );
+      loadSessions(loadHistory: true);
+    });
+
+    _permissionsSubscription = _webSocket.caregiverPermissionsUpdatedStream.listen((data) {
+      final permId = data['accessId'] as String? ?? data['permissionId'] as String? ?? '';
+      if (permId.isNotEmpty && data['permissions'] is Map) {
+        final updatedPerms = Map<String, bool>.from((data['permissions'] as Map).map((k, v) => MapEntry(k.toString(), v == true)));
+        final updatedSessions = state.activeSessions.map((s) {
+          return s.id == permId ? s.copyWith(permissions: updatedPerms) : s;
+        }).toList();
+        state = state.copyWith(activeSessions: updatedSessions);
+      }
+      loadSessions();
+    });
+
+    _extendedSubscription = _webSocket.caregiverExtendedStream.listen((data) {
+      final permId = data['accessId'] as String? ?? data['permissionId'] as String? ?? '';
+      final newExpiresAtStr = data['expiresAt'] as String?;
+      if (permId.isNotEmpty && newExpiresAtStr != null) {
+        final newExpiresAt = DateTime.tryParse(newExpiresAtStr);
+        if (newExpiresAt != null) {
+          final updatedSessions = state.activeSessions.map((s) {
+            return s.id == permId ? s.copyWith(expiresAt: newExpiresAt) : s;
+          }).toList();
+          state = state.copyWith(activeSessions: updatedSessions);
+        }
+      }
+      loadSessions();
+    });
+
+    _revokedSubscription = _webSocket.caregiverRevokedStream.listen((revokedId) {
+      if (revokedId.isNotEmpty) {
+        final updated = state.activeSessions.where((s) => s.id != revokedId).toList();
+        state = state.copyWith(activeSessions: updated);
+      }
+      loadSessions(loadHistory: true);
+    });
+
     _connectionSubscription = _webSocket.stateStream.listen((connection) {
       if (connection == WsConnectionState.connected) loadSessions(loadHistory: true);
     });
@@ -116,8 +186,6 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
       ]);
       final sessions = results[0] as List<ActiveSession>;
       final serverTime = results[1] as DateTime;
-      // Midpoint approximation: enough for smooth UI display, while server-side
-      // authorization never relies on the phone clock.
       final offset = serverTime.difference(receivedAt);
 
       List<AccessHistory> history = state.accessHistory;
@@ -174,8 +242,6 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
     final updated = Map<String, bool>.from(state.permissions);
     updated[key] = !(updated[key] ?? false);
     state = state.copyWith(permissions: updated);
-    // A pending invitation owns its selected permissions. Only an ACTIVE record
-    // is updated remotely; do not silently generate a second invitation.
     for (final session in state.activeSessions) {
       await updateTemporaryPermissions(
         permissionId: session.id,
@@ -219,7 +285,7 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
     String? role,
   }) async {
     if (!silent) {
-      state = state.copyWith(isGeneratingQR: true);
+      state = state.copyWith(isGeneratingQR: true, clearQrError: true);
     }
 
     final duration = parseDuration(state.selectedDurationLabel);
@@ -238,19 +304,17 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
         isGeneratingQR: false,
         clearQrError: true,
       );
-      // Server owns startedAt/expiresAt. QR generation never alters an active
-      // session or starts the countdown.
       await loadSessions();
-    } catch (e) {
-      debugPrint('[QR] ❌ generateInviteToken FAILED: $e');
+    } catch (e, stackTrace) {
+      debugPrint('[QR] ❌ generateInviteToken FAILED: $e\n$stackTrace');
+      final userMessage = CaregiverErrorMapper.map(e);
       state = state.copyWith(
         isGeneratingQR: false,
-        qrError: e.toString(),
+        qrError: userMessage,
       );
     }
   }
 
-  /// Public method to retry QR generation after a failure
   Future<void> retryGenerateQR() async {
     await _generateNewQR(silent: false);
   }
@@ -272,7 +336,6 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
       await _caregiverRepo.revokeAccess(sessionId);
     } catch (_) {}
 
-    // Create history entry
     final now = DateTime.now();
     final timeStr =
         "${_formatTime(now.subtract(const Duration(minutes: 30)))} – ${_formatTime(now)}";
@@ -285,6 +348,7 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
       durationText: 'Expired',
       isExpired: true,
       status: 'REVOKED',
+      timestamp: now,
     );
 
     final updatedActive =
@@ -298,7 +362,6 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
       isGeneratingQR: false,
     );
 
-    // Force load fresh data
     loadSessions();
   }
 
@@ -315,7 +378,6 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
     required String durationLabel,
     required String imageUrl,
   }) {
-    // Map relationships to the database roles
     String role = 'BABYSITTER';
     final relLower = relationship.toLowerCase();
     if (relLower.contains('grand')) {
@@ -327,7 +389,6 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
       role = 'SECONDARY_PARENT';
     }
 
-    // Trigger secure invitation token generation with wildcard email/role on the backend
     _generateNewQR(
       silent: false,
       email: '*',
@@ -335,7 +396,6 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
     );
   }
 
-  /// Grant temporary caregiver access for specific duration (Requirement 1 & 2)
   Future<bool> grantTemporaryAccess({
     required String babyId,
     required String caregiverEmail,
@@ -357,7 +417,6 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
     }
   }
 
-  /// Revoke temporary caregiver permission (Requirement 6)
   Future<bool> revokeTemporaryPermission(String permissionId) async {
     try {
       await _caregiverRepo.revokeTemporaryPermission(permissionId);
@@ -369,7 +428,6 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
     }
   }
 
-  /// Fetch active unexpired permissions for caregiver (Requirement 4)
   Future<List<Map<String, dynamic>>> checkActivePermissions() async {
     try {
       return await _caregiverRepo.getActivePermissions();
@@ -379,36 +437,41 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
     }
   }
 
-  /// Edit feature-level permissions for active caregiver access
   Future<bool> updateTemporaryPermissions({
     required String permissionId,
     required Map<String, bool> permissions,
   }) async {
-    // 1. Optimistically update local state for instant real-time UI feedback
-    state = state.copyWith(permissions: permissions);
-    if (state.activeSessions.isNotEmpty) {
-      final updatedSessions = state.activeSessions.map((s) {
-        if (s.id == permissionId || permissionId.isEmpty) {
-          return s.copyWith(permissions: permissions);
-        }
-        return s;
-      }).toList();
-      state = state.copyWith(activeSessions: updatedSessions);
+    debugPrint('[CaregiverAccessNotifier] Permission update requested for access $permissionId');
+    state = state.copyWith(
+      permissions: permissions,
+      activeSessions: state.activeSessions.map((session) =>
+          session.id == permissionId ? session.copyWith(permissions: permissions) : session).toList(),
+    );
+
+    if (permissionId.trim().isEmpty || permissionId.startsWith('h_')) {
+      return true;
     }
 
-    // 2. Persist to backend
     try {
-      await _caregiverRepo.updatePermissions(permissionId, permissions);
-      await loadSessions();
+      final updated = await _caregiverRepo.updatePermissions(permissionId, permissions);
+      final persistedPermissions = updated['permissions'] is Map
+          ? Map<String, bool>.from((updated['permissions'] as Map).map(
+              (key, value) => MapEntry(key.toString(), value == true),
+            ))
+          : permissions;
+      state = state.copyWith(
+        permissions: persistedPermissions,
+        activeSessions: state.activeSessions.map((session) =>
+            session.id == permissionId ? session.copyWith(permissions: persistedPermissions) : session).toList(),
+      );
+      debugPrint('[CaregiverAccessNotifier] Permission update succeeded for access $permissionId');
       return true;
     } catch (e) {
-      debugPrint('[CaregiverAccessNotifier] updateTemporaryPermissions server notice: $e');
-      return true;
+      debugPrint('[CaregiverAccessNotifier] Remote permission sync notice: $e');
+      return false;
     }
   }
 
-
-  /// Extend temporary access duration (+15m, +30m, +1h, custom)
   Future<bool> extendTemporaryAccess({
     required String permissionId,
     required int extensionMinutes,
@@ -451,10 +514,10 @@ class CaregiverAccessNotifier extends StateNotifier<CaregiverAccessState> {
 
     int totalMinutes = (days * 1440) + (hours * 60) + minutes;
     if (totalMinutes <= 0) {
-      totalMinutes = 30; // Default 30 mins
+      totalMinutes = 30;
     }
     if (totalMinutes > 10080) {
-      totalMinutes = 10080; // Hard limit 7 days
+      totalMinutes = 10080;
     }
 
     return Duration(minutes: totalMinutes);

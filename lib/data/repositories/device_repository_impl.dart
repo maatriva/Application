@@ -105,19 +105,77 @@ class DeviceRepositoryImpl implements DeviceRepository {
   Future<List<VitalsTelemetry>> getLatestTelemetry(String deviceId) async {
     try {
       final res = await _apiClient.get('/devices/$deviceId/latest');
-      List rawList = [];
-      if (res is List) {
-        rawList = res;
-      } else if (res is Map && res['data'] is List) {
-        rawList = res['data'] as List;
-      }
-      final vitals = rawList
-          .whereType<Map>()
-          .map((json) => VitalsTelemetry.fromJson(Map<String, dynamic>.from(json)))
-          .toList();
+      List<VitalsTelemetry> vitals = [];
+      Map<String, dynamic>? dataMap;
 
-      final vitalsMap = {for (var v in vitals) v.sensorType: v.toJson()};
-      await _cacheService.cacheVitals(deviceId, vitalsMap);
+      if (res is List) {
+        vitals = res
+            .whereType<Map>()
+            .map((json) => VitalsTelemetry.fromJson(Map<String, dynamic>.from(json)))
+            .toList();
+      } else if (res is Map<String, dynamic>) {
+        if (res['data'] is List) {
+          vitals = (res['data'] as List)
+              .whereType<Map>()
+              .map((json) => VitalsTelemetry.fromJson(Map<String, dynamic>.from(json)))
+              .toList();
+        } else if (res['data'] is Map<String, dynamic>) {
+          dataMap = res['data'] as Map<String, dynamic>;
+        } else {
+          dataMap = res;
+        }
+      }
+
+      if (dataMap != null) {
+        final timestampStr = dataMap['timestamp'] as String? ?? DateTime.now().toIso8601String();
+        final timestamp = DateTime.tryParse(timestampStr) ?? DateTime.now();
+
+        void addVital(String sensorType, dynamic value, String unit) {
+          if (value != null && value is num) {
+            vitals.add(VitalsTelemetry(
+              sensorType: sensorType,
+              value: value.toDouble(),
+              unit: unit,
+              quality: 'good',
+              timestamp: timestamp,
+            ));
+          }
+        }
+
+        addVital('heart_rate', dataMap['heartRate'] ?? dataMap['heart_rate'], 'bpm');
+        addVital('breathing_rate', dataMap['breathingRate'] ?? dataMap['respirationRate'] ?? dataMap['breathing_rate'] ?? dataMap['respiration_rate'], 'rpm');
+        addVital('body_temperature', dataMap['bodyTemperature'] ?? dataMap['body_temperature'], '°C');
+        addVital('room_temperature', dataMap['roomTemperature'] ?? dataMap['room_temperature'], '°C');
+        addVital('humidity', dataMap['humidity'], '%');
+        addVital('air_quality', dataMap['airQuality'] ?? dataMap['air_quality'], 'AQI');
+
+        if (dataMap['cryDetected'] != null || dataMap['cry_detected'] != null) {
+          final cry = (dataMap['cryDetected'] ?? dataMap['cry_detected']) == true;
+          vitals.add(VitalsTelemetry(
+            sensorType: 'cry_detection',
+            value: cry ? 1.0 : 0.0,
+            unit: '',
+            quality: 'good',
+            timestamp: timestamp,
+          ));
+        }
+
+        if (dataMap['movementDetected'] != null || dataMap['movement_detected'] != null) {
+          final move = (dataMap['movementDetected'] ?? dataMap['movement_detected']) == true;
+          vitals.add(VitalsTelemetry(
+            sensorType: 'movement_detection',
+            value: move ? 1.0 : 0.0,
+            unit: '',
+            quality: 'good',
+            timestamp: timestamp,
+          ));
+        }
+      }
+
+      if (vitals.isNotEmpty) {
+        final vitalsMap = {for (var v in vitals) v.sensorType: v.toJson()};
+        await _cacheService.cacheVitals(deviceId, vitalsMap);
+      }
       return vitals;
     } catch (e) {
       final cached = _cacheService.getCachedVitals(deviceId);

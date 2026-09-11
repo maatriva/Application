@@ -9,6 +9,7 @@ import '../../core/services/providers.dart';
 import '../../features/profile/provider/profile_provider.dart';
 import '../../features/authentication/presentation/providers/auth_provider.dart';
 import '../../features/dashboard/presentation/providers/dashboard_provider.dart';
+import '../../features/ai_monitoring/providers/ai_subscription_provider.dart';
 import '../../features/music/widgets/admin_upload_dialog.dart';
 
 /// Premium Maatriva Claymorphic Sidebar Navigation Drawer.
@@ -167,6 +168,153 @@ class AppDrawer extends ConsumerWidget {
     );
   }
 
+  void _showHelpSupportDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFE5F0FF),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.help_outline_rounded, color: Color(0xFF5478E8), size: 30),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Help & Support',
+                style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navyDeep),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Need assistance with your Maatriva Smart Monitor, IoT sensors, or caregiver permissions?\n\nContact our 24/7 Support Team:\n📧 support@maatriva.com\n📞 +1 (800) 555-MAATRIVA',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondary, height: 1.5),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.royalBlue,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 44),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                child: Text('OK', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showPrivacyPolicyDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFE2F8F0),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.lock_outline_rounded, color: Color(0xFF00B894), size: 30),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Privacy Policy',
+                style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navyDeep),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'At Maatriva, your family\'s data security is our top priority. All live video streams and health telemetry data are end-to-end encrypted (E2EE) and processed strictly under HIPAA & GDPR guidelines.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondary, height: 1.5),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.royalBlue,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 44),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                child: Text('Close', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showTermsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFFF0E5),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.description_outlined, color: Color(0xFFFF7675), size: 30),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Terms & Conditions',
+                style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navyDeep),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'By using Maatriva Smart Baby Monitor, you agree to our Terms of Service. Maatriva provides intelligent monitoring and soothing features intended to assist parents and authorized caregivers.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondary, height: 1.5),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.royalBlue,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 44),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                child: Text('Close', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showRestrictedAccessDialog(BuildContext context, String featureName) {
     showDialog(
       context: context,
@@ -192,7 +340,7 @@ class AppDrawer extends ConsumerWidget {
             ],
           ),
           content: Text(
-            'You don\'t have permission to access $featureName.\n\nAs a Caregiver, your authorized access includes:\n• Live Video Monitoring\n• Live Sensor Telemetry\n• Alerts & Notifications\n• In-App Online Music',
+            'You are not authorised to access this section.\n\nPlease ask the parent to enable access.',
             style: GoogleFonts.plusJakartaSans(
               fontSize: 13.5,
               color: AppColors.textSecondary,
@@ -237,15 +385,16 @@ class AppDrawer extends ConsumerWidget {
         authState.session?.email.toLowerCase() == 'admin@maatriva.com' ||
         caregiverEmail.toLowerCase() == 'admin@maatriva.com';
 
-    final cacheService = ref.watch(cacheServiceProvider);
-    final caregiverSession = cacheService.getCaregiverGrantedSession();
-    final perms = (caregiverSession?['permissions'] as Map<String, dynamic>?) ?? {};
-    final bool permsLiveMonitoring = !isCaregiver || (perms['live_monitoring'] == true);
-    final bool permsCamera = !isCaregiver || (perms['camera_snapshot'] == true);
-    final bool permsMusic = !isCaregiver || (perms['custom_music'] == true || perms['music'] == true);
-    final bool permsAi = !isCaregiver || (perms['ai_assistant'] == true);
-    final bool permsHealth = !isCaregiver || (perms['health_data'] == true);
-    final bool permsNotifications = !isCaregiver || (perms['notifications'] == true);
+    final perms = ref.watch(caregiverPermissionsProvider);
+    final bool permsLiveVideo = !isCaregiver || (perms['live_video'] == true || perms['camera_snapshot'] == true);
+    final bool permsHealth = !isCaregiver || (perms['health'] == true || perms['health_data'] == true);
+    final bool permsAiMonitoring = !isCaregiver || (perms['ai_monitoring'] == true || perms['ai'] == true);
+    final bool permsCustomParentFolder = !isCaregiver || (perms['custom_parent_folder'] == true || perms['custom_music'] == true);
+    final bool permsShop = !isCaregiver || (perms['shop'] == true);
+    final bool permsAlerts = !isCaregiver || (perms['real_time_alerts'] == true || perms['emergency_alerts'] == true);
+
+    final isSubscribed = ref.watch(aiSubscriptionProvider).isSubscribed;
+    final isParentSubscribed = !isCaregiver && isSubscribed;
 
     String currentLocation = '';
     try {
@@ -296,13 +445,24 @@ class AppDrawer extends ConsumerWidget {
                       Container(
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2.5),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.15),
-                              blurRadius: 8,
-                            ),
-                          ],
+                          border: Border.all(
+                            color: isParentSubscribed ? const Color(0xFFD4AF37) : Colors.white,
+                            width: isParentSubscribed ? 3.0 : 2.5,
+                          ),
+                          boxShadow: isParentSubscribed
+                              ? [
+                                  BoxShadow(
+                                    color: const Color(0xFFD4AF37).withValues(alpha: 0.5),
+                                    blurRadius: 10,
+                                    spreadRadius: 1,
+                                  ),
+                                ]
+                              : [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.15),
+                                    blurRadius: 8,
+                                  ),
+                                ],
                         ),
                         child: CircleAvatar(
                           radius: 26,
@@ -379,7 +539,149 @@ class AppDrawer extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 children: [
                   // ---------------------------------------------------------
-                  // 5. QUICK ACTIONS SECTION
+                  // 1. PARENT SECTION
+                  // ---------------------------------------------------------
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4, top: 8, bottom: 8),
+                    child: Text(
+                      '👥 PARENT SECTION',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.royalBlue,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+
+                  // 1. Profile
+                  _buildDrawerCard(
+                    context,
+                    icon: Icons.person_rounded,
+                    label: 'Profile',
+                    iconBgColor: const Color(0xFFE8E1FF),
+                    iconColor: const Color(0xFF6C5CE7),
+                    isActive: currentLocation == '/profile',
+                    onTap: () {
+                      Navigator.pop(context);
+                      context.push('/profile');
+                    },
+                  ),
+
+                  // 2. Caregiver Access
+                  if (!isCaregiver)
+                    _buildDrawerCard(
+                      context,
+                      icon: Icons.supervisor_account_rounded,
+                      label: 'Caregiver Access',
+                      iconBgColor: const Color(0xFFE2F8F0),
+                      iconColor: const Color(0xFF00B894),
+                      isActive: currentLocation == AppRoutes.caregiverAccess || currentLocation == '/caregiver',
+                      onTap: () {
+                        Navigator.pop(context);
+                        context.push(AppRoutes.caregiverAccess);
+                      },
+                    ),
+
+                  // 3. Live Video
+                  _buildDrawerCard(
+                    context,
+                    icon: Icons.videocam_rounded,
+                    label: 'Live Video',
+                    iconBgColor: const Color(0xFFE5F0FF),
+                    iconColor: const Color(0xFF5478E8),
+                    isActive: currentLocation == '/' && !currentLocation.contains('tab=0'),
+                    isRestricted: isCaregiver && !permsLiveVideo,
+                    onTap: () {
+                      if (isCaregiver && !permsLiveVideo) {
+                        _showRestrictedAccessDialog(context, 'Live Video');
+                      } else {
+                        Navigator.pop(context);
+                        context.go('/');
+                      }
+                    },
+                  ),
+
+                  // 4. Health
+                  _buildDrawerCard(
+                    context,
+                    icon: Icons.favorite_rounded,
+                    label: 'Health',
+                    iconBgColor: const Color(0xFFFFF0E5),
+                    iconColor: const Color(0xFFFF7675),
+                    isActive: currentLocation == '/predictive-health',
+                    isRestricted: isCaregiver && !permsHealth,
+                    onTap: () {
+                      if (isCaregiver && !permsHealth) {
+                        _showRestrictedAccessDialog(context, 'Health');
+                      } else {
+                        Navigator.pop(context);
+                        context.go('/predictive-health');
+                      }
+                    },
+                  ),
+
+                  // 5. Alerts & Notifications
+                  _buildDrawerCard(
+                    context,
+                    icon: Icons.notifications_rounded,
+                    label: 'Alerts & Notifications',
+                    iconBgColor: const Color(0xFFFFF0E5),
+                    iconColor: const Color(0xFFFF7675),
+                    isActive: currentLocation == '/notifications',
+                    isRestricted: isCaregiver && !permsAlerts,
+                    onTap: () {
+                      if (isCaregiver && !permsAlerts) {
+                        _showRestrictedAccessDialog(context, 'Alerts & Notifications');
+                      } else {
+                        Navigator.pop(context);
+                        context.push('/notifications');
+                      }
+                    },
+                  ),
+
+                  // 6. Shop
+                  _buildDrawerCard(
+                    context,
+                    icon: Icons.shopping_bag_rounded,
+                    label: 'Shop',
+                    iconBgColor: const Color(0xFFE5F0FF),
+                    iconColor: const Color(0xFF5478E8),
+                    isActive: currentLocation == '/shop',
+                    isRestricted: isCaregiver && !permsShop,
+                    onTap: () {
+                      if (isCaregiver && !permsShop) {
+                        _showRestrictedAccessDialog(context, 'Shop');
+                      } else {
+                        Navigator.pop(context);
+                        context.go('/shop');
+                      }
+                    },
+                  ),
+
+                  // 7. AI Monitoring
+                  _buildDrawerCard(
+                    context,
+                    icon: Icons.auto_awesome_rounded,
+                    label: 'AI Monitoring',
+                    iconBgColor: const Color(0xFFE2F8F0),
+                    iconColor: const Color(0xFF00B894),
+                    isActive: currentLocation.startsWith('/ai-monitoring') || currentLocation.startsWith('/ai-subscription'),
+                    isRestricted: isCaregiver && !permsAiMonitoring,
+                    onTap: () {
+                      if (isCaregiver && !permsAiMonitoring) {
+                        _showRestrictedAccessDialog(context, 'AI Monitoring');
+                      } else {
+                        Navigator.pop(context);
+                        context.go('/ai-monitoring');
+                      }
+                    },
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // ---------------------------------------------------------
+                  // 2. QUICK ACTIONS SECTION
                   // ---------------------------------------------------------
                   Padding(
                     padding: const EdgeInsets.only(left: 4, top: 8, bottom: 8),
@@ -394,52 +696,26 @@ class AppDrawer extends ConsumerWidget {
                     ),
                   ),
 
-                  // 1. Live Sensors Dashboard
-                  if (!isCaregiver || permsLiveMonitoring)
-                    _buildDrawerCard(
-                      context,
-                      icon: Icons.sensors_rounded,
-                      label: 'Live Sensors Dashboard',
-                      iconBgColor: const Color(0xFFE2F8F0),
-                      iconColor: const Color(0xFF00B894),
-                      isActive: currentLocation == '/?tab=0' || currentLocation == '/',
-                      onTap: () {
+                  // 8. Live Sensors Dashboard
+                  _buildDrawerCard(
+                    context,
+                    icon: Icons.sensors_rounded,
+                    label: 'Live Sensors Dashboard',
+                    iconBgColor: const Color(0xFFE2F8F0),
+                    iconColor: const Color(0xFF00B894),
+                    isActive: currentLocation == '/?tab=0' || currentLocation == '/',
+                    isRestricted: isCaregiver && !permsHealth,
+                    onTap: () {
+                      if (isCaregiver && !permsHealth) {
+                        _showRestrictedAccessDialog(context, 'Live Sensors Dashboard');
+                      } else {
                         Navigator.pop(context);
                         context.go('/?tab=0');
-                      },
-                    ),
+                      }
+                    },
+                  ),
 
-                  // 2. Live Video Feed
-                  if (!isCaregiver || permsCamera)
-                    _buildDrawerCard(
-                      context,
-                      icon: Icons.videocam_rounded,
-                      label: 'Live Video Feed',
-                      iconBgColor: const Color(0xFFE5F0FF),
-                      iconColor: const Color(0xFF5478E8),
-                      isActive: currentLocation == '/?tab=1',
-                      onTap: () {
-                        Navigator.pop(context);
-                        context.go('/?tab=1');
-                      },
-                    ),
-
-                  // 3. Alerts & Notifications
-                  if (!isCaregiver || permsNotifications)
-                    _buildDrawerCard(
-                      context,
-                      icon: Icons.notifications_rounded,
-                      label: 'Alerts & Notifications',
-                      iconBgColor: const Color(0xFFFFF0E5),
-                      iconColor: const Color(0xFFFF7675),
-                      isActive: currentLocation == '/notifications',
-                      onTap: () {
-                        Navigator.pop(context);
-                        context.push('/notifications');
-                      },
-                    ),
-
-                  // 4. Online Music Soother
+                  // 9. Online Music Soother
                   _buildDrawerCard(
                     context,
                     icon: Icons.music_note_rounded,
@@ -447,8 +723,9 @@ class AppDrawer extends ConsumerWidget {
                     iconBgColor: const Color(0xFFE8E1FF),
                     iconColor: const Color(0xFF6C5CE7),
                     isActive: currentLocation == '/music',
+                    isRestricted: isCaregiver && !permsCustomParentFolder,
                     onTap: () {
-                      if (isCaregiver && !permsMusic) {
+                      if (isCaregiver && !permsCustomParentFolder) {
                         _showRestrictedAccessDialog(context, 'Online Music Soother');
                       } else {
                         Navigator.pop(context);
@@ -474,139 +751,7 @@ class AppDrawer extends ConsumerWidget {
                   const SizedBox(height: 12),
 
                   // ---------------------------------------------------------
-                  // 6. PARENT SECTION
-                  // ---------------------------------------------------------
-                  if (!isCaregiver) ...[
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4, top: 8, bottom: 8),
-                      child: Text(
-                        '👥 PARENT SECTION',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.royalBlue,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    ),
-
-                    // 1. Profile
-                    _buildDrawerCard(
-                      context,
-                      icon: Icons.person_rounded,
-                      label: 'Profile',
-                      iconBgColor: const Color(0xFFE8E1FF),
-                      iconColor: const Color(0xFF6C5CE7),
-                      isActive: currentLocation == '/profile',
-                      onTap: () {
-                        Navigator.pop(context);
-                        context.push('/profile');
-                      },
-                    ),
-
-                    // 2. AI Assistant
-                    _buildDrawerCard(
-                      context,
-                      icon: Icons.smart_toy_rounded,
-                      label: 'AI Assistant',
-                      iconBgColor: const Color(0xFFE5F0FF),
-                      iconColor: const Color(0xFF5478E8),
-                      isActive: currentLocation == '/ai-assistant',
-                      onTap: () {
-                        Navigator.pop(context);
-                        context.push('/ai-assistant');
-                      },
-                    ),
-
-                    // 3. Predictive Health
-                    _buildDrawerCard(
-                      context,
-                      icon: Icons.favorite_rounded,
-                      label: 'Predictive Health',
-                      iconBgColor: const Color(0xFFFFF0E5),
-                      iconColor: const Color(0xFFFF7675),
-                      isActive: currentLocation == '/predictive-health',
-                      onTap: () {
-                        Navigator.pop(context);
-                        context.go('/predictive-health');
-                      },
-                    ),
-
-                    // 4. Caregiver Access
-                    _buildDrawerCard(
-                      context,
-                      icon: Icons.supervisor_account_rounded,
-                      label: 'Caregiver Access',
-                      iconBgColor: const Color(0xFFE2F8F0),
-                      iconColor: const Color(0xFF00B894),
-                      isActive: currentLocation == AppRoutes.caregiverAccess || currentLocation == '/caregiver',
-                      onTap: () {
-                        Navigator.pop(context);
-                        context.push(AppRoutes.caregiverAccess);
-                      },
-                    ),
-
-                    // 5. Nursery Shop
-                    _buildDrawerCard(
-                      context,
-                      icon: Icons.shopping_bag_rounded,
-                      label: 'Nursery Shop',
-                      iconBgColor: const Color(0xFFE5F0FF),
-                      iconColor: const Color(0xFF5478E8),
-                      isActive: currentLocation == '/shop',
-                      onTap: () {
-                        Navigator.pop(context);
-                        context.go('/shop');
-                      },
-                    ),
-                  ] else ...[
-                    // Caregiver Granted Features Section
-                    if (permsAi || permsHealth) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4, top: 8, bottom: 8),
-                        child: Text(
-                          '⭐ AUTHORIZED FEATURES',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.royalBlue,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                      ),
-                      if (permsAi)
-                        _buildDrawerCard(
-                          context,
-                          icon: Icons.smart_toy_rounded,
-                          label: 'AI Assistant',
-                          iconBgColor: const Color(0xFFE5F0FF),
-                          iconColor: const Color(0xFF5478E8),
-                          isActive: currentLocation == '/ai-assistant',
-                          onTap: () {
-                            Navigator.pop(context);
-                            context.push('/ai-assistant');
-                          },
-                        ),
-                      if (permsHealth)
-                        _buildDrawerCard(
-                          context,
-                          icon: Icons.favorite_rounded,
-                          label: 'Predictive Health',
-                          iconBgColor: const Color(0xFFFFF0E5),
-                          iconColor: const Color(0xFFFF7675),
-                          isActive: currentLocation == '/predictive-health',
-                          onTap: () {
-                            Navigator.pop(context);
-                            context.go('/predictive-health');
-                          },
-                        ),
-                    ],
-                  ],
-
-                  const SizedBox(height: 12),
-
-                  // ---------------------------------------------------------
-                  // INFORMATION & ACCOUNT SECTION
+                  // 3. INFORMATION & ACCOUNT SECTION
                   // ---------------------------------------------------------
                   Padding(
                     padding: const EdgeInsets.only(left: 4, top: 8, bottom: 8),
@@ -621,6 +766,7 @@ class AppDrawer extends ConsumerWidget {
                     ),
                   ),
 
+                  // 10. About Us
                   _buildDrawerCard(
                     context,
                     icon: Icons.info_outline_rounded,
@@ -630,6 +776,37 @@ class AppDrawer extends ConsumerWidget {
                     onTap: () => _showAboutDialog(context),
                   ),
 
+                  // 11. Help & Support
+                  _buildDrawerCard(
+                    context,
+                    icon: Icons.help_outline_rounded,
+                    label: 'Help & Support',
+                    iconBgColor: const Color(0xFFE5F0FF),
+                    iconColor: const Color(0xFF5478E8),
+                    onTap: () => _showHelpSupportDialog(context),
+                  ),
+
+                  // 12. Privacy Policy
+                  _buildDrawerCard(
+                    context,
+                    icon: Icons.lock_outline_rounded,
+                    label: 'Privacy Policy',
+                    iconBgColor: const Color(0xFFE2F8F0),
+                    iconColor: const Color(0xFF00B894),
+                    onTap: () => _showPrivacyPolicyDialog(context),
+                  ),
+
+                  // 13. Terms & Conditions
+                  _buildDrawerCard(
+                    context,
+                    icon: Icons.description_outlined,
+                    label: 'Terms & Conditions',
+                    iconBgColor: const Color(0xFFFFF0E5),
+                    iconColor: const Color(0xFFFF7675),
+                    onTap: () => _showTermsDialog(context),
+                  ),
+
+                  // 14. Sign Out
                   _buildDrawerCard(
                     context,
                     icon: Icons.logout_rounded,
