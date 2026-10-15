@@ -35,53 +35,10 @@ export class DebugController {
    * POST /debug/telemetry
    */
   public static async submitTelemetry(req: Request, res: Response) {
-    console.log('[DEBUG] Received simulated telemetry request');
-    const {
-      babyId,
-      heartRate,
-      breathingRate,
-      bodyTemperature,
-      roomTemperature,
-      humidity,
-      movement,
-      cryDetected,
-    } = req.body;
-
-    if (!babyId) {
-      return res.status(400).json({ success: false, message: 'babyId is required.' });
-    }
-
-    try {
-      const deviceId = await DebugController.resolveDeviceId(babyId);
-      const telemetryPayload = {
-        deviceId,
-        timestamp: new Date().toISOString(),
-        heartRate: heartRate !== undefined ? Number(heartRate) : null,
-        respirationRate: breathingRate !== undefined ? Number(breathingRate) : null,
-        bodyTemperature: bodyTemperature !== undefined ? Number(bodyTemperature) : null,
-        roomTemperature: roomTemperature !== undefined ? Number(roomTemperature) : null,
-        humidity: humidity !== undefined ? Number(humidity) : null,
-        movementDetected: movement === true,
-        cryDetected: cryDetected === true,
-        airQuality: 50,
-        batteryLevel: 100,
-      };
-
-      console.log(`[DEBUG] Forwarding simulated telemetry to pipeline for device ${deviceId}`);
-      await subscriber.handleMessage(deviceId, JSON.stringify(telemetryPayload));
-
-      res.json({
-        success: true,
-        message: 'Simulated telemetry processed through production pipeline.',
-        data: telemetryPayload,
-      });
-    } catch (e: any) {
-      const status = e.statusCode || 500;
-      res.status(status).json({
-        success: false,
-        message: e.message || 'Error processing debug telemetry.',
-      });
-    }
+    return res.status(403).json({
+      success: false,
+      message: 'Simulated MQTT and telemetry requests are disabled.',
+    });
   }
 
   /**
@@ -413,7 +370,7 @@ export class DebugController {
         success: true,
         message: 'Debug status summary retrieved.',
         data: {
-          simulatorEnabled: true,
+          simulatorEnabled: false,
           connectedBabies,
           connectedDevices,
           socketClientsCount,

@@ -241,10 +241,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         width: 1.5,
                       ),
                     ),
-                    child: Icon(
-                      Icons.child_care_rounded,
-                      color: AppColors.primary,
-                      size: 30.r,
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/images/MaatrivaFavicon.png',
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
                   SizedBox(width: 12.w),

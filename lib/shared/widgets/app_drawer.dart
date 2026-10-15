@@ -50,10 +50,11 @@ class AppDrawer extends ConsumerWidget {
                     color: Color(0xFFE8E1FF),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
-                    Icons.bedroom_baby_rounded,
-                    color: AppColors.royalBlue,
-                    size: 32,
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/images/MaatrivaFavicon.png',
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),

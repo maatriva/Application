@@ -24,6 +24,12 @@ export class MqttClientManager {
    * Initializes connections and subscribes to telemetry.
    */
   public connect(): void {
+    if (!env.ENABLE_MQTT || !env.MQTT_HOST) {
+      this.connectionStatus = 'disconnected';
+      console.log('ℹ MQTT is disabled (ENABLE_MQTT is false or MQTT_HOST is not set). No MQTT requests will be sent or received.');
+      return;
+    }
+
     const url = `mqtts://${env.MQTT_HOST}:${env.MQTT_PORT}`;
     console.log(`Connecting to MQTT Broker at ${url}...`);
 
@@ -144,6 +150,11 @@ export class MqttClientManager {
    * Publishes message to the broker (commands or system configs).
    */
   public publish(topic: string, payload: any, qos: 0 | 1 | 2 = 0): void {
+    if (!env.ENABLE_MQTT) {
+      console.warn(`MQTT disabled. Request to publish to topic "${topic}" blocked.`);
+      return;
+    }
+
     if (this.client?.connected) {
       const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
       this.client.publish(topic, payloadStr, { qos, retain: false });

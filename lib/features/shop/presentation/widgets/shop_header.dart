@@ -49,7 +49,7 @@ class ShopHeader extends ConsumerWidget implements PreferredSizeWidget {
                     ),
                   )
                 else
-                  // Circular gradient Maatriva brand icon
+                  // Circular Maatriva brand icon
                   Container(
                     width: 40.w,
                     height: 40.h,
@@ -59,23 +59,11 @@ class ShopHeader extends ConsumerWidget implements PreferredSizeWidget {
                         color: AppColors.primary.withOpacity(0.15),
                         width: 1.5,
                       ),
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          AppColors.primary,
-                          AppColors.primary.withOpacity(0.7),
-                        ],
-                      ),
                     ),
-                    child: Center(
-                      child: Text(
-                        'M',
-                        style: GoogleFonts.playfairDisplay(
-                          color: Colors.white,
-                          fontSize: 20.sp,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/images/MaatrivaFavicon.png',
+                        fit: BoxFit.cover,
                       ),
                     ),
                   ),

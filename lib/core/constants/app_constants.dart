@@ -68,7 +68,7 @@ class AppConstants {
   static const Duration durationDefault = Duration(milliseconds: 300);
   static const Duration durationSlow = Duration(milliseconds: 500);
 
-  // Asset Paths (Placeholders if needed in the future)
-  static const String logoPath = 'assets/logo.png';
+  // Asset Paths
+  static const String logoPath = 'assets/images/MaatrivaFavicon.png';
   static const String defaultAvatarPath = 'assets/default_avatar.png';
 }

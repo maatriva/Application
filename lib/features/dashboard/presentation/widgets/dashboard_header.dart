@@ -62,6 +62,27 @@ class DashboardHeader extends ConsumerWidget implements PreferredSizeWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.royalBlue.withOpacity(0.15),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/images/MaatrivaFavicon.png',
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Text(
                     'MAATRIVA',
                     style: GoogleFonts.outfit(

@@ -55,7 +55,8 @@ export const env = {
   JWT_REFRESH_EXPIRATION: '7d',
 
   // MQTT Settings
-  MQTT_HOST: process.env.MQTT_HOST || 'localhost',
+  ENABLE_MQTT: process.env.ENABLE_MQTT === 'true',
+  MQTT_HOST: process.env.MQTT_HOST || '',
   MQTT_PORT: process.env.MQTT_PORT ? parseInt(process.env.MQTT_PORT, 10) : 1883,
   MQTT_CLIENT_ID: process.env.MQTT_CLIENT_ID || 'MaatrivaBackendServer',
   MQTT_USERNAME: process.env.MQTT_USERNAME || undefined,

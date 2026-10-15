@@ -27,10 +27,11 @@ class SplashScreen extends StatelessWidget {
                   width: 2,
                 ),
               ),
-              child: Icon(
-                Icons.child_care_rounded,
-                color: AppColors.primary,
-                size: 52.r,
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/images/MaatrivaFavicon.png',
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
             SizedBox(height: 24.h),
