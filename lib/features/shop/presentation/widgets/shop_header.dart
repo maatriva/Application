@@ -38,7 +38,7 @@ class ShopHeader extends ConsumerWidget implements PreferredSizeWidget {
                         color: Colors.white,
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: AppColors.primary.withOpacity(0.1),
+                          color: AppColors.primary.withValues(alpha: 0.1),
                         ),
                       ),
                       child: const Icon(
@@ -56,7 +56,7 @@ class ShopHeader extends ConsumerWidget implements PreferredSizeWidget {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: AppColors.primary.withOpacity(0.15),
+                        color: AppColors.primary.withValues(alpha: 0.15),
                         width: 1.5,
                       ),
                     ),

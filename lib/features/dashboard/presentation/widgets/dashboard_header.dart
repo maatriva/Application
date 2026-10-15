@@ -69,7 +69,7 @@ class DashboardHeader extends ConsumerWidget implements PreferredSizeWidget {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.royalBlue.withOpacity(0.15),
+                          color: AppColors.royalBlue.withValues(alpha: 0.15),
                           blurRadius: 6,
                           offset: const Offset(0, 2),
                         ),
